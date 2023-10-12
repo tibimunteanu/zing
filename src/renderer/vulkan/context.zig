@@ -148,9 +148,6 @@ pub const Context = struct {
     }
 
     pub fn deinit(self: Self) void {
-        if (self.physical_device.surface_formats) |surface_formats| self.allocator.free(surface_formats);
-        if (self.physical_device.present_modes) |present_modes| self.allocator.free(present_modes);
-
         self.device_api.destroyDevice(self.device, null);
         self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
         self.instance_api.destroyInstance(self.instance, null);
@@ -220,21 +217,17 @@ pub const Context = struct {
     }
 
     fn pickPhysicalDevice(allocator: Allocator, instance: vk.Instance, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !PhysicalDevice {
-        var scratchAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        var scratch = scratchAllocator.allocator();
-        defer scratchAllocator.deinit();
-
         var count: u32 = undefined;
         _ = try instance_api.enumeratePhysicalDevices(instance, &count, null);
 
-        const physical_devices = try scratch.alloc(vk.PhysicalDevice, count);
-        errdefer scratch.free(physical_devices);
+        const physical_devices = try allocator.alloc(vk.PhysicalDevice, count);
+        defer allocator.free(physical_devices);
         _ = try instance_api.enumeratePhysicalDevices(instance, &count, physical_devices.ptr);
 
         var max_score: u32 = 0;
         var maybe_physical_device: ?PhysicalDevice = null;
         for (physical_devices) |physical_device| {
-            if (try PhysicalDevice.init(scratch, physical_device, instance_api, surface)) |info| {
+            if (try PhysicalDevice.init(allocator, physical_device, instance_api, surface)) |info| {
                 if (info.score > max_score) {
                     max_score = info.score;
                     maybe_physical_device = info;
@@ -242,22 +235,14 @@ pub const Context = struct {
             }
         }
 
-        if (maybe_physical_device) |*physical_device| {
-            // persist allocations made with the scratch
-            physical_device.surface_formats = try allocator.dupe(vk.SurfaceFormatKHR, physical_device.surface_formats.?);
-            physical_device.present_modes = try allocator.dupe(vk.PresentModeKHR, physical_device.present_modes.?);
-
-            return physical_device.*;
-        }
-
-        return error.noSuitablePhysicalDeviceFound;
+        return maybe_physical_device orelse error.noSuitablePhysicalDeviceFound;
     }
 
     fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_api: InstanceAPI) !vk.Device {
         const priority = [_]f32{1};
 
         var queue_count: u32 = 0;
-        var queue_family_indices: [4]u32 = undefined;
+        var queue_family_indices = [1]u32{std.math.maxInt(u32)} ** 4;
         var queue_create_infos: [4]vk.DeviceQueueCreateInfo = undefined;
 
         for ([_]u32{
@@ -329,9 +314,6 @@ pub const PhysicalDevice = struct {
     features: vk.PhysicalDeviceFeatures,
     properties: vk.PhysicalDeviceProperties,
     memory_properties: vk.PhysicalDeviceMemoryProperties,
-    surface_capabilities: vk.SurfaceCapabilitiesKHR,
-    surface_formats: ?[]vk.SurfaceFormatKHR,
-    present_modes: ?[]vk.PresentModeKHR,
     graphics_family_index: u32,
     present_family_index: u32,
     compute_family_index: u32,
@@ -351,11 +333,11 @@ pub const PhysicalDevice = struct {
             return null;
         }
 
-        if (!try info.initExtensionSupport(allocator, instance_api)) {
+        if (!try info.initSurfaceSupport(instance_api, surface)) {
             return null;
         }
 
-        if (!try info.initSurfaceSupport(allocator, instance_api, surface)) {
+        if (!try info.initExtensionSupport(allocator, instance_api)) {
             return null;
         }
 
@@ -416,6 +398,20 @@ pub const PhysicalDevice = struct {
         return true;
     }
 
+    fn initSurfaceSupport(self: *PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !bool {
+        var format_count: u32 = undefined;
+        _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(self.handle, surface, &format_count, null);
+
+        var present_mode_count: u32 = undefined;
+        _ = try instance_api.getPhysicalDeviceSurfacePresentModesKHR(self.handle, surface, &present_mode_count, null);
+
+        if (format_count > 0 and present_mode_count > 0) {
+            return true;
+        }
+
+        return false;
+    }
+
     fn initExtensionSupport(self: PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI) !bool {
         var count: u32 = undefined;
         _ = try instance_api.enumerateDeviceExtensionProperties(self.handle, null, &count, null);
@@ -439,37 +435,6 @@ pub const PhysicalDevice = struct {
         // TODO: make the optional extensions list into a map of pairs of extensions and weights
         //       which can then be used to increment the device score.
         return true;
-    }
-
-    fn initSurfaceSupport(self: *PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !bool {
-        self.surface_formats = null;
-        self.present_modes = null;
-
-        var format_count: u32 = undefined;
-        _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(self.handle, surface, &format_count, null);
-
-        var present_mode_count: u32 = undefined;
-        _ = try instance_api.getPhysicalDeviceSurfacePresentModesKHR(self.handle, surface, &present_mode_count, null);
-
-        if (format_count > 0 and present_mode_count > 0) {
-            const surface_capabilities = try instance_api.getPhysicalDeviceSurfaceCapabilitiesKHR(self.handle, surface);
-
-            const surface_formats = try allocator.alloc(vk.SurfaceFormatKHR, format_count);
-            errdefer allocator.free(surface_formats);
-            _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(self.handle, surface, &format_count, surface_formats.ptr);
-
-            const present_modes = try allocator.alloc(vk.PresentModeKHR, present_mode_count);
-            errdefer allocator.free(present_modes);
-            _ = try instance_api.getPhysicalDeviceSurfacePresentModesKHR(self.handle, surface, &present_mode_count, present_modes.ptr);
-
-            self.surface_capabilities = surface_capabilities;
-            self.surface_formats = surface_formats;
-            self.present_modes = present_modes;
-
-            return true;
-        }
-
-        return false;
     }
 
     fn initQueueSupport(self: *PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !bool {

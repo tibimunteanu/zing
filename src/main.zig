@@ -1,7 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
-const GraphicsContext = @import("renderer/vulkan/context.zig").Context;
+const vk = @import("renderer/vulkan/vk.zig");
+const Context = @import("renderer/vulkan/context.zig").Context;
+const Swapchain = @import("renderer/vulkan//swapchain.zig").Swapchain;
 
 const app_name = "Zing app";
 
@@ -24,7 +26,9 @@ pub fn main() !void {
     }
     defer glfw.terminate();
 
-    const window = glfw.Window.create(640, 480, app_name, null, null, .{
+    var extent = vk.Extent2D{ .width = 800, .height = 600 };
+
+    const window = glfw.Window.create(extent.width, extent.height, app_name, null, null, .{
         .client_api = .no_api,
     }) orelse {
         std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
@@ -32,15 +36,18 @@ pub fn main() !void {
     };
     defer window.destroy();
 
-    const renderer = try GraphicsContext.init(allocator, app_name, window);
-    defer renderer.deinit();
+    const context = try Context.init(allocator, app_name, window);
+    defer context.deinit();
 
-    std.log.info("Graphics device: {?s}\n", .{renderer.physical_device.properties.device_name});
+    const swapchain = try Swapchain.init(allocator, &context, extent);
+    defer swapchain.deinit();
+
+    std.log.info("Graphics device: {?s}\n", .{context.physical_device.properties.device_name});
     std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}\n", .{
-        renderer.graphics_queue.family_index,
-        renderer.present_queue.family_index,
-        renderer.compute_queue.family_index,
-        renderer.transfer_queue.family_index,
+        context.graphics_queue.family_index,
+        context.present_queue.family_index,
+        context.compute_queue.family_index,
+        context.transfer_queue.family_index,
     });
 
     while (!window.shouldClose()) {
