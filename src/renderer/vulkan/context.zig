@@ -255,22 +255,28 @@ pub const Context = struct {
 
     fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_api: InstanceAPI) !vk.Device {
         const priority = [_]f32{1};
-        const queue_create_infos = [_]vk.DeviceQueueCreateInfo{
-            .{
-                .flags = .{},
-                .queue_family_index = physical_device.graphics_family_index,
-                .queue_count = 1,
-                .p_queue_priorities = &priority,
-            },
-            .{
-                .flags = .{},
-                .queue_family_index = physical_device.present_family_index,
-                .queue_count = 1,
-                .p_queue_priorities = &priority,
-            },
-        };
 
-        const queue_count: u32 = if (physical_device.graphics_family_index == physical_device.present_family_index) 1 else 2;
+        var queue_count: u32 = 0;
+        var queue_family_indices: [4]u32 = undefined;
+        var queue_create_infos: [4]vk.DeviceQueueCreateInfo = undefined;
+
+        for ([_]u32{
+            physical_device.graphics_family_index,
+            physical_device.present_family_index,
+            physical_device.compute_family_index,
+            physical_device.transfer_family_index,
+        }) |queue_family_index| {
+            if (std.mem.indexOfScalar(u32, &queue_family_indices, queue_family_index) == null) {
+                queue_family_indices[queue_count] = queue_family_index;
+                queue_create_infos[queue_count] = .{
+                    .flags = .{},
+                    .queue_family_index = queue_family_index,
+                    .queue_count = 1,
+                    .p_queue_priorities = &priority,
+                };
+                queue_count += 1;
+            }
+        }
 
         var device_extensions = try std.ArrayList([*:0]const u8).initCapacity(allocator, required_device_extensions.len);
         defer device_extensions.deinit();

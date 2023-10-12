@@ -36,6 +36,12 @@ pub fn main() !void {
     defer renderer.deinit();
 
     std.log.info("Graphics device: {?s}\n", .{renderer.physical_device.properties.device_name});
+    std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}\n", .{
+        renderer.graphics_queue.family_index,
+        renderer.present_queue.family_index,
+        renderer.compute_queue.family_index,
+        renderer.transfer_queue.family_index,
+    });
 
     while (!window.shouldClose()) {
         glfw.pollEvents();
