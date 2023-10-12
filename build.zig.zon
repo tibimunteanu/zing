@@ -1,0 +1,14 @@
+.{
+    .name = "Zing engine",
+    .version = "0.0.1",
+    .dependencies = .{
+        .mach_glfw = .{
+            .url = "https://pkg.machengine.org/mach-glfw/076b3869cbfd2ccccb6a8c01e4128bb0d7977ebb.tar.gz",
+            .hash = "1220cafbb90ea86d92c07f779e8106e6f5c3d8ab4cc68ddc8d3f80bd4b6079064135",
+        },
+        .vulkan_zig = .{
+            .url = "https://github.com/Snektron/vulkan-zig/archive/1e4e90ffb14084357265d79b58e5f1b1c9396069.tar.gz",
+            .hash = "1220d3e1254af9c8fd4c3f09bd9f50f51dc5eaa5506f845ed67bcd75e1e2961ce1ea",
+        },
+    },
+}
