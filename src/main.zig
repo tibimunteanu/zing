@@ -40,7 +40,7 @@ pub fn main() !void {
     defer context.deinit();
 
     const swapchain = try Swapchain.init(allocator, &context, extent);
-    defer swapchain.deinit();
+    defer swapchain.deinit(.{});
 
     std.log.info("Graphics device: {?s}\n", .{context.physical_device.properties.device_name});
     std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}\n", .{
