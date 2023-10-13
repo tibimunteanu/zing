@@ -39,7 +39,7 @@ pub fn main() !void {
     const context = try Context.init(allocator, app_name, window);
     defer context.deinit();
 
-    const swapchain = try Swapchain.init(allocator, &context, extent);
+    var swapchain = try Swapchain.init(allocator, &context, .{ .desired_extent = extent });
     defer swapchain.deinit(.{});
 
     std.log.info("Graphics device: {?s}\n", .{context.physical_device.properties.device_name});
