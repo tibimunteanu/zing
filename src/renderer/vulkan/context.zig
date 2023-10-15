@@ -217,6 +217,16 @@ pub const Context = struct {
         self.instance_api.destroyInstance(self.instance, null);
     }
 
+    pub fn onResized(self: *Self, new_desired_extent: glfw.Window.Size) void {
+        self.desired_extent = new_desired_extent;
+        self.desired_extent_generation += 1;
+
+        std.log.info("Context onResized with new desired extent {} x {}", .{
+            new_desired_extent.width,
+            new_desired_extent.height,
+        });
+    }
+
     pub fn getMemoryIndex(self: Self, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
         const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
 

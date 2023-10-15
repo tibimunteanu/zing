@@ -2,12 +2,101 @@ const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
 const Context = @import("renderer/vulkan/context.zig").Context;
+const Allocator = std.mem.Allocator;
 
-const app_name = "Zing app";
+pub var engine: Engine = undefined;
 
 fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
     std.log.err("glfw: {}: {s}\n", .{ error_code, description });
 }
+
+fn framebufferSizeCallback(window: glfw.Window, width: u32, height: u32) void {
+    engine.context.onResized(glfw.Window.Size{ .width = width, .height = height });
+    std.log.info("Window at {}, {} resized to {} x {}", .{ window.getPos().x, window.getPos().y, width, height });
+}
+
+pub const Engine = struct {
+    const Self = @This();
+
+    window: glfw.Window,
+    context: Context,
+
+    pub fn init(allocator: Allocator) !Self {
+        var self: Self = undefined;
+
+        glfw.setErrorCallback(errorCallback);
+
+        if (!glfw.init(.{})) {
+            std.log.err("Failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
+            std.process.exit(1);
+        }
+        errdefer glfw.terminate();
+
+        self.window = glfw.Window.create(800, 600, "Zing", null, null, .{
+            .client_api = .no_api,
+        }) orelse {
+            std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
+            std.process.exit(1);
+        };
+        errdefer self.window.destroy();
+
+        self.context = try Context.init(allocator, "Zing app", self.window);
+        errdefer self.context.deinit();
+
+        std.log.info("Graphics device: {?s}\n", .{self.context.physical_device.properties.device_name});
+        std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}\n", .{
+            self.context.graphics_queue.family_index,
+            self.context.present_queue.family_index,
+            self.context.compute_queue.family_index,
+            self.context.transfer_queue.family_index,
+        });
+
+        self.window.setFramebufferSizeCallback(framebufferSizeCallback);
+
+        return self;
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.context.deinit();
+        self.window.destroy();
+        glfw.terminate();
+    }
+
+    pub fn run(self: *Self) void {
+        while (!self.window.shouldClose()) {
+            // const cmdbuf = cmdbufs[swapchain.image_index];
+
+            // const state = swapchain.present(cmdbuf) catch |err| switch (err) {
+            //     error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+            //     else => |narrow| return narrow,
+            // };
+
+            // if (state == .suboptimal) {
+            //     const size = window.getSize();
+            //     extent.width = @intCast(size.width);
+            //     extent.height = @intCast(size.height);
+            //     try swapchain.recreate(extent);
+
+            //     destroyFramebuffers(&gc, allocator, framebuffers);
+            //     framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
+
+            //     destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
+            //     cmdbufs = try createCommandBuffers(
+            //         &gc,
+            //         pool,
+            //         allocator,
+            //         buffer,
+            //         swapchain.extent,
+            //         render_pass,
+            //         pipeline,
+            //         framebuffers,
+            //     );
+            // }
+
+            glfw.pollEvents();
+        }
+    }
+};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -16,63 +105,8 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    glfw.setErrorCallback(errorCallback);
+    engine = try Engine.init(allocator);
+    defer engine.deinit();
 
-    if (!glfw.init(.{})) {
-        std.log.err("Failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
-        std.process.exit(1);
-    }
-    defer glfw.terminate();
-
-    const window = glfw.Window.create(800, 600, app_name, null, null, .{
-        .client_api = .no_api,
-    }) orelse {
-        std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
-        std.process.exit(1);
-    };
-    defer window.destroy();
-
-    var context = try Context.init(allocator, app_name, window);
-    defer context.deinit();
-
-    std.log.info("Graphics device: {?s}\n", .{context.physical_device.properties.device_name});
-    std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}\n", .{
-        context.graphics_queue.family_index,
-        context.present_queue.family_index,
-        context.compute_queue.family_index,
-        context.transfer_queue.family_index,
-    });
-
-    while (!window.shouldClose()) {
-        // const cmdbuf = cmdbufs[swapchain.image_index];
-
-        // const state = swapchain.present(cmdbuf) catch |err| switch (err) {
-        //     error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
-        //     else => |narrow| return narrow,
-        // };
-
-        // if (state == .suboptimal) {
-        //     const size = window.getSize();
-        //     extent.width = @intCast(size.width);
-        //     extent.height = @intCast(size.height);
-        //     try swapchain.recreate(extent);
-
-        //     destroyFramebuffers(&gc, allocator, framebuffers);
-        //     framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
-
-        //     destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
-        //     cmdbufs = try createCommandBuffers(
-        //         &gc,
-        //         pool,
-        //         allocator,
-        //         buffer,
-        //         swapchain.extent,
-        //         render_pass,
-        //         pipeline,
-        //         framebuffers,
-        //     );
-        // }
-
-        glfw.pollEvents();
-    }
+    engine.run();
 }
