@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
-const vk = @import("renderer/vulkan/vk.zig");
 const Context = @import("renderer/vulkan/context.zig").Context;
 
 const app_name = "Zing app";
@@ -25,9 +24,7 @@ pub fn main() !void {
     }
     defer glfw.terminate();
 
-    var extent = vk.Extent2D{ .width = 800, .height = 600 };
-
-    const window = glfw.Window.create(extent.width, extent.height, app_name, null, null, .{
+    const window = glfw.Window.create(800, 600, app_name, null, null, .{
         .client_api = .no_api,
     }) orelse {
         std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
@@ -35,11 +32,7 @@ pub fn main() !void {
     };
     defer window.destroy();
 
-    var context = try Context.init(allocator, app_name, window, .{
-        .swapchain = .{
-            .desired_extent = extent,
-        },
-    });
+    var context = try Context.init(allocator, app_name, window);
     defer context.deinit();
 
     std.log.info("Graphics device: {?s}\n", .{context.physical_device.properties.device_name});

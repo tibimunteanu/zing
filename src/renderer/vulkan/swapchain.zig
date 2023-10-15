@@ -1,4 +1,5 @@
 const std = @import("std");
+const glfw = @import("mach-glfw");
 const vk = @import("vk.zig");
 const Context = @import("context.zig").Context;
 const Image = @import("image.zig").Image;
@@ -19,6 +20,7 @@ pub const Swapchain = struct {
 
     capabilities: vk.SurfaceCapabilitiesKHR,
     extent: vk.Extent2D,
+    extent_generation: u32,
     surface_format: vk.SurfaceFormatKHR,
     present_mode: vk.PresentModeKHR,
 
@@ -34,7 +36,6 @@ pub const Swapchain = struct {
         allocator: Allocator,
         context: *const Context,
         options: struct {
-            desired_extent: vk.Extent2D,
             desired_surface_format: vk.SurfaceFormatKHR = vk.SurfaceFormatKHR{
                 .format = .b8g8r8a8_srgb,
                 .color_space = .srgb_nonlinear_khr,
@@ -51,7 +52,7 @@ pub const Swapchain = struct {
         self.allocator = allocator;
 
         try self.initCapabilities();
-        try self.initExtent(options.desired_extent);
+        try self.initExtent();
         try self.initSurfaceFormat(options.desired_surface_format);
         try self.initPresentMode(options.desired_present_modes);
 
@@ -112,7 +113,7 @@ pub const Swapchain = struct {
     }
 
     // public
-    pub fn recreate(self: *Self, new_extent: vk.Extent2D) !void {
+    pub fn recreate(self: *Self) !void {
         const allocator = self.allocator;
         const context = self.context;
         const old_handle = self.handle;
@@ -122,7 +123,6 @@ pub const Swapchain = struct {
         self.deinit(.{ .destroy_swapchain = false });
 
         self.* = try init(allocator, context, .{
-            .desired_extent = new_extent,
             .desired_surface_format = old_surface_format,
             .desired_present_modes = &[1]vk.PresentModeKHR{old_present_mode},
             .old_handle = old_handle,
@@ -185,23 +185,25 @@ pub const Swapchain = struct {
         );
     }
 
-    fn initExtent(self: *Self, extent: vk.Extent2D) !void {
+    fn initExtent(self: *Self) !void {
         self.extent = self.capabilities.current_extent;
 
         if (self.capabilities.current_extent.width == 0xFFFF_FFFF) {
             self.extent = .{
                 .width = std.math.clamp(
-                    extent.width,
+                    self.context.desired_extent.width,
                     self.capabilities.min_image_extent.width,
                     self.capabilities.max_image_extent.width,
                 ),
                 .height = std.math.clamp(
-                    extent.height,
+                    self.context.desired_extent.height,
                     self.capabilities.min_image_extent.height,
                     self.capabilities.max_image_extent.height,
                 ),
             };
         }
+
+        self.extent_generation = self.context.desired_extent_generation;
 
         if (self.extent.width == 0 or self.extent.height == 0) {
             return error.invalidSurfaceDimensions;

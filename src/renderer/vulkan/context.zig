@@ -129,19 +129,15 @@ pub const Context = struct {
     graphics_command_pool: vk.CommandPool,
     graphics_command_buffers: std.ArrayList(CommandBuffer),
 
-    pub fn init(
-        allocator: Allocator,
-        app_name: [*:0]const u8,
-        window: glfw.Window,
-        options: struct {
-            swapchain: struct {
-                desired_extent: vk.Extent2D,
-            },
-        },
-    ) !Self {
+    desired_extent: glfw.Window.Size,
+    desired_extent_generation: u32,
+
+    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !Self {
         var self: Self = undefined;
 
         self.allocator = allocator;
+        self.desired_extent = window.getFramebufferSize();
+        self.desired_extent_generation = 0;
 
         // load base api
         const base_loader = @as(vk.PfnGetInstanceProcAddr, @ptrCast(&glfw.getInstanceProcAddress));
@@ -174,13 +170,7 @@ pub const Context = struct {
         self.compute_queue = Queue.init(self.device, self.device_api, self.physical_device.compute_family_index);
         self.transfer_queue = Queue.init(self.device, self.device_api, self.physical_device.transfer_family_index);
 
-        self.swapchain = try Swapchain.init(
-            allocator,
-            &self,
-            .{
-                .desired_extent = options.swapchain.desired_extent,
-            },
-        );
+        self.swapchain = try Swapchain.init(allocator, &self, .{});
 
         self.main_render_pass = try RenderPass.init(
             &self,
@@ -643,10 +633,12 @@ pub const PhysicalDevice = struct {
 };
 
 pub const Queue = struct {
+    const Self = @This();
+
     handle: vk.Queue,
     family_index: u32,
 
-    fn init(device: vk.Device, device_api: DeviceAPI, family_index: u32) Queue {
+    fn init(device: vk.Device, device_api: DeviceAPI, family_index: u32) Self {
         return .{
             .handle = device_api.getDeviceQueue(device, family_index, 0),
             .family_index = family_index,

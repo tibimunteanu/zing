@@ -41,11 +41,7 @@ pub const CommandBuffer = struct {
         self.state = .not_allocated;
     }
 
-    pub fn begin(
-        self: *Self,
-        context: *const Context,
-        flags: vk.CommandBufferUsageFlags,
-    ) void {
+    pub fn begin(self: *Self, context: *const Context, flags: vk.CommandBufferUsageFlags) void {
         try context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{
             .flags = flags,
         });

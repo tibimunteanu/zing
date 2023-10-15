@@ -27,11 +27,7 @@ pub const RenderPass = struct {
     render_area: vk.Rect2D,
     clear_values: ClearValues,
 
-    pub fn init(
-        context: *const Context,
-        render_area: vk.Rect2D,
-        clear_values: ClearValues,
-    ) !Self {
+    pub fn init(context: *const Context, render_area: vk.Rect2D, clear_values: ClearValues) !Self {
         var self: Self = undefined;
 
         self.render_area = render_area;
