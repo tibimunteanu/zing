@@ -1,6 +1,8 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const Context = @import("context.zig").Context;
+const Image = @import("image.zig").Image;
+const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Allocator = std.mem.Allocator;
 const maxInt = std.math.maxInt;
 
@@ -22,6 +24,8 @@ pub const Swapchain = struct {
 
     handle: vk.SwapchainKHR,
     images: []SwapchainImage,
+    depth_image: Image,
+    framebuffers: std.ArrayList(Framebuffer),
     image_index: u32,
     next_image_acquired_semaphore: vk.Semaphore,
 
@@ -52,7 +56,7 @@ pub const Swapchain = struct {
         try self.initPresentMode(options.desired_present_modes);
 
         const image_count = self.getImageCount();
-        const attached_queue_families = self.getAttachedQueueFamilies();
+        const image_sharing = self.getImageSharingInfo();
 
         const device = context.device;
         const device_api = context.device_api;
@@ -66,9 +70,9 @@ pub const Swapchain = struct {
             .image_extent = self.extent,
             .image_array_layers = 1,
             .image_usage = .{ .color_attachment_bit = true, .transfer_dst_bit = true },
-            .image_sharing_mode = if (attached_queue_families.len == 1) .concurrent else .exclusive,
-            .queue_family_index_count = @intCast(attached_queue_families.len),
-            .p_queue_family_indices = attached_queue_families.ptr,
+            .image_sharing_mode = if (image_sharing != null) .concurrent else .exclusive,
+            .queue_family_index_count = if (image_sharing) |s| @intCast(s.len) else 0,
+            .p_queue_family_indices = if (image_sharing) |s| s.ptr else undefined,
             .pre_transform = self.capabilities.current_transform,
             .composite_alpha = .{ .opaque_bit_khr = true },
             .present_mode = self.present_mode,
@@ -150,7 +154,7 @@ pub const Swapchain = struct {
         try self.context.device_api.queueSubmit(self.context.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
             .wait_semaphore_count = 1,
             .p_wait_semaphores = @ptrCast(&current_image.image_acquired_semaphore),
-            .p_wait_dst_stage_mask = &[_]vk.PipelineStageFlags{.{ .top_of_pipe_bit = true }},
+            .p_wait_dst_stage_mask = &[_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }},
             .command_buffer_count = 1,
             .p_command_buffers = @ptrCast(&cmd_buffer),
             .signal_semaphore_count = 1,
@@ -255,15 +259,15 @@ pub const Swapchain = struct {
         return image_count;
     }
 
-    fn getAttachedQueueFamilies(self: Self) []u32 {
-        var queue_family_indices = [2]u32{
+    fn getImageSharingInfo(self: Self) ?[]const u32 {
+        if (self.context.graphics_queue.family_index == self.context.present_queue.family_index) {
+            return null;
+        }
+
+        return &[_]u32{
             self.context.graphics_queue.family_index,
             self.context.present_queue.family_index,
         };
-
-        var count: u32 = if (self.context.graphics_queue.family_index != self.context.present_queue.family_index) 1 else 2;
-
-        return queue_family_indices[0..count];
     }
 
     fn initImages(self: *Self) !void {
@@ -288,9 +292,21 @@ pub const Swapchain = struct {
         }
 
         self.images = swapchain_images;
+
+        // create the depth image
+        self.depth_image = try Image.init(self.context, .{
+            .width = self.extent.width,
+            .height = self.extent.height,
+            .format = self.context.physical_device.depth_format,
+            .usage = .{ .depth_stencil_attachment_bit = true },
+            .init_view = true,
+            .view_aspect_flags = .{ .depth_bit = true },
+        });
     }
 
     fn deinitImages(self: *Self) void {
+        self.depth_image.deinit(self.context);
+
         for (self.images) |image| {
             image.deinit(self.context);
         }

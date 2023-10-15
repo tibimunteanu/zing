@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
 const vk = @import("renderer/vulkan/vk.zig");
 const Context = @import("renderer/vulkan/context.zig").Context;
-const Swapchain = @import("renderer/vulkan//swapchain.zig").Swapchain;
 
 const app_name = "Zing app";
 
@@ -36,11 +35,12 @@ pub fn main() !void {
     };
     defer window.destroy();
 
-    const context = try Context.init(allocator, app_name, window);
+    var context = try Context.init(allocator, app_name, window, .{
+        .swapchain = .{
+            .desired_extent = extent,
+        },
+    });
     defer context.deinit();
-
-    var swapchain = try Swapchain.init(allocator, &context, .{ .desired_extent = extent });
-    defer swapchain.deinit(.{});
 
     std.log.info("Graphics device: {?s}\n", .{context.physical_device.properties.device_name});
     std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}\n", .{
@@ -51,6 +51,35 @@ pub fn main() !void {
     });
 
     while (!window.shouldClose()) {
+        // const cmdbuf = cmdbufs[swapchain.image_index];
+
+        // const state = swapchain.present(cmdbuf) catch |err| switch (err) {
+        //     error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+        //     else => |narrow| return narrow,
+        // };
+
+        // if (state == .suboptimal) {
+        //     const size = window.getSize();
+        //     extent.width = @intCast(size.width);
+        //     extent.height = @intCast(size.height);
+        //     try swapchain.recreate(extent);
+
+        //     destroyFramebuffers(&gc, allocator, framebuffers);
+        //     framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
+
+        //     destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
+        //     cmdbufs = try createCommandBuffers(
+        //         &gc,
+        //         pool,
+        //         allocator,
+        //         buffer,
+        //         swapchain.extent,
+        //         render_pass,
+        //         pipeline,
+        //         framebuffers,
+        //     );
+        // }
+
         glfw.pollEvents();
     }
 }

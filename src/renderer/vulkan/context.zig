@@ -2,16 +2,22 @@ const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
 const vk = @import("vk.zig");
+const Swapchain = @import("swapchain.zig").Swapchain;
+const RenderPass = @import("renderpass.zig").RenderPass;
+const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
+const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
 };
 
-const optional_device_extensions = [_][*:0]const u8{};
+const optional_device_extensions = [_][*:0]const u8{
+    // nothing here yet
+};
 
 const optional_instance_extensions = [_][*:0]const u8{
-    vk.extension_info.khr_get_physical_device_properties_2.name,
+    // nothing here yet
 };
 
 const BaseAPI = vk.BaseWrapper(.{
@@ -28,6 +34,7 @@ const InstanceAPI = vk.InstanceWrapper(.{
     .getPhysicalDeviceFeatures = true,
     .getPhysicalDeviceProperties = true,
     .enumerateDeviceExtensionProperties = true,
+    .getPhysicalDeviceFormatProperties = true,
     .getPhysicalDeviceSurfaceFormatsKHR = true,
     .getPhysicalDeviceSurfacePresentModesKHR = true,
     .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
@@ -55,6 +62,9 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .resetFences = true,
     .queueSubmit = true,
     .queuePresentKHR = true,
+    .createImage = true,
+    .destroyImage = true,
+    .bindImageMemory = true,
     .createCommandPool = true,
     .destroyCommandPool = true,
     .allocateCommandBuffers = true,
@@ -77,6 +87,7 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .createBuffer = true,
     .destroyBuffer = true,
     .getBufferMemoryRequirements = true,
+    .getImageMemoryRequirements = true,
     .mapMemory = true,
     .unmapMemory = true,
     .bindBufferMemory = true,
@@ -89,6 +100,12 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .cmdBindVertexBuffers = true,
     .cmdCopyBuffer = true,
 });
+
+const desired_depth_formats: []const vk.Format = &[_]vk.Format{
+    .d32_sfloat,
+    .d32_sfloat_s8_uint,
+    .d24_unorm_s8_uint,
+};
 
 pub const Context = struct {
     const Self = @This();
@@ -107,8 +124,21 @@ pub const Context = struct {
     present_queue: Queue,
     compute_queue: Queue,
     transfer_queue: Queue,
+    swapchain: Swapchain,
+    main_render_pass: RenderPass,
+    graphics_command_pool: vk.CommandPool,
+    graphics_command_buffers: std.ArrayList(CommandBuffer),
 
-    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !Self {
+    pub fn init(
+        allocator: Allocator,
+        app_name: [*:0]const u8,
+        window: glfw.Window,
+        options: struct {
+            swapchain: struct {
+                desired_extent: vk.Extent2D,
+            },
+        },
+    ) !Self {
         var self: Self = undefined;
 
         self.allocator = allocator;
@@ -144,13 +174,69 @@ pub const Context = struct {
         self.compute_queue = Queue.init(self.device, self.device_api, self.physical_device.compute_family_index);
         self.transfer_queue = Queue.init(self.device, self.device_api, self.physical_device.transfer_family_index);
 
+        self.swapchain = try Swapchain.init(
+            allocator,
+            &self,
+            .{
+                .desired_extent = options.swapchain.desired_extent,
+            },
+        );
+
+        self.main_render_pass = try RenderPass.init(
+            &self,
+            .{
+                .offset = .{ .x = 0, .y = 0 },
+                .extent = self.swapchain.extent,
+            },
+            .{
+                .color = [_]f32{ 0.0, 0.0, 0.2, 1.0 },
+                .depth = 1.0,
+                .stencil = 0,
+            },
+        );
+
+        // swapchain framebuffers
+        self.swapchain.framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        try self.regenerateFramebuffers(&self.main_render_pass);
+
+        self.graphics_command_pool = try self.device_api.createCommandPool(self.device, &vk.CommandPoolCreateInfo{
+            .queue_family_index = self.graphics_queue.family_index,
+            .flags = .{ .reset_command_buffer_bit = true },
+        }, null);
+        errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
+
+        try self.initCommandBuffers(.{ .allocate = true, .allocator = allocator });
+        errdefer self.deinitCommandbuffers(.{ .deallocate = true });
+
         return self;
     }
 
-    pub fn deinit(self: Self) void {
+    pub fn deinit(self: *Self) void {
+        self.device_api.deviceWaitIdle(self.device) catch {};
+
+        self.deinitCommandbuffers(.{ .deallocate = true });
+        self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
+        for (self.swapchain.framebuffers.items) |*framebuffer| {
+            framebuffer.deinit(self);
+        }
+        self.swapchain.framebuffers.deinit();
+        self.main_render_pass.deinit(self);
+        self.swapchain.deinit(.{});
         self.device_api.destroyDevice(self.device, null);
         self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
         self.instance_api.destroyInstance(self.instance, null);
+    }
+
+    pub fn getMemoryIndex(self: Self, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
+        const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
+
+        for (0..memory_properties.memory_type_count) |i| {
+            if ((type_bits & std.math.shl(u32, 1, i) != 0) and memory_properties.memory_types[i].property_flags.contains(flags)) {
+                return @as(u32, @intCast(i));
+            }
+        }
+
+        return error.getMemoryIndexFailed;
     }
 
     fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const u8) !vk.Instance {
@@ -226,12 +312,13 @@ pub const Context = struct {
 
         var max_score: u32 = 0;
         var maybe_physical_device: ?PhysicalDevice = null;
-        for (physical_devices) |physical_device| {
-            if (try PhysicalDevice.init(allocator, physical_device, instance_api, surface)) |info| {
-                if (info.score > max_score) {
-                    max_score = info.score;
-                    maybe_physical_device = info;
-                }
+
+        for (physical_devices) |handle| {
+            const physical_device = try PhysicalDevice.init(allocator, handle, instance_api, surface);
+
+            if (physical_device.score > max_score) {
+                max_score = physical_device.score;
+                maybe_physical_device = physical_device;
             }
         }
 
@@ -307,53 +394,94 @@ pub const Context = struct {
 
         return device;
     }
+
+    fn initCommandBuffers(self: *Self, options: struct { allocate: bool = false, allocator: ?Allocator }) !void {
+        if (options.allocate) {
+            self.graphics_command_buffers = try std.ArrayList(CommandBuffer).initCapacity(options.allocator.?, self.swapchain.images.len);
+            self.graphics_command_buffers.items.len = self.swapchain.images.len;
+
+            for (self.graphics_command_buffers.items) |*buffer| {
+                buffer.handle = .null_handle;
+                buffer.state = .not_allocated;
+            }
+        }
+        errdefer if (options.allocate) self.graphics_command_buffers.deinit();
+
+        for (self.graphics_command_buffers.items) |*buffer| {
+            if (buffer.handle != .null_handle) {
+                buffer.deinit(self, self.graphics_command_pool);
+            }
+
+            buffer.* = try CommandBuffer.init(self, self.graphics_command_pool, true);
+        }
+    }
+
+    fn deinitCommandbuffers(self: *Self, options: struct { deallocate: bool = false }) void {
+        for (self.graphics_command_buffers.items) |*buffer| {
+            buffer.deinit(self, self.graphics_command_pool);
+        }
+
+        if (options.deallocate) {
+            self.graphics_command_buffers.deinit();
+        }
+    }
+
+    fn regenerateFramebuffers(self: *Self, render_pass: *const RenderPass) !void {
+        self.swapchain.framebuffers.items.len = self.swapchain.images.len;
+
+        for (self.swapchain.images, 0..) |image, i| {
+            const attachments = [_]vk.ImageView{
+                image.view,
+                self.swapchain.depth_image.view.?,
+            };
+
+            self.swapchain.framebuffers.items[i] = try Framebuffer.init(
+                self,
+                self.allocator,
+                render_pass,
+                self.swapchain.extent.width,
+                self.swapchain.extent.height,
+                &attachments,
+            );
+        }
+    }
 };
 
 pub const PhysicalDevice = struct {
+    const Self = @This();
+
     handle: vk.PhysicalDevice,
     features: vk.PhysicalDeviceFeatures,
     properties: vk.PhysicalDeviceProperties,
     memory_properties: vk.PhysicalDeviceMemoryProperties,
+    depth_format: vk.Format,
     graphics_family_index: u32,
     present_family_index: u32,
     compute_family_index: u32,
     transfer_family_index: u32,
     score: u32,
 
-    pub fn init(allocator: Allocator, physical_device: vk.PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !?PhysicalDevice {
-        var info: PhysicalDevice = undefined;
-        info.handle = physical_device;
-        info.score = 1;
+    pub fn init(allocator: Allocator, handle: vk.PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !Self {
+        var self: Self = undefined;
+        self.handle = handle;
+        self.score = 1;
 
-        if (!info.initFeatureSupport(instance_api)) {
-            return null;
-        }
+        try self.initFeatureSupport(instance_api);
+        try self.initMemorySupport(instance_api);
+        try self.initDepthFormat(instance_api);
+        try self.initSurfaceSupport(instance_api, surface);
+        try self.initExtensionSupport(allocator, instance_api);
+        try self.initQueueSupport(allocator, instance_api, surface);
 
-        if (!info.initMemorySupport(instance_api)) {
-            return null;
-        }
-
-        if (!try info.initSurfaceSupport(instance_api, surface)) {
-            return null;
-        }
-
-        if (!try info.initExtensionSupport(allocator, instance_api)) {
-            return null;
-        }
-
-        if (!try info.initQueueSupport(allocator, instance_api, surface)) {
-            return null;
-        }
-
-        return info;
+        return self;
     }
 
-    fn initFeatureSupport(self: *PhysicalDevice, instance_api: InstanceAPI) bool {
+    fn initFeatureSupport(self: *Self, instance_api: InstanceAPI) !void {
         const features = instance_api.getPhysicalDeviceFeatures(self.handle);
         const properties = instance_api.getPhysicalDeviceProperties(self.handle);
 
         if (features.sampler_anisotropy != vk.TRUE) {
-            return false;
+            return error.samplerAnisotropyNotSupported;
         }
 
         if (features.geometry_shader == vk.TRUE) {
@@ -372,11 +500,9 @@ pub const PhysicalDevice = struct {
         //       to be used in here to prune the checking of this device or to increment it's score
         self.features = features;
         self.properties = properties;
-
-        return true;
     }
 
-    fn initMemorySupport(self: *PhysicalDevice, instance_api: InstanceAPI) bool {
+    fn initMemorySupport(self: *Self, instance_api: InstanceAPI) !void {
         const memory_properties = instance_api.getPhysicalDeviceMemoryProperties(self.handle);
 
         var supports_device_local_host_visible: bool = false;
@@ -394,25 +520,40 @@ pub const PhysicalDevice = struct {
         }
 
         self.memory_properties = memory_properties;
-
-        return true;
     }
 
-    fn initSurfaceSupport(self: *PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !bool {
+    fn initDepthFormat(self: *Self, instance_api: InstanceAPI) !void {
+        for (desired_depth_formats) |desired_format| {
+            const format_properties = instance_api.getPhysicalDeviceFormatProperties(self.handle, desired_format);
+
+            if (format_properties.linear_tiling_features.depth_stencil_attachment_bit or format_properties.optimal_tiling_features.depth_stencil_attachment_bit) {
+                self.depth_format = desired_format;
+                return;
+            }
+        }
+
+        return error.couldNotFindDepthFormat;
+    }
+
+    fn initSurfaceSupport(self: *Self, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
         var format_count: u32 = undefined;
         _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(self.handle, surface, &format_count, null);
+
+        if (format_count == 0) {
+            return error.noDeviceSurfaceFormatsFound;
+        }
 
         var present_mode_count: u32 = undefined;
         _ = try instance_api.getPhysicalDeviceSurfacePresentModesKHR(self.handle, surface, &present_mode_count, null);
 
-        if (format_count > 0 and present_mode_count > 0) {
-            return true;
+        if (present_mode_count == 0) {
+            return error.noDevicePresentModesFound;
         }
-
-        return false;
     }
 
-    fn initExtensionSupport(self: PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI) !bool {
+    fn initExtensionSupport(self: Self, allocator: Allocator, instance_api: InstanceAPI) !void {
+        // TODO: make the optional extensions list into a map of pairs of extensions and weights
+        //       which can then be used to increment the device score.
         var count: u32 = undefined;
         _ = try instance_api.enumerateDeviceExtensionProperties(self.handle, null, &count, null);
 
@@ -428,16 +569,12 @@ pub const PhysicalDevice = struct {
                     break;
                 }
             } else {
-                return false;
+                return error.extensionNotSupported;
             }
         }
-
-        // TODO: make the optional extensions list into a map of pairs of extensions and weights
-        //       which can then be used to increment the device score.
-        return true;
     }
 
-    fn initQueueSupport(self: *PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !bool {
+    fn initQueueSupport(self: *Self, allocator: Allocator, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
         var count: u32 = undefined;
         instance_api.getPhysicalDeviceQueueFamilyProperties(self.handle, &count, null);
 
@@ -495,15 +632,13 @@ pub const PhysicalDevice = struct {
         }
 
         if (graphics_family_index == null or present_family_index == null or compute_family_index == null or transfer_family_index == null) {
-            return false;
+            return error.queueFamilyTypeNotSupported;
         }
 
         self.graphics_family_index = graphics_family_index.?;
         self.present_family_index = present_family_index.?;
         self.compute_family_index = compute_family_index.?;
         self.transfer_family_index = transfer_family_index.?;
-
-        return true;
     }
 };
 
