@@ -143,7 +143,7 @@ pub const Swapchain = struct {
         }
     }
 
-    pub fn present(self: *Self, cmd_buffer: vk.CommandBuffer) !PresentState {
+    pub fn present_old(self: *Self, cmd_buffer: vk.CommandBuffer) !PresentState {
         const current_image = self.getCurrentSwapImage();
 
         // make sure the current frame has finished rendering.
@@ -160,6 +160,25 @@ pub const Swapchain = struct {
             .signal_semaphore_count = 1,
             .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
         }}, current_image.frame_fence);
+
+        // present the current frame
+        // NOTE: we ignore .suboptimal result here, but the next call to acquire next image catch and return it
+        _ = try self.context.device_api.queuePresentKHR(self.context.present_queue.handle, &vk.PresentInfoKHR{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = @ptrCast(&current_image.render_finished_semaphore),
+            .swapchain_count = 1,
+            .p_swapchains = @ptrCast(&self.handle),
+            .p_image_indices = @ptrCast(&self.image_index),
+            .p_results = null,
+        });
+
+        // acquire next frame
+        // NOTE: call acquire next image as the last step so we can reference the current image while rendering.
+        return try self.acquireNextImage();
+    }
+
+    pub fn present(self: *Self) !PresentState {
+        const current_image = self.getCurrentSwapImage();
 
         // present the current frame
         // NOTE: we ignore .suboptimal result here, but the next call to acquire next image catch and return it
@@ -404,7 +423,7 @@ const SwapchainImage = struct {
     }
 
     // internal
-    fn waitForFrameFence(self: SwapchainImage, context: *const Context, options: struct { reset: bool = false }) !void {
+    pub fn waitForFrameFence(self: SwapchainImage, context: *const Context, options: struct { reset: bool = false }) !void {
         _ = try context.device_api.waitForFences(context.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
 
         if (options.reset) {

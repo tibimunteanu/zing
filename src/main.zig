@@ -62,36 +62,21 @@ pub const Engine = struct {
         glfw.terminate();
     }
 
-    pub fn run(self: *Self) void {
+    pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
-            // const cmdbuf = cmdbufs[swapchain.image_index];
+            var ok = true;
 
-            // const state = swapchain.present(cmdbuf) catch |err| switch (err) {
-            //     error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
-            //     else => |narrow| return narrow,
-            // };
+            self.context.beginFrame() catch |err| switch (err) {
+                error.cannotRenderWhileResizing => {
+                    std.log.info("run cannotRenderWhileResizing. Recreate everything!!!", .{});
+                    ok = false;
+                },
+                else => |narrow| return narrow,
+            };
 
-            // if (state == .suboptimal) {
-            //     const size = window.getSize();
-            //     extent.width = @intCast(size.width);
-            //     extent.height = @intCast(size.height);
-            //     try swapchain.recreate(extent);
-
-            //     destroyFramebuffers(&gc, allocator, framebuffers);
-            //     framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
-
-            //     destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
-            //     cmdbufs = try createCommandBuffers(
-            //         &gc,
-            //         pool,
-            //         allocator,
-            //         buffer,
-            //         swapchain.extent,
-            //         render_pass,
-            //         pipeline,
-            //         framebuffers,
-            //     );
-            // }
+            if (ok) {
+                try self.context.endFrame();
+            }
 
             glfw.pollEvents();
         }
@@ -108,5 +93,5 @@ pub fn main() !void {
     engine = try Engine.init(allocator);
     defer engine.deinit();
 
-    engine.run();
+    try engine.run();
 }

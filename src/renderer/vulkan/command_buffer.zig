@@ -41,7 +41,7 @@ pub const CommandBuffer = struct {
         self.state = .not_allocated;
     }
 
-    pub fn begin(self: *Self, context: *const Context, flags: vk.CommandBufferUsageFlags) void {
+    pub fn begin(self: *Self, context: *const Context, flags: vk.CommandBufferUsageFlags) !void {
         try context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{
             .flags = flags,
         });
@@ -49,7 +49,7 @@ pub const CommandBuffer = struct {
         self.state = .recording;
     }
 
-    pub fn end(self: *Self, context: *const Context) void {
+    pub fn end(self: *Self, context: *const Context) !void {
         try context.device_api.endCommandBuffer(self.handle);
 
         self.state = .recording_ended;
@@ -65,12 +65,12 @@ pub const CommandBuffer = struct {
 
     pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !Self {
         var self = try CommandBuffer.init(context, pool, true);
-        self.begin(context, .{ .one_time_submit_bit = true });
+        try self.begin(context, .{ .one_time_submit_bit = true });
         return self;
     }
 
     pub fn endSingleUseAndDeinit(self: *Self, context: *const Context, pool: vk.CommandPool, queue: vk.Queue) void {
-        self.end(context);
+        try self.end(context);
 
         try context.device_api.queueSubmit(queue, 1, &vk.SubmitInfo{
             .command_buffer_count = 1,

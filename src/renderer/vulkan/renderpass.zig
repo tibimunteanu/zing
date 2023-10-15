@@ -102,13 +102,13 @@ pub const RenderPass = struct {
         context.device_api.destroyRenderPass(context.device, self.handle, null);
     }
 
-    pub fn begin(self: *Self, context: *const Context, command_buffer: CommandBuffer, framebuffer: vk.Framebuffer) void {
+    pub fn begin(self: *Self, context: *const Context, command_buffer: *CommandBuffer, framebuffer: vk.Framebuffer) void {
         context.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
             .render_pass = self.handle,
             .framebuffer = framebuffer,
             .render_area = self.render_area,
             .clear_value_count = 2,
-            .p_clear_values = [_]vk.ClearValue{
+            .p_clear_values = &[_]vk.ClearValue{
                 .{
                     .color = .{ .float_32 = self.clear_values.color },
                 },
@@ -125,7 +125,7 @@ pub const RenderPass = struct {
     }
 
     pub fn end(self: Self, context: *const Context, command_buffer: *CommandBuffer) void {
-        context.device_api.cmdEndRenderPass(context.device, command_buffer.handle);
+        context.device_api.cmdEndRenderPass(command_buffer.handle);
         command_buffer.state = .recording;
         _ = self;
     }

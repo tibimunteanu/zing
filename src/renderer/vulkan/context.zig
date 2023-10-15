@@ -239,6 +239,79 @@ pub const Context = struct {
         return error.getMemoryIndexFailed;
     }
 
+    pub fn beginFrame(self: *Self) !void {
+        const current_image = self.swapchain.getCurrentSwapImage();
+
+        // make sure the current frame has finished rendering.
+        // NOTE: the fences start signaled so the first frame can get past them.
+        try current_image.waitForFrameFence(self, .{ .reset = true });
+
+        if (self.desired_extent_generation != self.swapchain.extent_generation) {
+            try self.device_api.deviceWaitIdle(self.device);
+
+            std.log.info("Generation changed. Recreate everything!!!", .{});
+
+            return error.cannotRenderWhileResizing;
+        }
+
+        var command_buffer = self.getCurrentCommandBuffer();
+        command_buffer.set_ready();
+        try command_buffer.begin(self, .{});
+
+        const viewport: vk.Viewport = .{
+            .x = 0.0,
+            .y = @floatFromInt(self.swapchain.extent.height),
+            .width = @floatFromInt(self.swapchain.extent.width),
+            .height = @floatFromInt(-@as(i32, @intCast(self.swapchain.extent.height))),
+            .min_depth = 0.0,
+            .max_depth = 1.0,
+        };
+
+        const scissor: vk.Rect2D = .{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.swapchain.extent,
+        };
+
+        self.device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
+        self.device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
+
+        const framebuffer = self.getCurrentFramebuffer();
+
+        self.main_render_pass.render_area.extent = self.swapchain.extent;
+        self.main_render_pass.begin(self, command_buffer, framebuffer.handle);
+    }
+
+    pub fn endFrame(self: *Self) !void {
+        const current_image = self.swapchain.getCurrentSwapImage();
+
+        // end the render pass and the command buffer
+        var command_buffer = self.getCurrentCommandBuffer();
+        self.main_render_pass.end(self, command_buffer);
+        try command_buffer.end(self);
+
+        // submit the command buffer
+        try self.device_api.queueSubmit(self.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = @ptrCast(&current_image.image_acquired_semaphore),
+            .p_wait_dst_stage_mask = &[_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }},
+            .command_buffer_count = 1,
+            .p_command_buffers = @ptrCast(&command_buffer.handle),
+            .signal_semaphore_count = 1,
+            .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
+        }}, current_image.frame_fence);
+
+        command_buffer.set_submitted();
+
+        const state = self.swapchain.present() catch |err| switch (err) {
+            error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+            else => |narrow| return narrow,
+        };
+
+        if (state == .suboptimal) {
+            std.log.info("Suboptimal. Recreate everything!!!", .{});
+        }
+    }
+
     fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const u8) !vk.Instance {
         const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return blk: {
             const err = glfw.mustGetError();
@@ -424,6 +497,14 @@ pub const Context = struct {
         if (options.deallocate) {
             self.graphics_command_buffers.deinit();
         }
+    }
+
+    fn getCurrentCommandBuffer(self: Self) *CommandBuffer {
+        return &self.graphics_command_buffers.items[self.swapchain.image_index];
+    }
+
+    fn getCurrentFramebuffer(self: Self) *Framebuffer {
+        return &self.swapchain.framebuffers.items[self.swapchain.image_index];
     }
 
     fn regenerateFramebuffers(self: *Self, render_pass: *const RenderPass) !void {
