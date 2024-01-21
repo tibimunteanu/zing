@@ -40,7 +40,9 @@ pub const Framebuffer = struct {
     }
 
     pub fn deinit(self: *Self, context: *const Context) void {
-        context.device_api.destroyFramebuffer(context.device, self.handle, null);
+        if (self.handle != .null_handle) {
+            context.device_api.destroyFramebuffer(context.device, self.handle, null);
+        }
 
         if (self.attachments.len > 0) {
             self.allocator.free(self.attachments);

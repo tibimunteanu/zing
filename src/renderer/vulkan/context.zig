@@ -132,6 +132,7 @@ pub const Context = struct {
     desired_extent: glfw.Window.Size,
     desired_extent_generation: u32,
 
+    // public
     pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !Self {
         var self: Self = undefined;
 
@@ -187,8 +188,15 @@ pub const Context = struct {
 
         // swapchain framebuffers
         self.swapchain.framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        self.swapchain.framebuffers.items.len = self.swapchain.images.len;
+
+        for (self.swapchain.framebuffers.items) |*framebuffer| {
+            framebuffer.handle = .null_handle;
+        }
+
         try self.regenerateFramebuffers(&self.main_render_pass);
 
+        // create command buffers
         self.graphics_command_pool = try self.device_api.createCommandPool(self.device, &vk.CommandPoolCreateInfo{
             .queue_family_index = self.graphics_queue.family_index,
             .flags = .{ .reset_command_buffer_bit = true },
@@ -228,10 +236,11 @@ pub const Context = struct {
     }
 
     pub fn getMemoryIndex(self: Self, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
-        const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
+        // TODO: should we always get fresh memory properties from the device?
+        // const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
 
-        for (0..memory_properties.memory_type_count) |i| {
-            if ((type_bits & std.math.shl(u32, 1, i) != 0) and memory_properties.memory_types[i].property_flags.contains(flags)) {
+        for (0..self.physical_device.memory_properties.memory_type_count) |i| {
+            if ((type_bits & std.math.shl(u32, 1, i) != 0) and self.physical_device.memory_properties.memory_types[i].property_flags.contains(flags)) {
                 return @as(u32, @intCast(i));
             }
         }
@@ -240,7 +249,7 @@ pub const Context = struct {
     }
 
     pub fn beginFrame(self: *Self) !void {
-        const current_image = self.swapchain.getCurrentSwapImage();
+        const current_image = self.swapchain.getCurrentImage();
 
         // make sure the current frame has finished rendering.
         // NOTE: the fences start signaled so the first frame can get past them.
@@ -249,13 +258,13 @@ pub const Context = struct {
         if (self.desired_extent_generation != self.swapchain.extent_generation) {
             try self.device_api.deviceWaitIdle(self.device);
 
-            std.log.info("Generation changed. Recreate everything!!!", .{});
+            std.log.info("beginFrame() generation changed. Cannot render while resizing!!!", .{});
 
             return error.cannotRenderWhileResizing;
         }
 
         var command_buffer = self.getCurrentCommandBuffer();
-        command_buffer.set_ready();
+        command_buffer.set_initial();
         try command_buffer.begin(self, .{});
 
         const viewport: vk.Viewport = .{
@@ -282,7 +291,7 @@ pub const Context = struct {
     }
 
     pub fn endFrame(self: *Self) !void {
-        const current_image = self.swapchain.getCurrentSwapImage();
+        const current_image = self.swapchain.getCurrentImage();
 
         // end the render pass and the command buffer
         var command_buffer = self.getCurrentCommandBuffer();
@@ -300,7 +309,7 @@ pub const Context = struct {
             .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
         }}, current_image.frame_fence);
 
-        command_buffer.set_submitted();
+        command_buffer.set_pending();
 
         const state = self.swapchain.present() catch |err| switch (err) {
             error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -308,10 +317,11 @@ pub const Context = struct {
         };
 
         if (state == .suboptimal) {
-            std.log.info("Suboptimal. Recreate everything!!!", .{});
+            std.log.info("endFrame() present was suboptimal!!!", .{});
         }
     }
 
+    // internal
     fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const u8) !vk.Instance {
         const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return blk: {
             const err = glfw.mustGetError();
@@ -326,6 +336,7 @@ pub const Context = struct {
             required_instance_extensions.len + 1,
         );
         defer instance_extensions.deinit();
+
         try instance_extensions.appendSlice(required_instance_extensions);
 
         var count: u32 = undefined;
@@ -341,16 +352,14 @@ pub const Context = struct {
                 const len = std.mem.indexOfScalar(u8, &existing_inst_ext.extension_name, 0) orelse existing_inst_ext.extension_name.len;
 
                 if (std.mem.eql(u8, existing_inst_ext.extension_name[0..len], std.mem.span(optional_inst_ext))) {
-                    try instance_extensions.append(@ptrCast(optional_inst_ext));
+                    try instance_extensions.append(optional_inst_ext);
                     break;
                 }
             }
         }
 
         const instance = try base_api.createInstance(&.{
-            .flags = if (builtin.os.tag == .macos) .{
-                .enumerate_portability_bit_khr = true,
-            } else .{},
+            .flags = if (builtin.os.tag == .macos) .{ .enumerate_portability_bit_khr = true } else .{},
             .p_application_info = &.{
                 .p_application_name = app_name,
                 .application_version = vk.makeApiVersion(0, 0, 0, 1),
@@ -359,7 +368,7 @@ pub const Context = struct {
                 .api_version = vk.API_VERSION_1_3,
             },
             .enabled_layer_count = 0,
-            .pp_enabled_layer_names = undefined,
+            .pp_enabled_layer_names = null,
             .enabled_extension_count = @intCast(instance_extensions.items.len),
             .pp_enabled_extension_names = @ptrCast(instance_extensions.items),
         }, null);
@@ -384,18 +393,18 @@ pub const Context = struct {
         _ = try instance_api.enumeratePhysicalDevices(instance, &count, physical_devices.ptr);
 
         var max_score: u32 = 0;
-        var maybe_physical_device: ?PhysicalDevice = null;
+        var best_physical_device: ?PhysicalDevice = null;
 
         for (physical_devices) |handle| {
-            const physical_device = try PhysicalDevice.init(allocator, handle, instance_api, surface);
+            const physical_device = PhysicalDevice.init(allocator, handle, instance_api, surface) catch continue;
 
             if (physical_device.score > max_score) {
                 max_score = physical_device.score;
-                maybe_physical_device = physical_device;
+                best_physical_device = physical_device;
             }
         }
 
-        return maybe_physical_device orelse error.noSuitablePhysicalDeviceFound;
+        return best_physical_device orelse error.noSuitablePhysicalDeviceFound;
     }
 
     fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_api: InstanceAPI) !vk.Device {
@@ -459,7 +468,7 @@ pub const Context = struct {
             .queue_create_info_count = queue_count,
             .p_queue_create_infos = &queue_create_infos,
             .enabled_layer_count = 0,
-            .pp_enabled_layer_names = undefined,
+            .pp_enabled_layer_names = null,
             .enabled_extension_count = @intCast(device_extensions.items.len),
             .pp_enabled_extension_names = @ptrCast(device_extensions.items),
             .p_enabled_features = null,
@@ -475,7 +484,7 @@ pub const Context = struct {
 
             for (self.graphics_command_buffers.items) |*buffer| {
                 buffer.handle = .null_handle;
-                buffer.state = .not_allocated;
+                buffer.state = .invalid;
             }
         }
         errdefer if (options.allocate) self.graphics_command_buffers.deinit();
@@ -508,15 +517,17 @@ pub const Context = struct {
     }
 
     fn regenerateFramebuffers(self: *Self, render_pass: *const RenderPass) !void {
-        self.swapchain.framebuffers.items.len = self.swapchain.images.len;
+        for (self.swapchain.images, self.swapchain.framebuffers.items) |image, *framebuffer| {
+            if (framebuffer.handle != .null_handle) {
+                framebuffer.deinit(self);
+            }
 
-        for (self.swapchain.images, 0..) |image, i| {
             const attachments = [_]vk.ImageView{
                 image.view,
-                self.swapchain.depth_image.view.?,
+                // self.swapchain.depth_image.view.?,
             };
 
-            self.swapchain.framebuffers.items[i] = try Framebuffer.init(
+            framebuffer.* = try Framebuffer.init(
                 self,
                 self.allocator,
                 render_pass,
@@ -542,6 +553,7 @@ pub const PhysicalDevice = struct {
     transfer_family_index: u32,
     score: u32,
 
+    // public
     pub fn init(allocator: Allocator, handle: vk.PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !Self {
         var self: Self = undefined;
         self.handle = handle;
@@ -557,6 +569,7 @@ pub const PhysicalDevice = struct {
         return self;
     }
 
+    // internal
     fn initFeatureSupport(self: *Self, instance_api: InstanceAPI) !void {
         const features = instance_api.getPhysicalDeviceFeatures(self.handle);
         const properties = instance_api.getPhysicalDeviceProperties(self.handle);
@@ -586,18 +599,13 @@ pub const PhysicalDevice = struct {
     fn initMemorySupport(self: *Self, instance_api: InstanceAPI) !void {
         const memory_properties = instance_api.getPhysicalDeviceMemoryProperties(self.handle);
 
-        var supports_device_local_host_visible: bool = false;
         for (0..memory_properties.memory_type_count) |i| {
             const flags = memory_properties.memory_types[i].property_flags;
 
             if (flags.device_local_bit and flags.host_visible_bit) {
-                supports_device_local_host_visible = true;
+                self.score += 500;
                 break;
             }
-        }
-
-        if (supports_device_local_host_visible) {
-            self.score += 500;
         }
 
         self.memory_properties = memory_properties;

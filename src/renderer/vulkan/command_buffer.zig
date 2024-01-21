@@ -6,21 +6,21 @@ pub const CommandBuffer = struct {
     const Self = @This();
 
     pub const State = enum {
-        not_allocated,
-        ready,
+        invalid,
+        initial,
         recording,
         in_render_pass,
-        recording_ended,
-        submitted,
+        executable,
+        pending,
     };
 
-    state: State = .not_allocated,
+    state: State = .invalid,
     handle: vk.CommandBuffer = .null_handle,
 
     pub fn init(context: *const Context, pool: vk.CommandPool, is_primary: bool) !Self {
         var self: Self = undefined;
 
-        self.state = .not_allocated;
+        self.state = .invalid;
 
         try context.device_api.allocateCommandBuffers(context.device, &vk.CommandBufferAllocateInfo{
             .command_pool = pool,
@@ -28,7 +28,7 @@ pub const CommandBuffer = struct {
             .level = if (is_primary) .primary else .secondary,
         }, @ptrCast(&self.handle));
 
-        self.state = .ready;
+        self.state = .initial;
 
         return self;
     }
@@ -38,7 +38,7 @@ pub const CommandBuffer = struct {
             context.device_api.freeCommandBuffers(context.device, pool, 1, @ptrCast(&self.handle));
         }
         self.handle = .null_handle;
-        self.state = .not_allocated;
+        self.state = .invalid;
     }
 
     pub fn begin(self: *Self, context: *const Context, flags: vk.CommandBufferUsageFlags) !void {
@@ -52,15 +52,15 @@ pub const CommandBuffer = struct {
     pub fn end(self: *Self, context: *const Context) !void {
         try context.device_api.endCommandBuffer(self.handle);
 
-        self.state = .recording_ended;
+        self.state = .executable;
     }
 
-    pub fn set_submitted(self: *Self) void {
-        self.state = .submitted;
+    pub fn set_initial(self: *Self) void {
+        self.state = .initial;
     }
 
-    pub fn set_ready(self: *Self) void {
-        self.state = .ready;
+    pub fn set_pending(self: *Self) void {
+        self.state = .pending;
     }
 
     pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !Self {

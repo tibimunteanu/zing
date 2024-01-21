@@ -12,21 +12,12 @@ pub fn build(b: *std.Build) void {
     });
 
     const glfw_dep = b.dependency("mach_glfw", .{
-        .target = exe.target,
-        .optimize = exe.optimize,
+        .target = target,
+        .optimize = optimize,
     });
-    exe.addModule("mach-glfw", glfw_dep.module("mach-glfw"));
-    @import("mach_glfw").link(glfw_dep.builder, exe);
 
-    const vk_gen = b.dependency("vulkan_zig", .{}).artifact("generator");
-
-    const generate_cmd = b.addRunArtifact(vk_gen);
-    generate_cmd.addArg(b.pathFromRoot("vk.xml"));
-
-    const vulkan_zig = b.addModule("vulkan-zig", .{
-        .source_file = generate_cmd.addOutputFileArg("vk.zig"),
-    });
-    exe.addModule("vulkan-zig", vulkan_zig);
+    exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
+    @import("mach_glfw").addPaths(exe);
 
     b.installArtifact(exe);
 

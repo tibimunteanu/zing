@@ -36,7 +36,7 @@ pub const Swapchain = struct {
         allocator: Allocator,
         context: *const Context,
         options: struct {
-            desired_surface_format: vk.SurfaceFormatKHR = vk.SurfaceFormatKHR{
+            desired_surface_format: vk.SurfaceFormatKHR = .{
                 .format = .b8g8r8a8_srgb,
                 .color_space = .srgb_nonlinear_khr,
             },
@@ -90,6 +90,9 @@ pub const Swapchain = struct {
         try self.initImages();
         errdefer self.deinitImages();
 
+        // create an aux semaphore because we call acquireNextImage as the last step
+        // in order to reference the current image while rendering.
+        // since we can't know beforehand which image semaphore to signal, we swap in this aux.
         self.next_image_acquired_semaphore = try device_api.createSemaphore(device, &.{}, null);
         errdefer device_api.destroySemaphore(device, self.next_image_acquired_semaphore, null);
 
@@ -129,11 +132,7 @@ pub const Swapchain = struct {
         });
     }
 
-    pub fn getCurrentImage(self: Self) vk.Image {
-        return self.images[self.image_index].image;
-    }
-
-    pub fn getCurrentSwapImage(self: Self) *const SwapchainImage {
+    pub fn getCurrentImage(self: Self) *const SwapchainImage {
         return &self.images[self.image_index];
     }
 
@@ -144,7 +143,7 @@ pub const Swapchain = struct {
     }
 
     pub fn present_old(self: *Self, cmd_buffer: vk.CommandBuffer) !PresentState {
-        const current_image = self.getCurrentSwapImage();
+        const current_image = self.getCurrentImage();
 
         // make sure the current frame has finished rendering.
         // NOTE: the fences start signaled so the first frame can get past them.
@@ -178,7 +177,7 @@ pub const Swapchain = struct {
     }
 
     pub fn present(self: *Self) !PresentState {
-        const current_image = self.getCurrentSwapImage();
+        const current_image = self.getCurrentImage();
 
         // present the current frame
         // NOTE: we ignore .suboptimal result here, but the next call to acquire next image catch and return it
@@ -248,6 +247,10 @@ pub const Swapchain = struct {
             }
         }
 
+        std.log.info(
+            "Desired surface format not available! Falling back to {s}",
+            .{@tagName(surface_formats[0].format)},
+        );
         self.surface_format = surface_formats[0]; // there must always be at least one
     }
 
@@ -266,9 +269,11 @@ pub const Swapchain = struct {
         for (desired_present_modes) |desired_mode| {
             if (std.mem.indexOfScalar(vk.PresentModeKHR, present_modes, desired_mode) != null) {
                 self.present_mode = desired_mode;
+                return;
             }
         }
 
+        std.log.info("Desired present mode not available! Falling back to fifo_khr", .{});
         self.present_mode = .fifo_khr; // guaranteed to be available
     }
 
@@ -304,15 +309,13 @@ pub const Swapchain = struct {
         _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, images.ptr);
 
         // allocate swapchain images
-        const swapchain_images = try self.allocator.alloc(SwapchainImage, count);
-        errdefer self.allocator.free(swapchain_images);
+        self.images = try self.allocator.alloc(SwapchainImage, count);
+        errdefer self.allocator.free(self.images);
 
         for (images, 0..) |image, i| {
-            swapchain_images[i] = try SwapchainImage.init(self.context, image, self.surface_format.format);
-            errdefer swapchain_images[i].deinit(self.context);
+            self.images[i] = try SwapchainImage.init(self.context, image, self.surface_format.format);
+            errdefer self.images[i].deinit(self.context);
         }
-
-        self.images = swapchain_images;
 
         // create the depth image
         self.depth_image = try Image.init(self.context, .{
@@ -337,7 +340,7 @@ pub const Swapchain = struct {
     fn acquireNextImage(self: *Self) !PresentState {
         // NOTE: in order to reference the current image while rendering,
         // call acquire next image as the last step.
-        // and use an aux semaphore since we can't know beforehand which image attached semaphore to signal.
+        // and use an aux semaphore since we can't know beforehand which image semaphore to signal.
         const acquired = try self.context.device_api.acquireNextImageKHR(
             self.context.device,
             self.handle,
@@ -373,7 +376,7 @@ const SwapchainImage = struct {
     render_finished_semaphore: vk.Semaphore,
     frame_fence: vk.Fence,
 
-    // internal init
+    // internal
     fn init(context: *const Context, image: vk.Image, format: vk.Format) !SwapchainImage {
         const device = context.device;
         const device_api = context.device_api;
@@ -422,7 +425,7 @@ const SwapchainImage = struct {
         context.device_api.destroyImageView(context.device, self.view, null);
     }
 
-    // internal
+    // public
     pub fn waitForFrameFence(self: SwapchainImage, context: *const Context, options: struct { reset: bool = false }) !void {
         _ = try context.device_api.waitForFences(context.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
 

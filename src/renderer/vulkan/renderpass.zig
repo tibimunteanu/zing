@@ -8,12 +8,12 @@ pub const RenderPass = struct {
     const Self = @This();
 
     pub const State = enum {
-        not_allocated,
-        ready,
+        invalid,
+        initial,
         recording,
         in_render_pass,
-        recording_ended,
-        submitted,
+        executable,
+        pending,
     };
 
     pub const ClearValues = struct {
@@ -30,6 +30,8 @@ pub const RenderPass = struct {
     pub fn init(context: *const Context, render_area: vk.Rect2D, clear_values: ClearValues) !Self {
         var self: Self = undefined;
 
+        self.state = .invalid;
+
         self.render_area = render_area;
         self.clear_values = clear_values;
 
@@ -44,16 +46,16 @@ pub const RenderPass = struct {
                 .initial_layout = .undefined,
                 .final_layout = .present_src_khr,
             },
-            .{
-                .format = context.physical_device.depth_format,
-                .samples = .{ .@"1_bit" = true },
-                .load_op = .clear,
-                .store_op = .dont_care,
-                .stencil_load_op = .dont_care,
-                .stencil_store_op = .dont_care,
-                .initial_layout = .undefined,
-                .final_layout = .depth_stencil_attachment_optimal,
-            },
+            // .{
+            //     .format = context.physical_device.depth_format,
+            //     .samples = .{ .@"1_bit" = true },
+            //     .load_op = .clear,
+            //     .store_op = .dont_care,
+            //     .stencil_load_op = .dont_care,
+            //     .stencil_store_op = .dont_care,
+            //     .initial_layout = .undefined,
+            //     .final_layout = .depth_stencil_attachment_optimal,
+            // },
         };
 
         const sub_pass = vk.SubpassDescription{
@@ -65,15 +67,15 @@ pub const RenderPass = struct {
                     .layout = .color_attachment_optimal,
                 },
             },
-            .p_depth_stencil_attachment = &.{
-                .attachment = 1,
-                .layout = .depth_stencil_attachment_optimal,
-            },
+            .p_depth_stencil_attachment = null, // &.{
+            //     .attachment = 1,
+            //     .layout = .depth_stencil_attachment_optimal,
+            // },
             .input_attachment_count = 0,
-            .p_input_attachments = undefined,
-            .p_resolve_attachments = undefined,
+            .p_input_attachments = null,
             .preserve_attachment_count = 0,
-            .p_preserve_attachments = undefined,
+            .p_preserve_attachments = null,
+            .p_resolve_attachments = null,
         };
 
         const dependency = vk.SubpassDependency{
@@ -95,6 +97,8 @@ pub const RenderPass = struct {
             .p_dependencies = &[_]vk.SubpassDependency{dependency},
         }, null);
 
+        self.state = .initial;
+
         return self;
     }
 
@@ -107,26 +111,27 @@ pub const RenderPass = struct {
             .render_pass = self.handle,
             .framebuffer = framebuffer,
             .render_area = self.render_area,
-            .clear_value_count = 2,
+            .clear_value_count = 1,
             .p_clear_values = &[_]vk.ClearValue{
                 .{
                     .color = .{ .float_32 = self.clear_values.color },
                 },
-                .{
-                    .depth_stencil = .{
-                        .depth = self.clear_values.depth,
-                        .stencil = self.clear_values.stencil,
-                    },
-                },
+                // .{
+                //     .depth_stencil = .{
+                //         .depth = self.clear_values.depth,
+                //         .stencil = self.clear_values.stencil,
+                //     },
+                // },
             },
         }, .@"inline");
 
-        self.state = .in_render_pass;
+        command_buffer.state = .in_render_pass;
+        self.state = .recording;
     }
 
-    pub fn end(self: Self, context: *const Context, command_buffer: *CommandBuffer) void {
+    pub fn end(self: *Self, context: *const Context, command_buffer: *CommandBuffer) void {
         context.device_api.cmdEndRenderPass(command_buffer.handle);
         command_buffer.state = .recording;
-        _ = self;
+        self.state = .executable;
     }
 };

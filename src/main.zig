@@ -43,8 +43,8 @@ pub const Engine = struct {
         self.context = try Context.init(allocator, "Zing app", self.window);
         errdefer self.context.deinit();
 
-        std.log.info("Graphics device: {?s}\n", .{self.context.physical_device.properties.device_name});
-        std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}\n", .{
+        std.log.info("Graphics device: {?s}", .{self.context.physical_device.properties.device_name});
+        std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}", .{
             self.context.graphics_queue.family_index,
             self.context.present_queue.family_index,
             self.context.compute_queue.family_index,
@@ -68,7 +68,7 @@ pub const Engine = struct {
 
             self.context.beginFrame() catch |err| switch (err) {
                 error.cannotRenderWhileResizing => {
-                    std.log.info("run cannotRenderWhileResizing. Recreate everything!!!", .{});
+                    std.log.info("run() cannotRenderWhileResizing. Recreate everything!!!", .{});
                     ok = false;
                 },
                 else => |narrow| return narrow,
