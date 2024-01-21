@@ -46,19 +46,19 @@ pub const RenderPass = struct {
                 .initial_layout = .undefined,
                 .final_layout = .present_src_khr,
             },
-            // .{
-            //     .format = context.physical_device.depth_format,
-            //     .samples = .{ .@"1_bit" = true },
-            //     .load_op = .clear,
-            //     .store_op = .dont_care,
-            //     .stencil_load_op = .dont_care,
-            //     .stencil_store_op = .dont_care,
-            //     .initial_layout = .undefined,
-            //     .final_layout = .depth_stencil_attachment_optimal,
-            // },
+            .{
+                .format = context.physical_device.depth_format,
+                .samples = .{ .@"1_bit" = true },
+                .load_op = .clear,
+                .store_op = .dont_care,
+                .stencil_load_op = .dont_care,
+                .stencil_store_op = .dont_care,
+                .initial_layout = .undefined,
+                .final_layout = .depth_stencil_attachment_optimal,
+            },
         };
 
-        const sub_pass = vk.SubpassDescription{
+        const subpass = vk.SubpassDescription{
             .pipeline_bind_point = .graphics,
             .color_attachment_count = 1,
             .p_color_attachments = &[_]vk.AttachmentReference{
@@ -67,10 +67,10 @@ pub const RenderPass = struct {
                     .layout = .color_attachment_optimal,
                 },
             },
-            .p_depth_stencil_attachment = null, // &.{
-            //     .attachment = 1,
-            //     .layout = .depth_stencil_attachment_optimal,
-            // },
+            .p_depth_stencil_attachment = &.{
+                .attachment = 1,
+                .layout = .depth_stencil_attachment_optimal,
+            },
             .input_attachment_count = 0,
             .p_input_attachments = null,
             .preserve_attachment_count = 0,
@@ -78,23 +78,41 @@ pub const RenderPass = struct {
             .p_resolve_attachments = null,
         };
 
-        const dependency = vk.SubpassDependency{
-            .src_subpass = vk.SUBPASS_EXTERNAL,
-            .dst_subpass = 0,
-            .src_stage_mask = .{ .color_attachment_output_bit = true },
-            .src_access_mask = .{},
-            .dst_stage_mask = .{ .color_attachment_output_bit = true },
-            .dst_access_mask = .{ .color_attachment_read_bit = true, .color_attachment_write_bit = true },
-            .dependency_flags = .{},
+        const subpasses = [_]vk.SubpassDescription{subpass};
+
+        const dependencies = [_]vk.SubpassDependency{
+            .{
+                .src_subpass = vk.SUBPASS_EXTERNAL,
+                .dst_subpass = 0,
+                .src_stage_mask = .{ .color_attachment_output_bit = true },
+                .src_access_mask = .{},
+                .dst_stage_mask = .{ .color_attachment_output_bit = true },
+                .dst_access_mask = .{ .color_attachment_read_bit = true, .color_attachment_write_bit = true },
+                .dependency_flags = .{},
+            },
+            // NOTE: Use an incoming subpass-dependency to ensure:
+            // * Previous use of the depth-buffer is complete (execution dependency).
+            // * WAW hazard is resolved (e.g. caches are flushed and invalidated so old and new writes are not re-ordered).
+            // * Transition from UNDEFINED -> VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL happens-after previous `EARLY/LATE_FRAGMENT_TESTS` use.
+            // * Changes made to the image by the transition are accounted for by setting the appropriate dstAccessMask.
+            .{
+                .src_subpass = vk.SUBPASS_EXTERNAL,
+                .dst_subpass = 0,
+                .src_stage_mask = .{ .late_fragment_tests_bit = true }, // store op is always performed in late tests, after subpass access
+                .src_access_mask = .{ .depth_stencil_attachment_write_bit = true },
+                .dst_stage_mask = .{ .early_fragment_tests_bit = true }, // load op is always performed in early tests, before subpass access
+                .dst_access_mask = .{ .depth_stencil_attachment_write_bit = true, .depth_stencil_attachment_read_bit = true },
+                .dependency_flags = .{},
+            },
         };
 
         self.handle = try context.device_api.createRenderPass(context.device, &vk.RenderPassCreateInfo{
             .attachment_count = attachment_descriptions.len,
             .p_attachments = &attachment_descriptions,
-            .subpass_count = 1,
-            .p_subpasses = &[_]vk.SubpassDescription{sub_pass},
-            .dependency_count = 1,
-            .p_dependencies = &[_]vk.SubpassDependency{dependency},
+            .subpass_count = subpasses.len,
+            .p_subpasses = &subpasses,
+            .dependency_count = dependencies.len,
+            .p_dependencies = &dependencies,
         }, null);
 
         self.state = .initial;
@@ -111,17 +129,17 @@ pub const RenderPass = struct {
             .render_pass = self.handle,
             .framebuffer = framebuffer,
             .render_area = self.render_area,
-            .clear_value_count = 1,
+            .clear_value_count = 2,
             .p_clear_values = &[_]vk.ClearValue{
                 .{
                     .color = .{ .float_32 = self.clear_values.color },
                 },
-                // .{
-                //     .depth_stencil = .{
-                //         .depth = self.clear_values.depth,
-                //         .stencil = self.clear_values.stencil,
-                //     },
-                // },
+                .{
+                    .depth_stencil = .{
+                        .depth = self.clear_values.depth,
+                        .stencil = self.clear_values.stencil,
+                    },
+                },
             },
         }, .@"inline");
 

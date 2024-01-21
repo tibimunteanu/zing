@@ -524,7 +524,7 @@ pub const Context = struct {
 
             const attachments = [_]vk.ImageView{
                 image.view,
-                // self.swapchain.depth_image.view.?,
+                self.swapchain.depth_image.view.?,
             };
 
             framebuffer.* = try Framebuffer.init(
