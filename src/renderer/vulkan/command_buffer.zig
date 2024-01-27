@@ -9,7 +9,7 @@ pub const CommandBuffer = struct {
         invalid,
         initial,
         recording,
-        in_render_pass,
+        recording_in_render_pass,
         executable,
         pending,
     };
@@ -53,14 +53,6 @@ pub const CommandBuffer = struct {
         try context.device_api.endCommandBuffer(self.handle);
 
         self.state = .executable;
-    }
-
-    pub fn set_initial(self: *Self) void {
-        self.state = .initial;
-    }
-
-    pub fn set_pending(self: *Self) void {
-        self.state = .pending;
     }
 
     pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !Self {

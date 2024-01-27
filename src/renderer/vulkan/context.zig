@@ -186,7 +186,7 @@ pub const Context = struct {
                 .extent = self.swapchain.extent,
             },
             .{
-                .color = [_]f32{ 0.0, 0.0, 0.2, 1.0 },
+                .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
                 .depth = 1.0,
                 .stencil = 0,
             },
@@ -254,23 +254,28 @@ pub const Context = struct {
             }
         }
 
-        return error.getMemoryIndexFailed;
+        return error.GetMemoryIndexFailed;
     }
 
     pub fn beginFrame(self: *Self) !BeginFrameResult {
         if (self.desired_extent_generation != self.swapchain.extent_generation) {
+            // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
+            // which is handled by endFrame() by recreating resources, but this way we avoid a best practices warning
             try self.recreateSwapchainFramebuffersAndCmdBuffers();
             return .resize;
         }
 
         const current_image = self.swapchain.getCurrentImage();
+        var command_buffer = self.getCurrentCommandBuffer();
+        const current_framebuffer = self.getCurrentFramebuffer();
 
         // make sure the current frame has finished rendering.
         // NOTE: the fences start signaled so the first frame can get past them.
         try current_image.waitForFrameFence(self, .{ .reset = true });
 
-        var command_buffer = self.getCurrentCommandBuffer();
-        command_buffer.set_initial();
+        command_buffer.state = .initial;
+        self.main_render_pass.state = .initial;
+
         try command_buffer.begin(self, .{});
 
         const viewport: vk.Viewport = .{
@@ -290,19 +295,16 @@ pub const Context = struct {
         self.device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
         self.device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
 
-        const framebuffer = self.getCurrentFramebuffer();
-
-        self.main_render_pass.render_area.extent = self.swapchain.extent;
-        self.main_render_pass.begin(self, command_buffer, framebuffer.handle);
+        self.main_render_pass.begin(self, command_buffer, current_framebuffer.handle);
 
         return .render;
     }
 
     pub fn endFrame(self: *Self) !void {
         const current_image = self.swapchain.getCurrentImage();
+        var command_buffer = self.getCurrentCommandBuffer();
 
         // end the render pass and the command buffer
-        var command_buffer = self.getCurrentCommandBuffer();
         self.main_render_pass.end(self, command_buffer);
         try command_buffer.end(self);
 
@@ -317,7 +319,8 @@ pub const Context = struct {
             .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
         }}, current_image.frame_fence);
 
-        command_buffer.set_pending();
+        command_buffer.state = .pending;
+        self.main_render_pass.state = .pending;
 
         const state = self.swapchain.present() catch |err| switch (err) {
             error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -338,7 +341,7 @@ pub const Context = struct {
         const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return blk: {
             const err = glfw.mustGetError();
             std.log.err("Failed to get required instance extensions because {s}", .{err.description});
-            break :blk error.getRequiredInstanceExtensionsFailed;
+            break :blk error.GetRequiredInstanceExtensionsFailed;
         };
 
         // list of extensions to be requested when creating the instance
@@ -391,7 +394,7 @@ pub const Context = struct {
     fn createSurface(instance: vk.Instance, window: glfw.Window) !vk.SurfaceKHR {
         var surface: vk.SurfaceKHR = undefined;
         if (glfw.createWindowSurface(instance, window, null, &surface) != @intFromEnum(vk.Result.success)) {
-            return error.surfaceCreationFailed;
+            return error.SurfaceCreationFailed;
         }
         return surface;
     }
@@ -416,7 +419,7 @@ pub const Context = struct {
             }
         }
 
-        return best_physical_device orelse error.noSuitablePhysicalDeviceFound;
+        return best_physical_device orelse error.NoSuitablePhysicalDeviceFound;
     }
 
     fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_api: InstanceAPI) !vk.Device {
@@ -549,10 +552,7 @@ pub const Context = struct {
             .old_handle = old_handle,
         });
 
-        self.main_render_pass.render_area = .{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = self.swapchain.extent,
-        };
+        self.main_render_pass.render_area.extent = self.swapchain.extent;
 
         try self.recreateFramebuffers(&self.main_render_pass);
         errdefer {
@@ -575,16 +575,18 @@ pub const Context = struct {
                 framebuffer.deinit(self);
             }
 
+            const attachments = [_]vk.ImageView{
+                image.view,
+                self.swapchain.depth_image.view.?,
+            };
+
             framebuffer.* = try Framebuffer.init(
                 self,
                 self.allocator,
                 render_pass,
                 self.swapchain.extent.width,
                 self.swapchain.extent.height,
-                &[_]vk.ImageView{
-                    image.view,
-                    self.swapchain.depth_image.view.?,
-                },
+                &attachments,
             );
         }
     }
@@ -626,7 +628,7 @@ pub const PhysicalDevice = struct {
         const properties = instance_api.getPhysicalDeviceProperties(self.handle);
 
         if (features.sampler_anisotropy != vk.TRUE) {
-            return error.samplerAnisotropyNotSupported;
+            return error.SamplerAnisotropyNotSupported;
         }
 
         if (features.geometry_shader == vk.TRUE) {
@@ -672,7 +674,7 @@ pub const PhysicalDevice = struct {
             }
         }
 
-        return error.couldNotFindDepthFormat;
+        return error.CouldNotFindDepthFormat;
     }
 
     fn initSurfaceSupport(self: *Self, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
@@ -680,14 +682,14 @@ pub const PhysicalDevice = struct {
         _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(self.handle, surface, &format_count, null);
 
         if (format_count == 0) {
-            return error.noDeviceSurfaceFormatsFound;
+            return error.NoDeviceSurfaceFormatsFound;
         }
 
         var present_mode_count: u32 = undefined;
         _ = try instance_api.getPhysicalDeviceSurfacePresentModesKHR(self.handle, surface, &present_mode_count, null);
 
         if (present_mode_count == 0) {
-            return error.noDevicePresentModesFound;
+            return error.NoDevicePresentModesFound;
         }
     }
 
@@ -709,7 +711,7 @@ pub const PhysicalDevice = struct {
                     break;
                 }
             } else {
-                return error.extensionNotSupported;
+                return error.ExtensionNotSupported;
             }
         }
     }
@@ -772,7 +774,7 @@ pub const PhysicalDevice = struct {
         }
 
         if (graphics_family_index == null or present_family_index == null or compute_family_index == null or transfer_family_index == null) {
-            return error.queueFamilyTypeNotSupported;
+            return error.QueueFamilyTypeNotSupported;
         }
 
         self.graphics_family_index = graphics_family_index.?;

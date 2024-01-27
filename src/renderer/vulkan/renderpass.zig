@@ -11,7 +11,6 @@ pub const RenderPass = struct {
         invalid,
         initial,
         recording,
-        in_render_pass,
         executable,
         pending,
     };
@@ -120,8 +119,12 @@ pub const RenderPass = struct {
         return self;
     }
 
-    pub fn deinit(self: Self, context: *const Context) void {
-        context.device_api.destroyRenderPass(context.device, self.handle, null);
+    pub fn deinit(self: *Self, context: *const Context) void {
+        if (self.handle != .null_handle) {
+            context.device_api.destroyRenderPass(context.device, self.handle, null);
+        }
+        self.handle = .null_handle;
+        self.state = .invalid;
     }
 
     pub fn begin(self: *Self, context: *const Context, command_buffer: *CommandBuffer, framebuffer: vk.Framebuffer) void {
@@ -143,7 +146,7 @@ pub const RenderPass = struct {
             },
         }, .@"inline");
 
-        command_buffer.state = .in_render_pass;
+        command_buffer.state = .recording_in_render_pass;
         self.state = .recording;
     }
 

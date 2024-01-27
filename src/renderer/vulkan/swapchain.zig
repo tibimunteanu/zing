@@ -173,7 +173,7 @@ pub const Swapchain = struct {
         self.extent_generation = self.context.desired_extent_generation;
 
         if (self.extent.width == 0 or self.extent.height == 0) {
-            return error.invalidSurfaceDimensions;
+            return error.InvalidSurfaceDimensions;
         }
     }
 
@@ -311,7 +311,7 @@ pub const Swapchain = struct {
         return switch (acquired.result) {
             .success => .optimal,
             .suboptimal_khr => .suboptimal,
-            else => error.acquireNextImageFailed,
+            else => error.AcquireNextImageFailed,
         };
     }
 };
