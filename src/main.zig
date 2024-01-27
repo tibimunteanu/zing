@@ -75,6 +75,8 @@ pub const Engine = struct {
             }
             glfw.pollEvents();
         }
+
+        try self.context.swapchain.waitForAllFences();
     }
 };
 

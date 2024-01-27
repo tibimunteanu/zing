@@ -295,6 +295,8 @@ pub const Context = struct {
         self.device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
         self.device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
 
+        // TODO: maybe we should decouple rendering from the swapchain and instead render into a texture
+        // which would then be copied to the swapchain framebuffers if it's not out of date
         self.main_render_pass.begin(self, command_buffer, current_framebuffer.handle);
 
         return .render;

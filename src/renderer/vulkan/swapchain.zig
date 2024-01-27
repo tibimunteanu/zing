@@ -121,7 +121,7 @@ pub const Swapchain = struct {
 
     pub fn waitForAllFences(self: Self) !void {
         for (self.images) |image| {
-            image.waitForFrameFence(self.context) catch {};
+            image.waitForFrameFence(self.context, .{}) catch {};
         }
     }
 
