@@ -27,7 +27,6 @@ pub const Swapchain = struct {
     handle: vk.SwapchainKHR,
     images: []SwapchainImage,
     depth_image: Image,
-    framebuffers: std.ArrayList(Framebuffer),
     image_index: u32,
     next_image_acquired_semaphore: vk.Semaphore,
 
@@ -97,7 +96,7 @@ pub const Swapchain = struct {
         errdefer device_api.destroySemaphore(device, self.next_image_acquired_semaphore, null);
 
         // if the first just created swapchain fails to acquire it's first image, let it crash.
-        // when this gets called in present, the caller handles .suboptimal and error.out_of_date
+        // when this gets called in present(), the caller handles .suboptimal and error.OutOfDateKHR
         // by triggering a recreate, which ends up acquiring next image again from here.
         // so if this fails again after recreate, it's up to the caller of present if it wants to retry or crash.
         _ = try self.acquireNextImage();
@@ -105,33 +104,17 @@ pub const Swapchain = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self, options: struct { destroy_swapchain: bool = true }) void {
+    pub fn deinit(self: *Self, options: struct { recycle_handle: bool = false }) void {
         self.deinitImages();
 
         self.context.device_api.destroySemaphore(self.context.device, self.next_image_acquired_semaphore, null);
 
-        if (options.destroy_swapchain) {
+        if (!options.recycle_handle) {
             self.context.device_api.destroySwapchainKHR(self.context.device, self.handle, null);
         }
     }
 
     // public
-    pub fn recreate(self: *Self) !void {
-        const allocator = self.allocator;
-        const context = self.context;
-        const old_handle = self.handle;
-        const old_surface_format = self.surface_format;
-        const old_present_mode = self.present_mode;
-
-        self.deinit(.{ .destroy_swapchain = false });
-
-        self.* = try init(allocator, context, .{
-            .desired_surface_format = old_surface_format,
-            .desired_present_modes = &[1]vk.PresentModeKHR{old_present_mode},
-            .old_handle = old_handle,
-        });
-    }
-
     pub fn getCurrentImage(self: Self) *const SwapchainImage {
         return &self.images[self.image_index];
     }
@@ -142,45 +125,11 @@ pub const Swapchain = struct {
         }
     }
 
-    pub fn present_old(self: *Self, cmd_buffer: vk.CommandBuffer) !PresentState {
-        const current_image = self.getCurrentImage();
-
-        // make sure the current frame has finished rendering.
-        // NOTE: the fences start signaled so the first frame can get past them.
-        try current_image.waitForFrameFence(self.context, .{ .reset = true });
-
-        // submit the command buffer
-        try self.context.device_api.queueSubmit(self.context.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
-            .wait_semaphore_count = 1,
-            .p_wait_semaphores = @ptrCast(&current_image.image_acquired_semaphore),
-            .p_wait_dst_stage_mask = &[_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }},
-            .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast(&cmd_buffer),
-            .signal_semaphore_count = 1,
-            .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
-        }}, current_image.frame_fence);
-
-        // present the current frame
-        // NOTE: we ignore .suboptimal result here, but the next call to acquire next image catch and return it
-        _ = try self.context.device_api.queuePresentKHR(self.context.present_queue.handle, &vk.PresentInfoKHR{
-            .wait_semaphore_count = 1,
-            .p_wait_semaphores = @ptrCast(&current_image.render_finished_semaphore),
-            .swapchain_count = 1,
-            .p_swapchains = @ptrCast(&self.handle),
-            .p_image_indices = @ptrCast(&self.image_index),
-            .p_results = null,
-        });
-
-        // acquire next frame
-        // NOTE: call acquire next image as the last step so we can reference the current image while rendering.
-        return try self.acquireNextImage();
-    }
-
     pub fn present(self: *Self) !PresentState {
         const current_image = self.getCurrentImage();
 
         // present the current frame
-        // NOTE: we ignore .suboptimal result here, but the next call to acquire next image catch and return it
+        // NOTE: it's ok to ignore .suboptimal_khr result here. the following acquireNextImage() returns it.
         _ = try self.context.device_api.queuePresentKHR(self.context.present_queue.handle, &vk.PresentInfoKHR{
             .wait_semaphore_count = 1,
             .p_wait_semaphores = @ptrCast(&current_image.render_finished_semaphore),
@@ -358,13 +307,11 @@ pub const Swapchain = struct {
 
         self.image_index = acquired.image_index;
 
-        // NOTE: we don't consider suboptimal an error because it's not required to handle it.
-        // for example, while resizing, this could return suboptimal for many frames and the
-        // caller should have the option to wait for the resize to finish and then recreate the swapchain.
+        // NOTE: we don't consider .suboptimal an error because it's not required to handle it.
         return switch (acquired.result) {
             .success => .optimal,
             .suboptimal_khr => .suboptimal,
-            else => error.imageAcquireFailed,
+            else => error.acquireNextImageFailed,
         };
     }
 };

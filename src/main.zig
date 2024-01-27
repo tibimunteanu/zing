@@ -10,9 +10,8 @@ fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
     std.log.err("glfw: {}: {s}\n", .{ error_code, description });
 }
 
-fn framebufferSizeCallback(window: glfw.Window, width: u32, height: u32) void {
+fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
     engine.context.onResized(glfw.Window.Size{ .width = width, .height = height });
-    std.log.info("Window at {}, {} resized to {} x {}", .{ window.getPos().x, window.getPos().y, width, height });
 }
 
 pub const Engine = struct {
@@ -64,20 +63,16 @@ pub const Engine = struct {
 
     pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
-            var ok = true;
-
-            self.context.beginFrame() catch |err| switch (err) {
-                error.cannotRenderWhileResizing => {
-                    std.log.info("run() cannotRenderWhileResizing. Recreate everything!!!", .{});
-                    ok = false;
-                },
-                else => |narrow| return narrow,
-            };
-
-            if (ok) {
-                try self.context.endFrame();
+            if (self.window.getAttrib(.iconified) == 0) {
+                switch (try self.context.beginFrame()) {
+                    .resize => {
+                        // NOTE: Skip rendering this frame.
+                    },
+                    .render => {
+                        try self.context.endFrame();
+                    },
+                }
             }
-
             glfw.pollEvents();
         }
     }

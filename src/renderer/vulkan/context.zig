@@ -107,6 +107,11 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d24_unorm_s8_uint,
 };
 
+pub const BeginFrameResult = enum {
+    render,
+    resize,
+};
+
 pub const Context = struct {
     const Self = @This();
 
@@ -125,6 +130,7 @@ pub const Context = struct {
     compute_queue: Queue,
     transfer_queue: Queue,
     swapchain: Swapchain,
+    framebuffers: std.ArrayList(Framebuffer),
     main_render_pass: RenderPass,
     graphics_command_pool: vk.CommandPool,
     graphics_command_buffers: std.ArrayList(CommandBuffer),
@@ -186,23 +192,31 @@ pub const Context = struct {
             },
         );
 
-        // swapchain framebuffers
-        self.swapchain.framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
-        self.swapchain.framebuffers.items.len = self.swapchain.images.len;
+        // framebuffers
+        self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        self.framebuffers.items.len = self.swapchain.images.len;
 
-        for (self.swapchain.framebuffers.items) |*framebuffer| {
+        for (self.framebuffers.items) |*framebuffer| {
             framebuffer.handle = .null_handle;
         }
 
-        try self.regenerateFramebuffers(&self.main_render_pass);
+        try self.recreateFramebuffers(&self.main_render_pass);
+        errdefer {
+            for (self.framebuffers.items) |*framebuffer| {
+                if (framebuffer.handle != .null_handle) {
+                    framebuffer.deinit(&self);
+                }
+            }
+        }
 
-        // create command buffers
+        // create command pool
         self.graphics_command_pool = try self.device_api.createCommandPool(self.device, &vk.CommandPoolCreateInfo{
             .queue_family_index = self.graphics_queue.family_index,
             .flags = .{ .reset_command_buffer_bit = true },
         }, null);
         errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
+        // create command buffers
         try self.initCommandBuffers(.{ .allocate = true, .allocator = allocator });
         errdefer self.deinitCommandbuffers(.{ .deallocate = true });
 
@@ -214,10 +228,10 @@ pub const Context = struct {
 
         self.deinitCommandbuffers(.{ .deallocate = true });
         self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
-        for (self.swapchain.framebuffers.items) |*framebuffer| {
+        for (self.framebuffers.items) |*framebuffer| {
             framebuffer.deinit(self);
         }
-        self.swapchain.framebuffers.deinit();
+        self.framebuffers.deinit();
         self.main_render_pass.deinit(self);
         self.swapchain.deinit(.{});
         self.device_api.destroyDevice(self.device, null);
@@ -228,11 +242,6 @@ pub const Context = struct {
     pub fn onResized(self: *Self, new_desired_extent: glfw.Window.Size) void {
         self.desired_extent = new_desired_extent;
         self.desired_extent_generation += 1;
-
-        std.log.info("Context onResized with new desired extent {} x {}", .{
-            new_desired_extent.width,
-            new_desired_extent.height,
-        });
     }
 
     pub fn getMemoryIndex(self: Self, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
@@ -248,20 +257,17 @@ pub const Context = struct {
         return error.getMemoryIndexFailed;
     }
 
-    pub fn beginFrame(self: *Self) !void {
+    pub fn beginFrame(self: *Self) !BeginFrameResult {
+        if (self.desired_extent_generation != self.swapchain.extent_generation) {
+            try self.recreateSwapchainFramebuffersAndCmdBuffers();
+            return .resize;
+        }
+
         const current_image = self.swapchain.getCurrentImage();
 
         // make sure the current frame has finished rendering.
         // NOTE: the fences start signaled so the first frame can get past them.
         try current_image.waitForFrameFence(self, .{ .reset = true });
-
-        if (self.desired_extent_generation != self.swapchain.extent_generation) {
-            try self.device_api.deviceWaitIdle(self.device);
-
-            std.log.info("beginFrame() generation changed. Cannot render while resizing!!!", .{});
-
-            return error.cannotRenderWhileResizing;
-        }
 
         var command_buffer = self.getCurrentCommandBuffer();
         command_buffer.set_initial();
@@ -288,6 +294,8 @@ pub const Context = struct {
 
         self.main_render_pass.render_area.extent = self.swapchain.extent;
         self.main_render_pass.begin(self, command_buffer, framebuffer.handle);
+
+        return .render;
     }
 
     pub fn endFrame(self: *Self) !void {
@@ -316,8 +324,12 @@ pub const Context = struct {
             else => |narrow| return narrow,
         };
 
+        // NOTE: we should always recreate resources when error.OutOfDateKHR, but here,
+        // we decided to also always recreate resources when the result is .suboptimal.
+        // this should be configurable, so that you can choose if you only want to recreate on error.
         if (state == .suboptimal) {
-            std.log.info("endFrame() present was suboptimal!!!", .{});
+            std.log.info("endFrame() Present was suboptimal. Recreating resources.", .{});
+            try self.recreateSwapchainFramebuffersAndCmdBuffers();
         }
     }
 
@@ -477,7 +489,7 @@ pub const Context = struct {
         return device;
     }
 
-    fn initCommandBuffers(self: *Self, options: struct { allocate: bool = false, allocator: ?Allocator }) !void {
+    fn initCommandBuffers(self: *Self, options: struct { allocate: bool = false, allocator: ?Allocator = null }) !void {
         if (options.allocate) {
             self.graphics_command_buffers = try std.ArrayList(CommandBuffer).initCapacity(options.allocator.?, self.swapchain.images.len);
             self.graphics_command_buffers.items.len = self.swapchain.images.len;
@@ -513,19 +525,55 @@ pub const Context = struct {
     }
 
     fn getCurrentFramebuffer(self: Self) *Framebuffer {
-        return &self.swapchain.framebuffers.items[self.swapchain.image_index];
+        return &self.framebuffers.items[self.swapchain.image_index];
     }
 
-    fn regenerateFramebuffers(self: *Self, render_pass: *const RenderPass) !void {
-        for (self.swapchain.images, self.swapchain.framebuffers.items) |image, *framebuffer| {
+    fn recreateSwapchainFramebuffersAndCmdBuffers(self: *Self) !void {
+        try self.device_api.deviceWaitIdle(self.device);
+
+        if (self.desired_extent.width == 0 or self.desired_extent.height == 0) {
+            // NOTE: don't bother recreating resources if width or height are 0
+            return;
+        }
+
+        const old_allocator = self.swapchain.allocator;
+        const old_handle = self.swapchain.handle;
+        const old_surface_format = self.swapchain.surface_format;
+        const old_present_mode = self.swapchain.present_mode;
+
+        self.swapchain.deinit(.{ .recycle_handle = true });
+
+        self.swapchain = try Swapchain.init(old_allocator, self, .{
+            .desired_surface_format = old_surface_format,
+            .desired_present_modes = &[1]vk.PresentModeKHR{old_present_mode},
+            .old_handle = old_handle,
+        });
+
+        self.main_render_pass.render_area = .{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.swapchain.extent,
+        };
+
+        try self.recreateFramebuffers(&self.main_render_pass);
+        errdefer {
+            for (self.framebuffers.items) |*framebuffer| {
+                if (framebuffer.handle != .null_handle) {
+                    framebuffer.deinit(self);
+                }
+            }
+        }
+
+        try self.initCommandBuffers(.{});
+        errdefer self.deinitCommandbuffers(.{});
+
+        self.swapchain.extent_generation = self.desired_extent_generation;
+    }
+
+    fn recreateFramebuffers(self: *Self, render_pass: *const RenderPass) !void {
+        for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
             if (framebuffer.handle != .null_handle) {
                 framebuffer.deinit(self);
             }
-
-            const attachments = [_]vk.ImageView{
-                image.view,
-                self.swapchain.depth_image.view.?,
-            };
 
             framebuffer.* = try Framebuffer.init(
                 self,
@@ -533,7 +581,10 @@ pub const Context = struct {
                 render_pass,
                 self.swapchain.extent.width,
                 self.swapchain.extent.height,
-                &attachments,
+                &[_]vk.ImageView{
+                    image.view,
+                    self.swapchain.depth_image.view.?,
+                },
             );
         }
     }
