@@ -31,7 +31,7 @@ pub const Engine = struct {
         }
         errdefer glfw.terminate();
 
-        self.window = glfw.Window.create(800, 600, "Zing", null, null, .{
+        self.window = glfw.Window.create(960, 540, "Zing", null, null, .{
             .client_api = .no_api,
         }) orelse {
             std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
@@ -69,6 +69,27 @@ pub const Engine = struct {
                         // NOTE: Skip rendering this frame.
                     },
                     .render => {
+                        const command_buffer = self.context.getCurrentCommandBuffer();
+
+                        self.context.shader.bind(command_buffer, .graphics);
+
+                        self.context.device_api.cmdBindVertexBuffers(
+                            command_buffer.handle,
+                            0,
+                            1,
+                            @ptrCast(&self.context.vertex_buffer.handle),
+                            @ptrCast(&[_]u64{0}),
+                        );
+
+                        self.context.device_api.cmdBindIndexBuffer(
+                            command_buffer.handle,
+                            self.context.index_buffer.handle,
+                            0,
+                            .uint32,
+                        );
+
+                        self.context.device_api.cmdDrawIndexed(command_buffer.handle, 6, 1, 0, 0, 0);
+
                         try self.context.endFrame();
                     },
                 }

@@ -16,9 +16,13 @@ pub const CommandBuffer = struct {
 
     state: State = .invalid,
     handle: vk.CommandBuffer = .null_handle,
+    context: *const Context,
+    pool: vk.CommandPool,
 
     pub fn init(context: *const Context, pool: vk.CommandPool, is_primary: bool) !Self {
         var self: Self = undefined;
+        self.context = context;
+        self.pool = pool;
 
         self.state = .invalid;
 
@@ -33,44 +37,44 @@ pub const CommandBuffer = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self, context: *const Context, pool: vk.CommandPool) void {
+    pub fn deinit(self: *Self) void {
         if (self.handle != .null_handle) {
-            context.device_api.freeCommandBuffers(context.device, pool, 1, @ptrCast(&self.handle));
+            self.context.device_api.freeCommandBuffers(self.context.device, self.pool, 1, @ptrCast(&self.handle));
         }
         self.handle = .null_handle;
         self.state = .invalid;
     }
 
-    pub fn begin(self: *Self, context: *const Context, flags: vk.CommandBufferUsageFlags) !void {
-        try context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{
+    pub fn begin(self: *Self, flags: vk.CommandBufferUsageFlags) !void {
+        try self.context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{
             .flags = flags,
         });
 
         self.state = .recording;
     }
 
-    pub fn end(self: *Self, context: *const Context) !void {
-        try context.device_api.endCommandBuffer(self.handle);
+    pub fn end(self: *Self) !void {
+        try self.context.device_api.endCommandBuffer(self.handle);
 
         self.state = .executable;
     }
 
     pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !Self {
         var self = try CommandBuffer.init(context, pool, true);
-        try self.begin(context, .{ .one_time_submit_bit = true });
+        try self.begin(.{ .one_time_submit_bit = true });
         return self;
     }
 
-    pub fn endSingleUseAndDeinit(self: *Self, context: *const Context, pool: vk.CommandPool, queue: vk.Queue) void {
-        try self.end(context);
+    pub fn endSingleUseAndDeinit(self: *Self, queue: vk.Queue) !void {
+        try self.end();
 
-        try context.device_api.queueSubmit(queue, 1, &vk.SubmitInfo{
+        try self.context.device_api.queueSubmit(queue, 1, &[_]vk.SubmitInfo{.{
             .command_buffer_count = 1,
-            .p_command_buffers = &self.handle,
-        }, null);
+            .p_command_buffers = @ptrCast(&self.handle),
+        }}, .null_handle);
 
-        try context.device_api.queueWaitIdle();
+        try self.context.device_api.queueWaitIdle(queue);
 
-        self.deinit(context, pool);
+        self.deinit();
     }
 };

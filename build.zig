@@ -21,6 +21,25 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
+    const compile_vert_shader = b.addSystemCommand(&.{
+        "glslc",
+        "assets/shaders/basic.vert",
+        "--target-env=vulkan1.3",
+        "-o",
+        "assets/shaders/basic_vert.spv",
+    });
+
+    const compile_frag_shader = b.addSystemCommand(&.{
+        "glslc",
+        "assets/shaders/basic.frag",
+        "--target-env=vulkan1.3",
+        "-o",
+        "assets/shaders/basic_frag.spv",
+    });
+
+    exe.step.dependOn(&compile_vert_shader.step);
+    exe.step.dependOn(&compile_frag_shader.step);
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 

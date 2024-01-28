@@ -6,6 +6,8 @@ const Swapchain = @import("swapchain.zig").Swapchain;
 const RenderPass = @import("renderpass.zig").RenderPass;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
+const Shader = @import("shader.zig").Shader;
+const Buffer = @import("buffer.zig").Buffer;
 const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][*:0]const u8{
@@ -95,9 +97,11 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .cmdEndRenderPass = true,
     .cmdBindPipeline = true,
     .cmdDraw = true,
+    .cmdDrawIndexed = true,
     .cmdSetViewport = true,
     .cmdSetScissor = true,
     .cmdBindVertexBuffers = true,
+    .cmdBindIndexBuffer = true,
     .cmdCopyBuffer = true,
 });
 
@@ -112,6 +116,41 @@ pub const BeginFrameResult = enum {
     resize,
 };
 
+pub const Vertex = struct {
+    pub const binding_description = vk.VertexInputBindingDescription{
+        .binding = 0,
+        .stride = @sizeOf(Vertex),
+        .input_rate = .vertex,
+    };
+
+    pub const attribute_description = [_]vk.VertexInputAttributeDescription{
+        .{
+            .binding = 0,
+            .location = 0,
+            .format = .r32g32b32_sfloat,
+            .offset = @offsetOf(Vertex, "position"),
+        },
+        .{
+            .binding = 0,
+            .location = 1,
+            .format = .r32g32b32_sfloat,
+            .offset = @offsetOf(Vertex, "color"),
+        },
+    };
+
+    position: [3]f32,
+    color: [3]f32,
+};
+
+pub const vertices = [_]Vertex{
+    .{ .position = .{ -0.5, -0.5, 0.0 }, .color = .{ 1, 0, 0 } },
+    .{ .position = .{ 0.5, -0.5, 0.0 }, .color = .{ 0, 0, 1 } },
+    .{ .position = .{ 0.5, 0.5, 0.0 }, .color = .{ 0, 1, 0 } },
+    .{ .position = .{ -0.5, 0.5, 0.0 }, .color = .{ 1, 1, 0 } },
+};
+
+pub const indices = [_]u32{ 0, 1, 2, 0, 2, 3 };
+
 pub const Context = struct {
     const Self = @This();
 
@@ -125,15 +164,27 @@ pub const Context = struct {
     surface: vk.SurfaceKHR,
     physical_device: PhysicalDevice,
     device: vk.Device,
+
     graphics_queue: Queue,
     present_queue: Queue,
     compute_queue: Queue,
     transfer_queue: Queue,
+
     swapchain: Swapchain,
     framebuffers: std.ArrayList(Framebuffer),
+
     main_render_pass: RenderPass,
+
     graphics_command_pool: vk.CommandPool,
     graphics_command_buffers: std.ArrayList(CommandBuffer),
+
+    shader: Shader,
+
+    vertex_buffer: Buffer,
+    vertex_offset: usize,
+
+    index_buffer: Buffer,
+    index_offset: usize,
 
     desired_extent: glfw.Window.Size,
     desired_extent_generation: u32,
@@ -220,12 +271,52 @@ pub const Context = struct {
         try self.initCommandBuffers(.{ .allocate = true, .allocator = allocator });
         errdefer self.deinitCommandbuffers(.{ .deallocate = true });
 
+        self.shader = try Shader.init(allocator, &self, "basic");
+        errdefer self.shader.deinit();
+
+        // create buffers
+        self.vertex_buffer = try Buffer.init(
+            &self,
+            .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
+            @sizeOf(@TypeOf(vertices)),
+            .{ .device_local_bit = true },
+            .{ .bind_on_create = true },
+        );
+        self.vertex_offset = 0;
+        errdefer self.vertex_buffer.deinit();
+
+        self.index_buffer = try Buffer.init(
+            &self,
+            .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
+            @sizeOf(@TypeOf(indices)),
+            .{ .device_local_bit = true },
+            .{ .bind_on_create = true },
+        );
+        self.index_offset = 0;
+        errdefer self.index_buffer.deinit();
+
+        // upload data to buffers
+        try self.uploadDataRegion(&self.vertex_buffer, vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = @sizeOf(@TypeOf(vertices)),
+        }, &std.mem.toBytes(vertices));
+
+        try self.uploadDataRegion(&self.index_buffer, vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = @sizeOf(@TypeOf(indices)),
+        }, &std.mem.toBytes(indices));
+
         return self;
     }
 
     pub fn deinit(self: *Self) void {
         self.device_api.deviceWaitIdle(self.device) catch {};
 
+        self.vertex_buffer.deinit();
+        self.index_buffer.deinit();
+        self.shader.deinit();
         self.deinitCommandbuffers(.{ .deallocate = true });
         self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
         for (self.framebuffers.items) |*framebuffer| {
@@ -257,6 +348,28 @@ pub const Context = struct {
         return error.GetMemoryIndexFailed;
     }
 
+    pub fn allocate(self: Context, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
+        return try self.device_api.allocateMemory(self.device, &.{
+            .allocation_size = requirements.size,
+            .memory_type_index = try self.getMemoryIndex(requirements.memory_type_bits, flags),
+        }, null);
+    }
+
+    fn uploadDataRegion(self: *Context, dst: *Buffer, region: vk.BufferCopy, data: []const u8) !void {
+        var staging_buffer = try Buffer.init(
+            self,
+            .{ .transfer_src_bit = true },
+            dst.total_size,
+            .{ .host_visible_bit = true, .host_coherent_bit = true },
+            .{ .bind_on_create = true },
+        );
+        defer staging_buffer.deinit();
+
+        try staging_buffer.loadData(0, dst.total_size, .{}, data);
+
+        try staging_buffer.copyTo(dst, self.graphics_command_pool, self.graphics_queue.handle, region);
+    }
+
     pub fn beginFrame(self: *Self) !BeginFrameResult {
         if (self.desired_extent_generation != self.swapchain.extent_generation) {
             // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
@@ -276,7 +389,7 @@ pub const Context = struct {
         command_buffer.state = .initial;
         self.main_render_pass.state = .initial;
 
-        try command_buffer.begin(self, .{});
+        try command_buffer.begin(.{});
 
         const viewport: vk.Viewport = .{
             .x = 0.0,
@@ -308,7 +421,7 @@ pub const Context = struct {
 
         // end the render pass and the command buffer
         self.main_render_pass.end(self, command_buffer);
-        try command_buffer.end(self);
+        try command_buffer.end();
 
         // submit the command buffer
         try self.device_api.queueSubmit(self.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
@@ -336,6 +449,14 @@ pub const Context = struct {
             std.log.info("endFrame() Present was suboptimal. Recreating resources.", .{});
             try self.recreateSwapchainFramebuffersAndCmdBuffers();
         }
+    }
+
+    pub fn getCurrentCommandBuffer(self: Self) *CommandBuffer {
+        return &self.graphics_command_buffers.items[self.swapchain.image_index];
+    }
+
+    pub fn getCurrentFramebuffer(self: Self) *Framebuffer {
+        return &self.framebuffers.items[self.swapchain.image_index];
     }
 
     // internal
@@ -508,7 +629,7 @@ pub const Context = struct {
 
         for (self.graphics_command_buffers.items) |*buffer| {
             if (buffer.handle != .null_handle) {
-                buffer.deinit(self, self.graphics_command_pool);
+                buffer.deinit();
             }
 
             buffer.* = try CommandBuffer.init(self, self.graphics_command_pool, true);
@@ -517,20 +638,12 @@ pub const Context = struct {
 
     fn deinitCommandbuffers(self: *Self, options: struct { deallocate: bool = false }) void {
         for (self.graphics_command_buffers.items) |*buffer| {
-            buffer.deinit(self, self.graphics_command_pool);
+            buffer.deinit();
         }
 
         if (options.deallocate) {
             self.graphics_command_buffers.deinit();
         }
-    }
-
-    fn getCurrentCommandBuffer(self: Self) *CommandBuffer {
-        return &self.graphics_command_buffers.items[self.swapchain.image_index];
-    }
-
-    fn getCurrentFramebuffer(self: Self) *Framebuffer {
-        return &self.framebuffers.items[self.swapchain.image_index];
     }
 
     fn recreateSwapchainFramebuffersAndCmdBuffers(self: *Self) !void {

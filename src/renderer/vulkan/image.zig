@@ -65,20 +65,19 @@ pub const Image = struct {
             .p_queue_family_indices = options.p_queue_family_indices,
             .initial_layout = options.initial_layout,
         }, null);
+        errdefer device_api.destroyImage(device, self.handle, null);
 
         const memory_requirements = device_api.getImageMemoryRequirements(device, self.handle);
-        const memory_type = try context.getMemoryIndex(memory_requirements.memory_type_bits, options.memory_flags);
 
-        self.memory = try device_api.allocateMemory(device, &vk.MemoryAllocateInfo{
-            .allocation_size = memory_requirements.size,
-            .memory_type_index = memory_type,
-        }, null);
+        self.memory = try context.allocate(memory_requirements, options.memory_flags);
+        errdefer device_api.freeMemory(device, self.memory, null);
 
         try device_api.bindImageMemory(device, self.handle, self.memory, 0);
 
         if (options.init_view) {
             try self.initView(context, options.view_type, options.format, options.view_aspect_flags);
         }
+        errdefer self.deinitView(context);
 
         return self;
     }
@@ -87,10 +86,7 @@ pub const Image = struct {
         const device_api = context.device_api;
         const device = context.device;
 
-        if (self.view) |view| {
-            device_api.destroyImageView(device, view, null);
-            self.view = null;
-        }
+        self.deinitView(context);
 
         device_api.destroyImage(device, self.handle, null);
         device_api.freeMemory(device, self.memory, null);
@@ -116,5 +112,12 @@ pub const Image = struct {
                 .layer_count = 1,
             },
         }, null);
+    }
+
+    fn deinitView(self: *Self, context: *const Context) void {
+        if (self.view) |view| {
+            context.device_api.destroyImageView(context.device, view, null);
+            self.view = null;
+        }
     }
 };
