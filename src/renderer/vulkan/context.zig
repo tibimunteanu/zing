@@ -255,7 +255,7 @@ pub const Context = struct {
         errdefer {
             for (self.framebuffers.items) |*framebuffer| {
                 if (framebuffer.handle != .null_handle) {
-                    framebuffer.deinit(&self);
+                    framebuffer.deinit();
                 }
             }
         }
@@ -320,10 +320,10 @@ pub const Context = struct {
         self.deinitCommandbuffers(.{ .deallocate = true });
         self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
         for (self.framebuffers.items) |*framebuffer| {
-            framebuffer.deinit(self);
+            framebuffer.deinit();
         }
         self.framebuffers.deinit();
-        self.main_render_pass.deinit(self);
+        self.main_render_pass.deinit();
         self.swapchain.deinit(.{});
         self.device_api.destroyDevice(self.device, null);
         self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
@@ -384,7 +384,7 @@ pub const Context = struct {
 
         // make sure the current frame has finished rendering.
         // NOTE: the fences start signaled so the first frame can get past them.
-        try current_image.waitForFrameFence(self, .{ .reset = true });
+        try current_image.waitForFrameFence(.{ .reset = true });
 
         command_buffer.state = .initial;
         self.main_render_pass.state = .initial;
@@ -410,7 +410,7 @@ pub const Context = struct {
 
         // TODO: maybe we should decouple rendering from the swapchain and instead render into a texture
         // which would then be copied to the swapchain framebuffers if it's not out of date
-        self.main_render_pass.begin(self, command_buffer, current_framebuffer.handle);
+        self.main_render_pass.begin(command_buffer, current_framebuffer.handle);
 
         return .render;
     }
@@ -420,7 +420,7 @@ pub const Context = struct {
         var command_buffer = self.getCurrentCommandBuffer();
 
         // end the render pass and the command buffer
-        self.main_render_pass.end(self, command_buffer);
+        self.main_render_pass.end(command_buffer);
         try command_buffer.end();
 
         // submit the command buffer
@@ -673,7 +673,7 @@ pub const Context = struct {
         errdefer {
             for (self.framebuffers.items) |*framebuffer| {
                 if (framebuffer.handle != .null_handle) {
-                    framebuffer.deinit(self);
+                    framebuffer.deinit();
                 }
             }
         }
@@ -687,7 +687,7 @@ pub const Context = struct {
     fn recreateFramebuffers(self: *Self, render_pass: *const RenderPass) !void {
         for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
             if (framebuffer.handle != .null_handle) {
-                framebuffer.deinit(self);
+                framebuffer.deinit();
             }
 
             const attachments = [_]vk.ImageView{

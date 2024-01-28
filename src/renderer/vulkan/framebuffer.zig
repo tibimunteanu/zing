@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 pub const Framebuffer = struct {
     const Self = @This();
 
+    context: *const Context,
     handle: vk.Framebuffer,
     allocator: Allocator,
     attachments: []vk.ImageView,
@@ -22,8 +23,9 @@ pub const Framebuffer = struct {
         attachments: []const vk.ImageView,
     ) !Self {
         var self: Self = undefined;
-
+        self.context = context;
         self.allocator = allocator;
+
         self.render_pass = render_pass;
         self.attachments = try allocator.dupe(vk.ImageView, attachments);
 
@@ -39,9 +41,9 @@ pub const Framebuffer = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self, context: *const Context) void {
+    pub fn deinit(self: *Self) void {
         if (self.handle != .null_handle) {
-            context.device_api.destroyFramebuffer(context.device, self.handle, null);
+            self.context.device_api.destroyFramebuffer(self.context.device, self.handle, null);
         }
 
         if (self.attachments.len > 0) {

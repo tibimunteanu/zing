@@ -21,13 +21,15 @@ pub const RenderPass = struct {
         stencil: u32,
     };
 
-    state: State,
+    context: *const Context,
     handle: vk.RenderPass,
+    state: State,
     render_area: vk.Rect2D,
     clear_values: ClearValues,
 
     pub fn init(context: *const Context, render_area: vk.Rect2D, clear_values: ClearValues) !Self {
         var self: Self = undefined;
+        self.context = context;
 
         self.state = .invalid;
 
@@ -119,16 +121,16 @@ pub const RenderPass = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self, context: *const Context) void {
+    pub fn deinit(self: *Self) void {
         if (self.handle != .null_handle) {
-            context.device_api.destroyRenderPass(context.device, self.handle, null);
+            self.context.device_api.destroyRenderPass(self.context.device, self.handle, null);
         }
         self.handle = .null_handle;
         self.state = .invalid;
     }
 
-    pub fn begin(self: *Self, context: *const Context, command_buffer: *CommandBuffer, framebuffer: vk.Framebuffer) void {
-        context.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
+    pub fn begin(self: *Self, command_buffer: *CommandBuffer, framebuffer: vk.Framebuffer) void {
+        self.context.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
             .render_pass = self.handle,
             .framebuffer = framebuffer,
             .render_area = self.render_area,
@@ -150,8 +152,8 @@ pub const RenderPass = struct {
         self.state = .recording;
     }
 
-    pub fn end(self: *Self, context: *const Context, command_buffer: *CommandBuffer) void {
-        context.device_api.cmdEndRenderPass(command_buffer.handle);
+    pub fn end(self: *Self, command_buffer: *CommandBuffer) void {
+        self.context.device_api.cmdEndRenderPass(command_buffer.handle);
         command_buffer.state = .recording;
         self.state = .executable;
     }

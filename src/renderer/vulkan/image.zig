@@ -6,6 +6,8 @@ const Allocator = std.mem.Allocator;
 pub const Image = struct {
     const Self = @This();
 
+    context: *const Context,
+
     handle: vk.Image,
     memory: vk.DeviceMemory,
     view: ?vk.ImageView = null,
@@ -38,6 +40,7 @@ pub const Image = struct {
         },
     ) !Self {
         var self: Self = undefined;
+        self.context = context;
 
         self.width = options.width;
         self.height = options.height;
@@ -75,18 +78,18 @@ pub const Image = struct {
         try device_api.bindImageMemory(device, self.handle, self.memory, 0);
 
         if (options.init_view) {
-            try self.initView(context, options.view_type, options.format, options.view_aspect_flags);
+            try self.initView(options.view_type, options.format, options.view_aspect_flags);
         }
         errdefer self.deinitView(context);
 
         return self;
     }
 
-    pub fn deinit(self: *Self, context: *const Context) void {
-        const device_api = context.device_api;
-        const device = context.device;
+    pub fn deinit(self: *Self) void {
+        const device_api = self.context.device_api;
+        const device = self.context.device;
 
-        self.deinitView(context);
+        self.deinitView();
 
         device_api.destroyImage(device, self.handle, null);
         device_api.freeMemory(device, self.memory, null);
@@ -94,12 +97,11 @@ pub const Image = struct {
 
     fn initView(
         self: *Self,
-        context: *const Context,
         view_type: vk.ImageViewType,
         format: vk.Format,
         aspect_flags: vk.ImageAspectFlags,
     ) !void {
-        self.view = try context.device_api.createImageView(context.device, &vk.ImageViewCreateInfo{
+        self.view = try self.context.device_api.createImageView(self.context.device, &vk.ImageViewCreateInfo{
             .image = self.handle,
             .view_type = view_type,
             .format = format,
@@ -114,9 +116,9 @@ pub const Image = struct {
         }, null);
     }
 
-    fn deinitView(self: *Self, context: *const Context) void {
+    fn deinitView(self: *Self) void {
         if (self.view) |view| {
-            context.device_api.destroyImageView(context.device, view, null);
+            self.context.device_api.destroyImageView(self.context.device, view, null);
             self.view = null;
         }
     }

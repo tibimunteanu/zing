@@ -121,7 +121,7 @@ pub const Swapchain = struct {
 
     pub fn waitForAllFences(self: Self) !void {
         for (self.images) |image| {
-            image.waitForFrameFence(self.context, .{}) catch {};
+            image.waitForFrameFence(.{}) catch {};
         }
     }
 
@@ -278,10 +278,10 @@ pub const Swapchain = struct {
     }
 
     fn deinitImages(self: *Self) void {
-        self.depth_image.deinit(self.context);
+        self.depth_image.deinit();
 
         for (self.images) |image| {
-            image.deinit(self.context);
+            image.deinit();
         }
         self.allocator.free(self.images);
     }
@@ -317,6 +317,8 @@ pub const Swapchain = struct {
 };
 
 const SwapchainImage = struct {
+    context: *const Context,
+
     image: vk.Image,
     view: vk.ImageView,
     image_acquired_semaphore: vk.Semaphore,
@@ -355,6 +357,7 @@ const SwapchainImage = struct {
         errdefer device_api.destroyFence(device, frame_fence, null);
 
         return .{
+            .context = context,
             .image = image,
             .view = view,
             .image_acquired_semaphore = image_acquired_semaphore,
@@ -363,21 +366,21 @@ const SwapchainImage = struct {
         };
     }
 
-    fn deinit(self: SwapchainImage, context: *const Context) void {
-        self.waitForFrameFence(context, .{ .reset = false }) catch return;
+    fn deinit(self: SwapchainImage) void {
+        self.waitForFrameFence(.{ .reset = false }) catch return;
 
-        context.device_api.destroyFence(context.device, self.frame_fence, null);
-        context.device_api.destroySemaphore(context.device, self.render_finished_semaphore, null);
-        context.device_api.destroySemaphore(context.device, self.image_acquired_semaphore, null);
-        context.device_api.destroyImageView(context.device, self.view, null);
+        self.context.device_api.destroyFence(self.context.device, self.frame_fence, null);
+        self.context.device_api.destroySemaphore(self.context.device, self.render_finished_semaphore, null);
+        self.context.device_api.destroySemaphore(self.context.device, self.image_acquired_semaphore, null);
+        self.context.device_api.destroyImageView(self.context.device, self.view, null);
     }
 
     // public
-    pub fn waitForFrameFence(self: SwapchainImage, context: *const Context, options: struct { reset: bool = false }) !void {
-        _ = try context.device_api.waitForFences(context.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
+    pub fn waitForFrameFence(self: SwapchainImage, options: struct { reset: bool = false }) !void {
+        _ = try self.context.device_api.waitForFences(self.context.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
 
         if (options.reset) {
-            try context.device_api.resetFences(context.device, 1, @ptrCast(&self.frame_fence));
+            try self.context.device_api.resetFences(self.context.device, 1, @ptrCast(&self.frame_fence));
         }
     }
 };

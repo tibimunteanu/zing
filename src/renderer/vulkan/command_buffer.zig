@@ -14,10 +14,10 @@ pub const CommandBuffer = struct {
         pending,
     };
 
-    state: State = .invalid,
-    handle: vk.CommandBuffer = .null_handle,
     context: *const Context,
+    handle: vk.CommandBuffer = .null_handle,
     pool: vk.CommandPool,
+    state: State = .invalid,
 
     pub fn init(context: *const Context, pool: vk.CommandPool, is_primary: bool) !Self {
         var self: Self = undefined;
