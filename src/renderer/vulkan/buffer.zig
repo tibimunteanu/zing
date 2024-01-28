@@ -15,6 +15,7 @@ pub const Buffer = struct {
     memory: vk.DeviceMemory,
     is_locked: bool,
 
+    // public
     pub fn init(
         context: *const Context,
         usage: vk.BufferUsageFlags,
@@ -72,14 +73,14 @@ pub const Buffer = struct {
         try self.context.device_api.bindBufferMemory(self.context.device, self.handle, self.memory, offset);
     }
 
-    pub fn lock(self: Self, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) !?*anyopaque {
-        return try self.context.device_api.mapMemory(
+    pub fn lock(self: Self, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
+        return @as([*]u8, @ptrCast(try self.context.device_api.mapMemory(
             self.context.device,
             self.memory,
             offset,
             size,
             flags,
-        );
+        )));
     }
 
     pub fn unlock(self: Self) void {
@@ -95,7 +96,7 @@ pub const Buffer = struct {
     ) !void {
         const dst = try self.lock(offset, size, flags);
 
-        @memcpy(@as([*]u8, @ptrCast(dst)), data);
+        @memcpy(dst, data);
 
         self.unlock();
     }

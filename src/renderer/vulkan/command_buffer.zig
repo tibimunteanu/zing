@@ -19,6 +19,7 @@ pub const CommandBuffer = struct {
     pool: vk.CommandPool,
     state: State = .invalid,
 
+    // public
     pub fn init(context: *const Context, pool: vk.CommandPool, is_primary: bool) !Self {
         var self: Self = undefined;
         self.context = context;

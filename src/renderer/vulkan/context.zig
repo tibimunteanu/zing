@@ -271,7 +271,7 @@ pub const Context = struct {
         try self.initCommandBuffers(.{ .allocate = true, .allocator = allocator });
         errdefer self.deinitCommandbuffers(.{ .deallocate = true });
 
-        self.shader = try Shader.init(allocator, &self, "basic");
+        self.shader = try Shader.init(allocator, &self, "basic", .graphics);
         errdefer self.shader.deinit();
 
         // create buffers
@@ -341,7 +341,7 @@ pub const Context = struct {
 
         for (0..self.physical_device.memory_properties.memory_type_count) |i| {
             if ((type_bits & std.math.shl(u32, 1, i) != 0) and self.physical_device.memory_properties.memory_types[i].property_flags.contains(flags)) {
-                return @as(u32, @intCast(i));
+                return @intCast(i);
             }
         }
 
@@ -353,21 +353,6 @@ pub const Context = struct {
             .allocation_size = requirements.size,
             .memory_type_index = try self.getMemoryIndex(requirements.memory_type_bits, flags),
         }, null);
-    }
-
-    fn uploadDataRegion(self: *Context, dst: *Buffer, region: vk.BufferCopy, data: []const u8) !void {
-        var staging_buffer = try Buffer.init(
-            self,
-            .{ .transfer_src_bit = true },
-            dst.total_size,
-            .{ .host_visible_bit = true, .host_coherent_bit = true },
-            .{ .bind_on_create = true },
-        );
-        defer staging_buffer.deinit();
-
-        try staging_buffer.loadData(0, dst.total_size, .{}, data);
-
-        try staging_buffer.copyTo(dst, self.graphics_command_pool, self.graphics_queue.handle, region);
     }
 
     pub fn beginFrame(self: *Self) !BeginFrameResult {
@@ -411,6 +396,28 @@ pub const Context = struct {
         // TODO: maybe we should decouple rendering from the swapchain and instead render into a texture
         // which would then be copied to the swapchain framebuffers if it's not out of date
         self.main_render_pass.begin(command_buffer, current_framebuffer.handle);
+
+        // TODO: remove test code
+        {
+            self.shader.bind(command_buffer);
+
+            self.device_api.cmdBindVertexBuffers(
+                command_buffer.handle,
+                0,
+                1,
+                @ptrCast(&self.vertex_buffer.handle),
+                @ptrCast(&[_]u64{0}),
+            );
+
+            self.device_api.cmdBindIndexBuffer(
+                command_buffer.handle,
+                self.index_buffer.handle,
+                0,
+                .uint32,
+            );
+
+            self.device_api.cmdDrawIndexed(command_buffer.handle, 6, 1, 0, 0, 0);
+        }
 
         return .render;
     }
@@ -459,7 +466,7 @@ pub const Context = struct {
         return &self.framebuffers.items[self.swapchain.image_index];
     }
 
-    // internal
+    // utils
     fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const u8) !vk.Instance {
         const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return blk: {
             const err = glfw.mustGetError();
@@ -705,6 +712,21 @@ pub const Context = struct {
             );
         }
     }
+
+    fn uploadDataRegion(self: *Context, dst: *Buffer, region: vk.BufferCopy, data: []const u8) !void {
+        var staging_buffer = try Buffer.init(
+            self,
+            .{ .transfer_src_bit = true },
+            dst.total_size,
+            .{ .host_visible_bit = true, .host_coherent_bit = true },
+            .{ .bind_on_create = true },
+        );
+        defer staging_buffer.deinit();
+
+        try staging_buffer.loadData(0, dst.total_size, .{}, data);
+
+        try staging_buffer.copyTo(dst, self.graphics_command_pool, self.graphics_queue.handle, region);
+    }
 };
 
 pub const PhysicalDevice = struct {
@@ -737,7 +759,7 @@ pub const PhysicalDevice = struct {
         return self;
     }
 
-    // internal
+    // utils
     fn initFeatureSupport(self: *Self, instance_api: InstanceAPI) !void {
         const features = instance_api.getPhysicalDeviceFeatures(self.handle);
         const properties = instance_api.getPhysicalDeviceProperties(self.handle);
@@ -846,7 +868,7 @@ pub const PhysicalDevice = struct {
 
         // prioritize a queue family that can do graphics and present to surface
         for (queue_families, 0..) |queue_family, i| {
-            const queue_family_index = @as(u32, @intCast(i));
+            const queue_family_index: u32 = @intCast(i);
 
             if (queue_family.queue_flags.graphics_bit) {
                 if (try instance_api.getPhysicalDeviceSurfaceSupportKHR(self.handle, queue_family_index, surface) == vk.TRUE) {
@@ -858,7 +880,7 @@ pub const PhysicalDevice = struct {
 
         var min_transfer_score: u8 = std.math.maxInt(u8);
         for (queue_families, 0..) |queue_family, i| {
-            const queue_family_index = @as(u32, @intCast(i));
+            const queue_family_index: u32 = @intCast(i);
 
             var transfer_score: u8 = 0;
 

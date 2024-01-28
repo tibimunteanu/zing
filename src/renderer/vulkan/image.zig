@@ -15,6 +15,7 @@ pub const Image = struct {
     height: u32,
     depth: u32,
 
+    // public
     pub fn init(
         context: *const Context,
         options: struct {
@@ -95,6 +96,7 @@ pub const Image = struct {
         device_api.freeMemory(device, self.memory, null);
     }
 
+    // utils
     fn initView(
         self: *Self,
         view_type: vk.ImageViewType,

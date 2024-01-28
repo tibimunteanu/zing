@@ -16,11 +16,20 @@ pub const Shader = struct {
 
     pipeline: vk.Pipeline,
     pipeline_layout: vk.PipelineLayout,
+    bind_point: vk.PipelineBindPoint,
 
-    pub fn init(allocator: Allocator, context: *const Context, name: []const u8) !Self {
+    // public
+    pub fn init(
+        allocator: Allocator,
+        context: *const Context,
+        name: []const u8,
+        bind_point: vk.PipelineBindPoint,
+    ) !Self {
         var self: Self = undefined;
         self.context = context;
         self.allocator = allocator;
+
+        self.bind_point = bind_point;
 
         const base_path = "assets/shaders";
 
@@ -56,10 +65,7 @@ pub const Shader = struct {
         const vertex_input_state = vk.PipelineVertexInputStateCreateInfo{
             .flags = .{},
             .vertex_binding_description_count = 1,
-            .p_vertex_binding_descriptions = @as(
-                [*]const vk.VertexInputBindingDescription,
-                @ptrCast(&Vertex.binding_description),
-            ),
+            .p_vertex_binding_descriptions = @ptrCast(&Vertex.binding_description),
             .vertex_attribute_description_count = Vertex.attribute_description.len,
             .p_vertex_attribute_descriptions = &Vertex.attribute_description,
         };
@@ -73,9 +79,9 @@ pub const Shader = struct {
         const viewport_state = vk.PipelineViewportStateCreateInfo{
             .flags = .{},
             .viewport_count = 1,
-            .p_viewports = undefined, // set in createCommandBuffers with cmdSetViewport
+            .p_viewports = undefined,
             .scissor_count = 1,
-            .p_scissors = undefined, // set in createCommandBuffers with cmdSetScissor
+            .p_scissors = undefined,
         };
 
         const rasterization_state = vk.PipelineRasterizationStateCreateInfo{
@@ -131,7 +137,7 @@ pub const Shader = struct {
             .logic_op_enable = vk.FALSE,
             .logic_op = .copy,
             .attachment_count = 1,
-            .p_attachments = @as([*]const vk.PipelineColorBlendAttachmentState, @ptrCast(&color_blend_attachment_state)),
+            .p_attachments = @ptrCast(&color_blend_attachment_state),
             .blend_constants = [_]f32{ 0, 0, 0, 0 },
         };
 
@@ -175,9 +181,9 @@ pub const Shader = struct {
             self.context.device,
             .null_handle,
             1,
-            @as([*]const vk.GraphicsPipelineCreateInfo, @ptrCast(&pipeline_create_info)),
+            @ptrCast(&pipeline_create_info),
             null,
-            @as([*]vk.Pipeline, @ptrCast(&self.pipeline)),
+            @ptrCast(&self.pipeline),
         );
 
         return self;
@@ -191,8 +197,8 @@ pub const Shader = struct {
         self.context.device_api.destroyShaderModule(self.context.device, self.vertex_shader_module, null);
     }
 
-    pub fn bind(self: Self, command_buffer: *const CommandBuffer, bind_point: vk.PipelineBindPoint) void {
-        self.context.device_api.cmdBindPipeline(command_buffer.handle, bind_point, self.pipeline);
+    pub fn bind(self: Self, command_buffer: *const CommandBuffer) void {
+        self.context.device_api.cmdBindPipeline(command_buffer.handle, self.bind_point, self.pipeline);
     }
 
     // utils

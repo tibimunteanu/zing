@@ -14,6 +14,7 @@ pub const Framebuffer = struct {
     attachments: []vk.ImageView,
     render_pass: ?*const RenderPass,
 
+    // public
     pub fn init(
         context: *const Context,
         allocator: Allocator,

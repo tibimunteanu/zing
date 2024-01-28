@@ -30,7 +30,7 @@ pub const Swapchain = struct {
     image_index: u32,
     next_image_acquired_semaphore: vk.Semaphore,
 
-    // public init
+    // public
     pub fn init(
         allocator: Allocator,
         context: *const Context,
@@ -114,7 +114,6 @@ pub const Swapchain = struct {
         }
     }
 
-    // public
     pub fn getCurrentImage(self: Self) *const SwapchainImage {
         return &self.images[self.image_index];
     }
@@ -144,7 +143,7 @@ pub const Swapchain = struct {
         return try self.acquireNextImage();
     }
 
-    // internal
+    // utils
     fn initCapabilities(self: *Self) !void {
         self.capabilities = try self.context.instance_api.getPhysicalDeviceSurfaceCapabilitiesKHR(
             self.context.physical_device.handle,
@@ -325,7 +324,7 @@ const SwapchainImage = struct {
     render_finished_semaphore: vk.Semaphore,
     frame_fence: vk.Fence,
 
-    // internal
+    // utils
     fn init(context: *const Context, image: vk.Image, format: vk.Format) !SwapchainImage {
         const device = context.device;
         const device_api = context.device_api;
