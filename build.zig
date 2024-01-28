@@ -37,8 +37,12 @@ pub fn build(b: *std.Build) void {
         "assets/shaders/basic_frag.spv",
     });
 
-    exe.step.dependOn(&compile_vert_shader.step);
-    exe.step.dependOn(&compile_frag_shader.step);
+    const copy_assets = b.addSystemCommand(&.{ "xcopy", "assets", "zig-out\\bin\\assets\\", "/E/D/Y" });
+
+    copy_assets.step.dependOn(&compile_vert_shader.step);
+    copy_assets.step.dependOn(&compile_frag_shader.step);
+
+    exe.step.dependOn(&copy_assets.step);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
