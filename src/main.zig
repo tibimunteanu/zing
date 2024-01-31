@@ -17,6 +17,11 @@ pub const Engine = struct {
     window: glfw.Window,
     renderer: Renderer,
 
+    var camera_view: zm.Mat = undefined;
+    var camera_view_dirty: bool = true;
+    var camera_position: zm.Vec = zm.Vec{ 0.0, 0.0, -30.0, 0.0 };
+    var camera_euler: zm.Vec = zm.Vec{ 0.0, 0.0, 0.0, 0.0 }; // pitch, yaw, roll
+
     pub fn init(allocator: Allocator) !Self {
         var self: Self = undefined;
 
@@ -51,12 +56,51 @@ pub const Engine = struct {
     pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
             if (self.window.getAttrib(.iconified) == 0) {
+                if (self.window.getKey(.a) == .press) {
+                    cameraYaw(0.001);
+                }
+                if (self.window.getKey(.d) == .press) {
+                    cameraYaw(-0.001);
+                }
+                if (self.window.getKey(.w) == .press) {
+                    cameraPitch(0.001);
+                }
+                if (self.window.getKey(.s) == .press) {
+                    cameraPitch(-0.001);
+                }
+
+                recomputeCameraView();
+                self.renderer.view = camera_view;
+
                 try self.renderer.drawFrame();
             }
             glfw.pollEvents();
         }
 
         try self.renderer.waitIdle();
+    }
+
+    // utils
+    fn recomputeCameraView() void {
+        if (camera_view_dirty) {
+            const rotation = zm.matFromRollPitchYawV(camera_euler);
+            const translation = zm.translationV(camera_position);
+
+            camera_view = zm.inverse(zm.mul(rotation, translation));
+        }
+        camera_view_dirty = false;
+    }
+
+    fn cameraPitch(amount: f32) void {
+        const limit = 89.0; // prevent gimbal lock
+        camera_euler[0] += amount;
+        camera_euler[0] = @max(-limit, @min(camera_euler[0], limit));
+        camera_view_dirty = true;
+    }
+
+    fn cameraYaw(amount: f32) void {
+        camera_euler[1] += amount;
+        camera_view_dirty = true;
     }
 };
 

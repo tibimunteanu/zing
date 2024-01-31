@@ -77,7 +77,7 @@ pub const Renderer = struct {
             .render => {
                 try self.context.updateGlobalState(self.projection, self.view);
 
-                const model = zm.mul(zm.translation(-5, 0.0, 0.0), zm.rotationY(-0.3));
+                const model = zm.mul(zm.translation(-5, 0.0, 0.0), zm.rotationY(-0.0));
 
                 self.context.updateObjectState(model);
 
