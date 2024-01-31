@@ -8,7 +8,9 @@ const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Shader = @import("shader.zig").Shader;
 const Buffer = @import("buffer.zig").Buffer;
+const BeginFrameResult = @import("../types.zig").BeginFrameResult;
 const Allocator = std.mem.Allocator;
+const zm = @import("zmath");
 
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
@@ -52,9 +54,16 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .createSemaphore = true,
     .createFence = true,
     .createImageView = true,
+    .createDescriptorSetLayout = true,
+    .createDescriptorPool = true,
+    .allocateDescriptorSets = true,
+    .cmdBindDescriptorSets = true,
+    .updateDescriptorSets = true,
     .destroyImageView = true,
     .destroySemaphore = true,
     .destroyFence = true,
+    .destroyDescriptorSetLayout = true,
+    .destroyDescriptorPool = true,
     .getSwapchainImagesKHR = true,
     .createSwapchainKHR = true,
     .destroySwapchainKHR = true,
@@ -103,17 +112,13 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .cmdBindVertexBuffers = true,
     .cmdBindIndexBuffer = true,
     .cmdCopyBuffer = true,
+    .cmdPushConstants = true,
 });
 
 const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d32_sfloat,
     .d32_sfloat_s8_uint,
     .d24_unorm_s8_uint,
-};
-
-pub const BeginFrameResult = enum {
-    render,
-    resize,
 };
 
 pub const Vertex = struct {
@@ -143,10 +148,10 @@ pub const Vertex = struct {
 };
 
 pub const vertices = [_]Vertex{
-    .{ .position = .{ -0.5, -0.5, 0.0 }, .color = .{ 1, 0, 0 } },
-    .{ .position = .{ 0.5, -0.5, 0.0 }, .color = .{ 0, 0, 1 } },
-    .{ .position = .{ 0.5, 0.5, 0.0 }, .color = .{ 0, 1, 0 } },
-    .{ .position = .{ -0.5, 0.5, 0.0 }, .color = .{ 1, 1, 0 } },
+    .{ .position = .{ -5.0, -5.0, 0.0 }, .color = .{ 1, 0, 0 } },
+    .{ .position = .{ 5.0, -5.0, 0.0 }, .color = .{ 0, 0, 1 } },
+    .{ .position = .{ 5.0, 5.0, 0.0 }, .color = .{ 0, 1, 0 } },
+    .{ .position = .{ -5.0, 5.0, 0.0 }, .color = .{ 1, 1, 0 } },
 };
 
 pub const indices = [_]u32{ 0, 1, 2, 0, 2, 3 };
@@ -397,28 +402,6 @@ pub const Context = struct {
         // which would then be copied to the swapchain framebuffers if it's not out of date
         self.main_render_pass.begin(command_buffer, current_framebuffer.handle);
 
-        // TODO: remove test code
-        {
-            self.shader.bind(command_buffer);
-
-            self.device_api.cmdBindVertexBuffers(
-                command_buffer.handle,
-                0,
-                1,
-                @ptrCast(&self.vertex_buffer.handle),
-                @ptrCast(&[_]u64{0}),
-            );
-
-            self.device_api.cmdBindIndexBuffer(
-                command_buffer.handle,
-                self.index_buffer.handle,
-                0,
-                .uint32,
-            );
-
-            self.device_api.cmdDrawIndexed(command_buffer.handle, 6, 1, 0, 0, 0);
-        }
-
         return .render;
     }
 
@@ -464,6 +447,44 @@ pub const Context = struct {
 
     pub fn getCurrentFramebuffer(self: Self) *Framebuffer {
         return &self.framebuffers.items[self.swapchain.image_index];
+    }
+
+    pub fn updateGlobalState(self: *Self, projection: zm.Mat, view: zm.Mat) !void {
+        const command_buffer = self.getCurrentCommandBuffer();
+        self.shader.bind(command_buffer);
+
+        self.shader.global_uniform_data.projection = projection;
+        self.shader.global_uniform_data.view = view;
+
+        try self.shader.updateGlobalUniformData();
+    }
+
+    pub fn updateObjectState(self: *Self, model: zm.Mat) void {
+        // const command_buffer = self.getCurrentCommandBuffer();
+        // self.shader.bind(command_buffer);
+
+        self.shader.updateObjectUniformData(model);
+    }
+
+    pub fn drawFrame(self: Self) void {
+        const command_buffer = self.getCurrentCommandBuffer();
+
+        self.device_api.cmdBindVertexBuffers(
+            command_buffer.handle,
+            0,
+            1,
+            @ptrCast(&self.vertex_buffer.handle),
+            @ptrCast(&[_]u64{0}),
+        );
+
+        self.device_api.cmdBindIndexBuffer(
+            command_buffer.handle,
+            self.index_buffer.handle,
+            0,
+            .uint32,
+        );
+
+        self.device_api.cmdDrawIndexed(command_buffer.handle, 6, 1, 0, 0, 0);
     }
 
     // utils
