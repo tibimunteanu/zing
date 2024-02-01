@@ -9,8 +9,6 @@ const Allocator = std.mem.Allocator;
 const zm = @import("zmath");
 
 pub const Shader = struct {
-    const Self = @This();
-
     context: *const Context,
     allocator: Allocator,
 
@@ -33,8 +31,8 @@ pub const Shader = struct {
         context: *const Context,
         name: []const u8,
         bind_point: vk.PipelineBindPoint,
-    ) !Self {
-        var self: Self = undefined;
+    ) !Shader {
+        var self: Shader = undefined;
         self.context = context;
         self.allocator = allocator;
 
@@ -276,7 +274,7 @@ pub const Shader = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Shader) void {
         self.global_uniform_buffer.deinit();
 
         self.context.device_api.destroyPipeline(self.context.device, self.pipeline, null);
@@ -289,11 +287,11 @@ pub const Shader = struct {
         self.context.device_api.destroyShaderModule(self.context.device, self.vertex_shader_module, null);
     }
 
-    pub fn bind(self: Self, command_buffer: *const CommandBuffer) void {
+    pub fn bind(self: Shader, command_buffer: *const CommandBuffer) void {
         self.context.device_api.cmdBindPipeline(command_buffer.handle, self.bind_point, self.pipeline);
     }
 
-    pub fn updateGlobalUniformData(self: *Self) !void {
+    pub fn updateGlobalUniformData(self: *Shader) !void {
         const image_index = self.context.swapchain.image_index;
         const command_buffer = self.context.getCurrentCommandBuffer();
         const global_descriptor = self.global_descriptor_sets[image_index];
@@ -340,7 +338,7 @@ pub const Shader = struct {
         );
     }
 
-    pub fn updateObjectUniformData(self: *Self, model: zm.Mat) void {
+    pub fn updateObjectUniformData(self: *Shader, model: zm.Mat) void {
         const command_buffer = self.context.getCurrentCommandBuffer();
 
         self.context.device_api.cmdPushConstants(
@@ -354,7 +352,7 @@ pub const Shader = struct {
     }
 
     // utils
-    fn createShaderModule(self: Self, path: []const u8) !vk.ShaderModule {
+    fn createShaderModule(self: Shader, path: []const u8) !vk.ShaderModule {
         const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
         defer file.close();
 

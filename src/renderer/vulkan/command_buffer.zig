@@ -3,8 +3,6 @@ const vk = @import("vk.zig");
 const Context = @import("context.zig").Context;
 
 pub const CommandBuffer = struct {
-    const Self = @This();
-
     pub const State = enum {
         invalid,
         initial,
@@ -20,8 +18,8 @@ pub const CommandBuffer = struct {
     state: State = .invalid,
 
     // public
-    pub fn init(context: *const Context, pool: vk.CommandPool, is_primary: bool) !Self {
-        var self: Self = undefined;
+    pub fn init(context: *const Context, pool: vk.CommandPool, is_primary: bool) !CommandBuffer {
+        var self: CommandBuffer = undefined;
         self.context = context;
         self.pool = pool;
 
@@ -38,7 +36,7 @@ pub const CommandBuffer = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *CommandBuffer) void {
         if (self.handle != .null_handle) {
             self.context.device_api.freeCommandBuffers(self.context.device, self.pool, 1, @ptrCast(&self.handle));
         }
@@ -46,7 +44,7 @@ pub const CommandBuffer = struct {
         self.state = .invalid;
     }
 
-    pub fn begin(self: *Self, flags: vk.CommandBufferUsageFlags) !void {
+    pub fn begin(self: *CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
         try self.context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{
             .flags = flags,
         });
@@ -54,19 +52,19 @@ pub const CommandBuffer = struct {
         self.state = .recording;
     }
 
-    pub fn end(self: *Self) !void {
+    pub fn end(self: *CommandBuffer) !void {
         try self.context.device_api.endCommandBuffer(self.handle);
 
         self.state = .executable;
     }
 
-    pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !Self {
+    pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !CommandBuffer {
         var self = try CommandBuffer.init(context, pool, true);
         try self.begin(.{ .one_time_submit_bit = true });
         return self;
     }
 
-    pub fn endSingleUseAndDeinit(self: *Self, queue: vk.Queue) !void {
+    pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
         try self.end();
 
         try self.context.device_api.queueSubmit(queue, 1, &[_]vk.SubmitInfo{.{

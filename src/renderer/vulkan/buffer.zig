@@ -4,8 +4,6 @@ const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const vk = @import("vk.zig");
 
 pub const Buffer = struct {
-    const Self = @This();
-
     context: *const Context,
 
     handle: vk.Buffer,
@@ -24,8 +22,8 @@ pub const Buffer = struct {
         options: struct {
             bind_on_create: bool = false,
         },
-    ) !Self {
-        var self: Self = undefined;
+    ) !Buffer {
+        var self: Buffer = undefined;
         self.context = context;
 
         self.usage = usage;
@@ -54,7 +52,7 @@ pub const Buffer = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Buffer) void {
         if (self.handle != .null_handle) {
             self.context.device_api.destroyBuffer(self.context.device, self.handle, null);
             self.handle = .null_handle;
@@ -69,11 +67,11 @@ pub const Buffer = struct {
         self.is_locked = false;
     }
 
-    pub fn bind(self: Self, offset: vk.DeviceSize) !void {
+    pub fn bind(self: Buffer, offset: vk.DeviceSize) !void {
         try self.context.device_api.bindBufferMemory(self.context.device, self.handle, self.memory, offset);
     }
 
-    pub fn lock(self: Self, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
+    pub fn lock(self: Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
         return @as([*]u8, @ptrCast(try self.context.device_api.mapMemory(
             self.context.device,
             self.memory,
@@ -83,12 +81,12 @@ pub const Buffer = struct {
         )));
     }
 
-    pub fn unlock(self: Self) void {
+    pub fn unlock(self: Buffer) void {
         self.context.device_api.unmapMemory(self.context.device, self.memory);
     }
 
     pub fn loadData(
-        self: Self,
+        self: Buffer,
         offset: vk.DeviceSize,
         size: vk.DeviceSize,
         flags: vk.MemoryMapFlags,
@@ -101,7 +99,7 @@ pub const Buffer = struct {
         self.unlock();
     }
 
-    pub fn resize(self: *Self, new_size: usize, command_pool: vk.CommandPool, queue: vk.Queue) !void {
+    pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queue: vk.Queue) !void {
         const new_buffer = try Buffer.init(
             self.context,
             self.usage,
@@ -126,7 +124,7 @@ pub const Buffer = struct {
     }
 
     pub fn copyTo(
-        self: Self,
+        self: Buffer,
         dst: *Buffer,
         command_pool: vk.CommandPool,
         queue: vk.Queue,
@@ -134,10 +132,10 @@ pub const Buffer = struct {
     ) !void {
         try self.context.device_api.queueWaitIdle(queue);
 
-        var temp_cmd_buffer = try CommandBuffer.initAndBeginSingleUse(self.context, command_pool);
+        var command_buffer = try CommandBuffer.initAndBeginSingleUse(self.context, command_pool);
 
-        self.context.device_api.cmdCopyBuffer(temp_cmd_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
+        self.context.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
 
-        try temp_cmd_buffer.endSingleUseAndDeinit(queue);
+        try command_buffer.endSingleUseAndDeinit(queue);
     }
 };

@@ -80,6 +80,7 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .destroyCommandPool = true,
     .allocateCommandBuffers = true,
     .freeCommandBuffers = true,
+    .resetCommandBuffer = true,
     .queueWaitIdle = true,
     .createShaderModule = true,
     .destroyShaderModule = true,
@@ -157,8 +158,6 @@ pub const vertices = [_]Vertex{
 pub const indices = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
 pub const Context = struct {
-    const Self = @This();
-
     allocator: Allocator,
 
     base_api: BaseAPI,
@@ -195,9 +194,7 @@ pub const Context = struct {
     desired_extent_generation: u32,
 
     // public
-    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !Self {
-        var self: Self = undefined;
-
+    pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !void {
         self.allocator = allocator;
         self.desired_extent = window.getFramebufferSize();
         self.desired_extent_generation = 0;
@@ -233,10 +230,10 @@ pub const Context = struct {
         self.compute_queue = Queue.init(self.device, self.device_api, self.physical_device.compute_family_index);
         self.transfer_queue = Queue.init(self.device, self.device_api, self.physical_device.transfer_family_index);
 
-        self.swapchain = try Swapchain.init(allocator, &self, .{});
+        self.swapchain = try Swapchain.init(self.allocator, self, .{});
 
         self.main_render_pass = try RenderPass.init(
-            &self,
+            self,
             .{
                 .offset = .{ .x = 0, .y = 0 },
                 .extent = self.swapchain.extent,
@@ -249,7 +246,7 @@ pub const Context = struct {
         );
 
         // framebuffers
-        self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(self.allocator, self.swapchain.images.len);
         self.framebuffers.items.len = self.swapchain.images.len;
 
         for (self.framebuffers.items) |*framebuffer| {
@@ -273,15 +270,15 @@ pub const Context = struct {
         errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
         // create command buffers
-        try self.initCommandBuffers(.{ .allocate = true, .allocator = allocator });
+        try self.initCommandBuffers(.{ .allocate = true, .allocator = self.allocator });
         errdefer self.deinitCommandbuffers(.{ .deallocate = true });
 
-        self.shader = try Shader.init(allocator, &self, "basic", .graphics);
+        self.shader = try Shader.init(self.allocator, self, "basic", .graphics);
         errdefer self.shader.deinit();
 
         // create buffers
         self.vertex_buffer = try Buffer.init(
-            &self,
+            self,
             .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             @sizeOf(@TypeOf(vertices)),
             .{ .device_local_bit = true },
@@ -291,7 +288,7 @@ pub const Context = struct {
         errdefer self.vertex_buffer.deinit();
 
         self.index_buffer = try Buffer.init(
-            &self,
+            self,
             .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             @sizeOf(@TypeOf(indices)),
             .{ .device_local_bit = true },
@@ -312,11 +309,9 @@ pub const Context = struct {
             .dst_offset = 0,
             .size = @sizeOf(@TypeOf(indices)),
         }, &std.mem.toBytes(indices));
-
-        return self;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Context) void {
         self.device_api.deviceWaitIdle(self.device) catch {};
 
         self.vertex_buffer.deinit();
@@ -335,12 +330,12 @@ pub const Context = struct {
         self.instance_api.destroyInstance(self.instance, null);
     }
 
-    pub fn onResized(self: *Self, new_desired_extent: glfw.Window.Size) void {
+    pub fn onResized(self: *Context, new_desired_extent: glfw.Window.Size) void {
         self.desired_extent = new_desired_extent;
         self.desired_extent_generation += 1;
     }
 
-    pub fn getMemoryIndex(self: Self, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
+    pub fn getMemoryIndex(self: Context, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
         // TODO: should we always get fresh memory properties from the device?
         // const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
 
@@ -360,7 +355,7 @@ pub const Context = struct {
         }, null);
     }
 
-    pub fn beginFrame(self: *Self) !BeginFrameResult {
+    pub fn beginFrame(self: *Context) !BeginFrameResult {
         if (self.desired_extent_generation != self.swapchain.extent_generation) {
             // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
             // which is handled by endFrame() by recreating resources, but this way we avoid a best practices warning
@@ -405,7 +400,7 @@ pub const Context = struct {
         return .render;
     }
 
-    pub fn endFrame(self: *Self) !void {
+    pub fn endFrame(self: *Context) !void {
         const current_image = self.swapchain.getCurrentImage();
         var command_buffer = self.getCurrentCommandBuffer();
 
@@ -441,15 +436,15 @@ pub const Context = struct {
         }
     }
 
-    pub fn getCurrentCommandBuffer(self: Self) *CommandBuffer {
+    pub fn getCurrentCommandBuffer(self: Context) *CommandBuffer {
         return &self.graphics_command_buffers.items[self.swapchain.image_index];
     }
 
-    pub fn getCurrentFramebuffer(self: Self) *Framebuffer {
+    pub fn getCurrentFramebuffer(self: Context) *Framebuffer {
         return &self.framebuffers.items[self.swapchain.image_index];
     }
 
-    pub fn updateGlobalState(self: *Self, projection: zm.Mat, view: zm.Mat) !void {
+    pub fn updateGlobalState(self: *Context, projection: zm.Mat, view: zm.Mat) !void {
         const command_buffer = self.getCurrentCommandBuffer();
         self.shader.bind(command_buffer);
 
@@ -459,14 +454,14 @@ pub const Context = struct {
         try self.shader.updateGlobalUniformData();
     }
 
-    pub fn updateObjectState(self: *Self, model: zm.Mat) void {
+    pub fn updateObjectState(self: *Context, model: zm.Mat) void {
         // const command_buffer = self.getCurrentCommandBuffer();
         // self.shader.bind(command_buffer);
 
         self.shader.updateObjectUniformData(model);
     }
 
-    pub fn drawFrame(self: Self) void {
+    pub fn drawFrame(self: Context) void {
         const command_buffer = self.getCurrentCommandBuffer();
 
         self.device_api.cmdBindVertexBuffers(
@@ -643,7 +638,7 @@ pub const Context = struct {
         return device;
     }
 
-    fn initCommandBuffers(self: *Self, options: struct { allocate: bool = false, allocator: ?Allocator = null }) !void {
+    fn initCommandBuffers(self: *Context, options: struct { allocate: bool = false, allocator: ?Allocator = null }) !void {
         if (options.allocate) {
             self.graphics_command_buffers = try std.ArrayList(CommandBuffer).initCapacity(options.allocator.?, self.swapchain.images.len);
             self.graphics_command_buffers.items.len = self.swapchain.images.len;
@@ -664,7 +659,7 @@ pub const Context = struct {
         }
     }
 
-    fn deinitCommandbuffers(self: *Self, options: struct { deallocate: bool = false }) void {
+    fn deinitCommandbuffers(self: *Context, options: struct { deallocate: bool = false }) void {
         for (self.graphics_command_buffers.items) |*buffer| {
             buffer.deinit();
         }
@@ -674,7 +669,7 @@ pub const Context = struct {
         }
     }
 
-    fn recreateSwapchainFramebuffersAndCmdBuffers(self: *Self) !void {
+    fn recreateSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
         try self.device_api.deviceWaitIdle(self.device);
 
         if (self.desired_extent.width == 0 or self.desired_extent.height == 0) {
@@ -712,7 +707,7 @@ pub const Context = struct {
         self.swapchain.extent_generation = self.desired_extent_generation;
     }
 
-    fn recreateFramebuffers(self: *Self, render_pass: *const RenderPass) !void {
+    fn recreateFramebuffers(self: *Context, render_pass: *const RenderPass) !void {
         for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
             if (framebuffer.handle != .null_handle) {
                 framebuffer.deinit();
@@ -751,8 +746,6 @@ pub const Context = struct {
 };
 
 pub const PhysicalDevice = struct {
-    const Self = @This();
-
     handle: vk.PhysicalDevice,
     features: vk.PhysicalDeviceFeatures,
     properties: vk.PhysicalDeviceProperties,
@@ -765,8 +758,8 @@ pub const PhysicalDevice = struct {
     score: u32,
 
     // public
-    pub fn init(allocator: Allocator, handle: vk.PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !Self {
-        var self: Self = undefined;
+    pub fn init(allocator: Allocator, handle: vk.PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !PhysicalDevice {
+        var self: PhysicalDevice = undefined;
         self.handle = handle;
         self.score = 1;
 
@@ -781,7 +774,7 @@ pub const PhysicalDevice = struct {
     }
 
     // utils
-    fn initFeatureSupport(self: *Self, instance_api: InstanceAPI) !void {
+    fn initFeatureSupport(self: *PhysicalDevice, instance_api: InstanceAPI) !void {
         const features = instance_api.getPhysicalDeviceFeatures(self.handle);
         const properties = instance_api.getPhysicalDeviceProperties(self.handle);
 
@@ -807,7 +800,7 @@ pub const PhysicalDevice = struct {
         self.properties = properties;
     }
 
-    fn initMemorySupport(self: *Self, instance_api: InstanceAPI) !void {
+    fn initMemorySupport(self: *PhysicalDevice, instance_api: InstanceAPI) !void {
         const memory_properties = instance_api.getPhysicalDeviceMemoryProperties(self.handle);
 
         for (0..memory_properties.memory_type_count) |i| {
@@ -822,7 +815,7 @@ pub const PhysicalDevice = struct {
         self.memory_properties = memory_properties;
     }
 
-    fn initDepthFormat(self: *Self, instance_api: InstanceAPI) !void {
+    fn initDepthFormat(self: *PhysicalDevice, instance_api: InstanceAPI) !void {
         for (desired_depth_formats) |desired_format| {
             const format_properties = instance_api.getPhysicalDeviceFormatProperties(self.handle, desired_format);
 
@@ -835,7 +828,7 @@ pub const PhysicalDevice = struct {
         return error.CouldNotFindDepthFormat;
     }
 
-    fn initSurfaceSupport(self: *Self, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
+    fn initSurfaceSupport(self: *PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
         var format_count: u32 = undefined;
         _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(self.handle, surface, &format_count, null);
 
@@ -851,7 +844,7 @@ pub const PhysicalDevice = struct {
         }
     }
 
-    fn initExtensionSupport(self: Self, allocator: Allocator, instance_api: InstanceAPI) !void {
+    fn initExtensionSupport(self: PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI) !void {
         // TODO: make the optional extensions list into a map of pairs of extensions and weights
         //       which can then be used to increment the device score.
         var count: u32 = undefined;
@@ -874,7 +867,7 @@ pub const PhysicalDevice = struct {
         }
     }
 
-    fn initQueueSupport(self: *Self, allocator: Allocator, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
+    fn initQueueSupport(self: *PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
         var count: u32 = undefined;
         instance_api.getPhysicalDeviceQueueFamilyProperties(self.handle, &count, null);
 
@@ -943,12 +936,10 @@ pub const PhysicalDevice = struct {
 };
 
 pub const Queue = struct {
-    const Self = @This();
-
     handle: vk.Queue,
     family_index: u32,
 
-    fn init(device: vk.Device, device_api: DeviceAPI, family_index: u32) Self {
+    fn init(device: vk.Device, device_api: DeviceAPI, family_index: u32) Queue {
         return .{
             .handle = device_api.getDeviceQueue(device, family_index, 0),
             .family_index = family_index,

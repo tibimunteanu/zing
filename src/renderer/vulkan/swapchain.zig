@@ -13,8 +13,6 @@ pub const Swapchain = struct {
         suboptimal,
     };
 
-    const Self = @This();
-
     context: *const Context,
     allocator: Allocator,
 
@@ -45,8 +43,10 @@ pub const Swapchain = struct {
             },
             old_handle: vk.SwapchainKHR = .null_handle,
         },
-    ) !Self {
-        var self: Self = undefined;
+    ) !Swapchain {
+        var self: Swapchain = undefined;
+        // TODO: should we not pass the context pointer everywhere and just get it where we need it?
+        // self.context = Engine.instance.renderer.context;
         self.context = context;
         self.allocator = allocator;
 
@@ -104,7 +104,7 @@ pub const Swapchain = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self, options: struct { recycle_handle: bool = false }) void {
+    pub fn deinit(self: *Swapchain, options: struct { recycle_handle: bool = false }) void {
         self.deinitImages();
 
         self.context.device_api.destroySemaphore(self.context.device, self.next_image_acquired_semaphore, null);
@@ -114,17 +114,17 @@ pub const Swapchain = struct {
         }
     }
 
-    pub fn getCurrentImage(self: Self) *const SwapchainImage {
+    pub fn getCurrentImage(self: Swapchain) *const SwapchainImage {
         return &self.images[self.image_index];
     }
 
-    pub fn waitForAllFences(self: Self) !void {
+    pub fn waitForAllFences(self: Swapchain) !void {
         for (self.images) |image| {
             image.waitForFrameFence(.{}) catch {};
         }
     }
 
-    pub fn present(self: *Self) !PresentState {
+    pub fn present(self: *Swapchain) !PresentState {
         const current_image = self.getCurrentImage();
 
         // present the current frame
@@ -144,14 +144,14 @@ pub const Swapchain = struct {
     }
 
     // utils
-    fn initCapabilities(self: *Self) !void {
+    fn initCapabilities(self: *Swapchain) !void {
         self.capabilities = try self.context.instance_api.getPhysicalDeviceSurfaceCapabilitiesKHR(
             self.context.physical_device.handle,
             self.context.surface,
         );
     }
 
-    fn initExtent(self: *Self) !void {
+    fn initExtent(self: *Swapchain) !void {
         self.extent = self.capabilities.current_extent;
 
         if (self.capabilities.current_extent.width == 0xFFFF_FFFF) {
@@ -176,7 +176,7 @@ pub const Swapchain = struct {
         }
     }
 
-    fn initSurfaceFormat(self: *Self, desired_surface_format: vk.SurfaceFormatKHR) !void {
+    fn initSurfaceFormat(self: *Swapchain, desired_surface_format: vk.SurfaceFormatKHR) !void {
         const instance_api = self.context.instance_api;
         const physical_device = self.context.physical_device.handle;
         const surface = self.context.surface;
@@ -202,7 +202,7 @@ pub const Swapchain = struct {
         self.surface_format = surface_formats[0]; // there must always be at least one
     }
 
-    fn initPresentMode(self: *Self, desired_present_modes: []const vk.PresentModeKHR) !void {
+    fn initPresentMode(self: *Swapchain, desired_present_modes: []const vk.PresentModeKHR) !void {
         const instance_api = self.context.instance_api;
         const physical_device = self.context.physical_device.handle;
         const surface = self.context.surface;
@@ -225,7 +225,7 @@ pub const Swapchain = struct {
         self.present_mode = .fifo_khr; // guaranteed to be available
     }
 
-    fn getImageCount(self: Self) u32 {
+    fn getImageCount(self: Swapchain) u32 {
         var image_count = self.capabilities.min_image_count + 1;
         if (self.capabilities.max_image_count > 0) {
             image_count = @min(image_count, self.capabilities.max_image_count);
@@ -233,7 +233,7 @@ pub const Swapchain = struct {
         return image_count;
     }
 
-    fn getImageSharingInfo(self: Self) ?[]const u32 {
+    fn getImageSharingInfo(self: Swapchain) ?[]const u32 {
         if (self.context.graphics_queue.family_index == self.context.present_queue.family_index) {
             return null;
         }
@@ -244,7 +244,7 @@ pub const Swapchain = struct {
         };
     }
 
-    fn initImages(self: *Self) !void {
+    fn initImages(self: *Swapchain) !void {
         const device = self.context.device;
         const device_api = self.context.device_api;
 
@@ -252,17 +252,21 @@ pub const Swapchain = struct {
         var count: u32 = undefined;
         _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, null);
 
-        const images = try self.allocator.alloc(vk.Image, count);
-        defer self.allocator.free(images);
-        _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, images.ptr);
+        const imageHandles = try self.allocator.alloc(vk.Image, count);
+        defer self.allocator.free(imageHandles);
+        _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, imageHandles.ptr);
 
         // allocate swapchain images
         self.images = try self.allocator.alloc(SwapchainImage, count);
         errdefer self.allocator.free(self.images);
 
-        for (images, 0..) |image, i| {
-            self.images[i] = try SwapchainImage.init(self.context, image, self.surface_format.format);
-            errdefer self.images[i].deinit(self.context);
+        for (imageHandles, 0..) |handle, i| {
+            self.images[i] = try SwapchainImage.init(self.context, handle, self.surface_format.format);
+        }
+        errdefer {
+            for (self.images) |image| {
+                image.deinit();
+            }
         }
 
         // create the depth image
@@ -276,7 +280,7 @@ pub const Swapchain = struct {
         });
     }
 
-    fn deinitImages(self: *Self) void {
+    fn deinitImages(self: *Swapchain) void {
         self.depth_image.deinit();
 
         for (self.images) |image| {
@@ -285,7 +289,7 @@ pub const Swapchain = struct {
         self.allocator.free(self.images);
     }
 
-    fn acquireNextImage(self: *Self) !PresentState {
+    fn acquireNextImage(self: *Swapchain) !PresentState {
         // NOTE: in order to reference the current image while rendering,
         // call acquire next image as the last step.
         // and use an aux semaphore since we can't know beforehand which image semaphore to signal.
@@ -318,20 +322,20 @@ pub const Swapchain = struct {
 const SwapchainImage = struct {
     context: *const Context,
 
-    image: vk.Image,
+    handle: vk.Image,
     view: vk.ImageView,
     image_acquired_semaphore: vk.Semaphore,
     render_finished_semaphore: vk.Semaphore,
     frame_fence: vk.Fence,
 
     // utils
-    fn init(context: *const Context, image: vk.Image, format: vk.Format) !SwapchainImage {
+    fn init(context: *const Context, handle: vk.Image, format: vk.Format) !SwapchainImage {
         const device = context.device;
         const device_api = context.device_api;
 
         const view = try device_api.createImageView(device, &.{
             .flags = .{},
-            .image = image,
+            .image = handle,
             .view_type = .@"2d",
             .format = format,
             .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
@@ -357,7 +361,7 @@ const SwapchainImage = struct {
 
         return .{
             .context = context,
-            .image = image,
+            .handle = handle,
             .view = view,
             .image_acquired_semaphore = image_acquired_semaphore,
             .render_finished_semaphore = render_finished_semaphore,

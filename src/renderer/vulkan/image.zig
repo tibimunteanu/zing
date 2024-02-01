@@ -4,8 +4,6 @@ const Context = @import("context.zig").Context;
 const Allocator = std.mem.Allocator;
 
 pub const Image = struct {
-    const Self = @This();
-
     context: *const Context,
 
     handle: vk.Image,
@@ -39,8 +37,8 @@ pub const Image = struct {
             view_type: vk.ImageViewType = .@"2d",
             view_aspect_flags: vk.ImageAspectFlags = .{ .color_bit = true },
         },
-    ) !Self {
-        var self: Self = undefined;
+    ) !Image {
+        var self: Image = undefined;
         self.context = context;
 
         self.width = options.width;
@@ -86,7 +84,7 @@ pub const Image = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Image) void {
         const device_api = self.context.device_api;
         const device = self.context.device;
 
@@ -98,7 +96,7 @@ pub const Image = struct {
 
     // utils
     fn initView(
-        self: *Self,
+        self: *Image,
         view_type: vk.ImageViewType,
         format: vk.Format,
         aspect_flags: vk.ImageAspectFlags,
@@ -118,7 +116,7 @@ pub const Image = struct {
         }, null);
     }
 
-    fn deinitView(self: *Self) void {
+    fn deinitView(self: *Image) void {
         if (self.view) |view| {
             self.context.device_api.destroyImageView(self.context.device, view, null);
             self.view = null;

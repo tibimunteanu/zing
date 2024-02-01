@@ -4,18 +4,16 @@ const glfw = @import("mach-glfw");
 const zm = @import("zmath");
 const Allocator = std.mem.Allocator;
 const BeginFrameResult = @import("types.zig").BeginFrameResult;
-const Engine = @import("../main.zig").Engine;
+const Engine = @import("../engine.zig").Engine;
 const deg2rad = std.math.degreesToRadians;
 
-fn framebufferSizeCallback(window: glfw.Window, width: u32, height: u32) void {
-    const engine = window.getUserPointer(Engine).?;
-    engine.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
+fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
+    Engine.instance.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
 }
 
 pub const Renderer = struct {
-    const Self = @This();
-
-    context: Context,
+    allocator: Allocator,
+    context: *Context,
 
     projection: zm.Mat,
     view: zm.Mat,
@@ -23,10 +21,12 @@ pub const Renderer = struct {
     near_clip: f32,
     far_clip: f32,
 
-    pub fn init(allocator: Allocator, window: glfw.Window) !Self {
-        var self: Self = undefined;
+    pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
+        self.allocator = allocator;
 
-        self.context = try Context.init(allocator, "Zing app", window);
+        self.context = try allocator.create(Context);
+        errdefer allocator.destroy(self.context);
+        try self.context.init(allocator, "Zing app", window);
         errdefer self.context.deinit();
 
         std.log.info("Graphics device: {?s}", .{self.context.physical_device.properties.device_name});
@@ -53,23 +53,22 @@ pub const Renderer = struct {
         );
 
         self.view = zm.inverse(zm.translation(0.0, 0.0, -30.0));
-
-        return self;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Renderer) void {
         self.context.deinit();
+        self.allocator.destroy(self.context);
     }
 
-    pub fn beginFrame(self: *Self) !BeginFrameResult {
+    pub fn beginFrame(self: *Renderer) !BeginFrameResult {
         return try self.context.beginFrame();
     }
 
-    pub fn endFrame(self: *Self) !void {
+    pub fn endFrame(self: *Renderer) !void {
         try self.context.endFrame();
     }
 
-    pub fn drawFrame(self: *Self) !void {
+    pub fn drawFrame(self: *Renderer) !void {
         switch (try self.beginFrame()) {
             .resize => {
                 // NOTE: Skip rendering this frame.
@@ -88,7 +87,7 @@ pub const Renderer = struct {
         }
     }
 
-    pub fn onResized(self: *Self, new_desired_extent: glfw.Window.Size) void {
+    pub fn onResized(self: *Renderer, new_desired_extent: glfw.Window.Size) void {
         self.projection = zm.perspectiveFovLh(
             self.fov,
             @as(f32, @floatFromInt(new_desired_extent.width)) / @as(f32, @floatFromInt(new_desired_extent.height)),
@@ -98,7 +97,7 @@ pub const Renderer = struct {
         self.context.onResized(new_desired_extent);
     }
 
-    pub fn waitIdle(self: Self) !void {
+    pub fn waitIdle(self: Renderer) !void {
         try self.context.swapchain.waitForAllFences();
     }
 };

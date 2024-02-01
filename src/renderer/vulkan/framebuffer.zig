@@ -6,8 +6,6 @@ const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Allocator = std.mem.Allocator;
 
 pub const Framebuffer = struct {
-    const Self = @This();
-
     context: *const Context,
     handle: vk.Framebuffer,
     allocator: Allocator,
@@ -22,8 +20,8 @@ pub const Framebuffer = struct {
         width: u32,
         height: u32,
         attachments: []const vk.ImageView,
-    ) !Self {
-        var self: Self = undefined;
+    ) !Framebuffer {
+        var self: Framebuffer = undefined;
         self.context = context;
         self.allocator = allocator;
 
@@ -42,7 +40,7 @@ pub const Framebuffer = struct {
         return self;
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Framebuffer) void {
         if (self.handle != .null_handle) {
             self.context.device_api.destroyFramebuffer(self.context.device, self.handle, null);
         }
