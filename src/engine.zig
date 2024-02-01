@@ -46,6 +46,7 @@ pub const Engine = struct {
 
         instance.renderer = try allocator.create(Renderer);
         errdefer allocator.destroy(instance.renderer);
+
         try instance.renderer.init(allocator, instance.window);
         errdefer instance.renderer.deinit();
     }

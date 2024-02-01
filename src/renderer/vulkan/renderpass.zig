@@ -114,6 +114,7 @@ pub const RenderPass = struct {
             .dependency_count = dependencies.len,
             .p_dependencies = &dependencies,
         }, null);
+        errdefer context.device_api.destroyRenderPass(context.device, self.handle, null);
 
         self.state = .initial;
 

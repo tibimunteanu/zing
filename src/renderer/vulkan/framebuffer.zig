@@ -26,7 +26,9 @@ pub const Framebuffer = struct {
         self.allocator = allocator;
 
         self.render_pass = render_pass;
+
         self.attachments = try allocator.dupe(vk.ImageView, attachments);
+        errdefer self.allocator.free(self.attachments);
 
         self.handle = try context.device_api.createFramebuffer(context.device, &vk.FramebufferCreateInfo{
             .render_pass = render_pass.handle,
@@ -36,6 +38,7 @@ pub const Framebuffer = struct {
             .height = height,
             .layers = 1,
         }, null);
+        errdefer context.device_api.destroyFramebuffer(context.device, self.handle, null);
 
         return self;
     }

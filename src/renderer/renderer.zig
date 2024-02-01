@@ -26,6 +26,7 @@ pub const Renderer = struct {
 
         self.context = try allocator.create(Context);
         errdefer allocator.destroy(self.context);
+
         try self.context.init(allocator, "Zing app", window);
         errdefer self.context.deinit();
 

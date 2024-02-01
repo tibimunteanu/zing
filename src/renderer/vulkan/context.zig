@@ -196,6 +196,7 @@ pub const Context = struct {
     // public
     pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !void {
         self.allocator = allocator;
+
         self.desired_extent = window.getFramebufferSize();
         self.desired_extent_generation = 0;
 
@@ -225,12 +226,13 @@ pub const Context = struct {
         errdefer self.device_api.destroyDevice(self.device, null);
 
         // get queues
-        self.graphics_queue = Queue.init(self.device, self.device_api, self.physical_device.graphics_family_index);
-        self.present_queue = Queue.init(self.device, self.device_api, self.physical_device.present_family_index);
-        self.compute_queue = Queue.init(self.device, self.device_api, self.physical_device.compute_family_index);
-        self.transfer_queue = Queue.init(self.device, self.device_api, self.physical_device.transfer_family_index);
+        self.graphics_queue = Queue.init(self, self.physical_device.graphics_family_index);
+        self.present_queue = Queue.init(self, self.physical_device.present_family_index);
+        self.compute_queue = Queue.init(self, self.physical_device.compute_family_index);
+        self.transfer_queue = Queue.init(self, self.physical_device.transfer_family_index);
 
         self.swapchain = try Swapchain.init(self.allocator, self, .{});
+        errdefer self.swapchain.deinit(.{});
 
         self.main_render_pass = try RenderPass.init(
             self,
@@ -244,6 +246,7 @@ pub const Context = struct {
                 .stencil = 0,
             },
         );
+        errdefer self.main_render_pass.deinit();
 
         // framebuffers
         self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(self.allocator, self.swapchain.images.len);
@@ -260,6 +263,7 @@ pub const Context = struct {
                     framebuffer.deinit();
                 }
             }
+            self.framebuffers.deinit();
         }
 
         // create command pool
@@ -939,9 +943,9 @@ pub const Queue = struct {
     handle: vk.Queue,
     family_index: u32,
 
-    fn init(device: vk.Device, device_api: DeviceAPI, family_index: u32) Queue {
+    fn init(context: *const Context, family_index: u32) Queue {
         return .{
-            .handle = device_api.getDeviceQueue(device, family_index, 0),
+            .handle = context.device_api.getDeviceQueue(context.device, family_index, 0),
             .family_index = family_index,
         };
     }

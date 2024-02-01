@@ -30,6 +30,7 @@ pub const CommandBuffer = struct {
             .command_buffer_count = 1,
             .level = if (is_primary) .primary else .secondary,
         }, @ptrCast(&self.handle));
+        errdefer context.device_api.freeCommandBuffers(context.device, pool, 1, @ptrCast(&self.handle));
 
         self.state = .initial;
 
@@ -60,11 +61,15 @@ pub const CommandBuffer = struct {
 
     pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !CommandBuffer {
         var self = try CommandBuffer.init(context, pool, true);
+        errdefer self.deinit();
+
         try self.begin(.{ .one_time_submit_bit = true });
         return self;
     }
 
     pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
+        defer self.deinit();
+
         try self.end();
 
         try self.context.device_api.queueSubmit(queue, 1, &[_]vk.SubmitInfo{.{
@@ -73,7 +78,5 @@ pub const CommandBuffer = struct {
         }}, .null_handle);
 
         try self.context.device_api.queueWaitIdle(queue);
-
-        self.deinit();
     }
 };

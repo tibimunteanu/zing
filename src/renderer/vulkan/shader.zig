@@ -88,7 +88,7 @@ pub const Shader = struct {
             &global_ubo_layout_info,
             null,
         );
-        // TODO: errdefer
+        errdefer context.device_api.destroyDescriptorSetLayout(context.device, self.global_descriptor_set_layout, null);
 
         const global_ubo_pool_size = vk.DescriptorPoolSize{
             .type = .uniform_buffer,
@@ -107,7 +107,7 @@ pub const Shader = struct {
             &global_ubo_pool_info,
             null,
         );
-        // TODO: errdefer
+        errdefer context.device_api.destroyDescriptorPool(context.device, self.global_descriptor_pool, null);
 
         const viewport_state = vk.PipelineViewportStateCreateInfo{
             .flags = .{},
@@ -206,14 +206,14 @@ pub const Shader = struct {
             .size = @sizeOf(zm.Mat) * 2,
         };
 
-        self.pipeline_layout = try self.context.device_api.createPipelineLayout(self.context.device, &.{
+        self.pipeline_layout = try context.device_api.createPipelineLayout(context.device, &.{
             .flags = .{},
             .set_layout_count = layouts.len,
             .p_set_layouts = &layouts,
             .push_constant_range_count = 1,
             .p_push_constant_ranges = @ptrCast(&push_constant_range),
         }, null);
-        errdefer self.context.device_api.destroyPipelineLayout(self.context.device, self.pipeline_layout, null);
+        errdefer context.device_api.destroyPipelineLayout(context.device, self.pipeline_layout, null);
 
         const pipeline_create_info = vk.GraphicsPipelineCreateInfo{
             .flags = .{},
@@ -229,20 +229,21 @@ pub const Shader = struct {
             .p_color_blend_state = &color_blend_state,
             .p_dynamic_state = &dynamic_state,
             .layout = self.pipeline_layout,
-            .render_pass = self.context.main_render_pass.handle,
+            .render_pass = context.main_render_pass.handle,
             .subpass = 0,
             .base_pipeline_handle = .null_handle,
             .base_pipeline_index = -1,
         };
 
-        _ = try self.context.device_api.createGraphicsPipelines(
-            self.context.device,
+        _ = try context.device_api.createGraphicsPipelines(
+            context.device,
             .null_handle,
             1,
             @ptrCast(&pipeline_create_info),
             null,
             @ptrCast(&self.pipeline),
         );
+        errdefer context.device_api.destroyPipeline(context.device, self.pipeline, null);
 
         self.global_uniform_buffer = try Buffer.init(
             context,
@@ -251,7 +252,7 @@ pub const Shader = struct {
             .{ .device_local_bit = true, .host_visible_bit = true, .host_coherent_bit = true },
             .{ .bind_on_create = true },
         );
-        // TODO: errdefer
+        errdefer self.global_uniform_buffer.deinit();
 
         const global_ubo_layouts = [_]vk.DescriptorSetLayout{
             self.global_descriptor_set_layout,
