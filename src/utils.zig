@@ -6,7 +6,11 @@ pub const ID = enum(u32) {
     _,
 
     pub fn increment(self: *ID) void {
-        self.* = @enumFromInt(1 + @intFromEnum(self.*));
+        if (self.* == .null_handle) {
+            self.* = @enumFromInt(0);
+        } else {
+            self.* = @enumFromInt(1 + @intFromEnum(self.*));
+        }
     }
 };
 

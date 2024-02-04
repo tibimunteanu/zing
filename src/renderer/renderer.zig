@@ -23,6 +23,8 @@ pub const Renderer = struct {
     near_clip: f32,
     far_clip: f32,
 
+    default_texture: Texture,
+
     pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
         self.allocator = allocator;
 
@@ -56,9 +58,33 @@ pub const Renderer = struct {
         );
 
         self.view = zm.inverse(zm.translation(0.0, 0.0, -30.0));
+
+        const tex_dimension: u32 = 64;
+        const channels: u32 = 4;
+        const pixel_count = tex_dimension * tex_dimension;
+
+        var pixels: [pixel_count * channels]u8 = undefined;
+        @memset(&pixels, 255);
+
+        for (0..tex_dimension) |row| {
+            for (0..tex_dimension) |col| {
+                const index = (row * tex_dimension) + col;
+                const index_channel = index * channels;
+
+                if (row % 2 == col % 2) {
+                    pixels[index_channel + 0] = 0;
+                    pixels[index_channel + 1] = 0;
+                }
+            }
+        }
+
+        self.default_texture = try self.createTexture("default", tex_dimension, tex_dimension, 4, false, false, &pixels);
+        errdefer self.destroyTexture(&self.default_texture);
     }
 
     pub fn deinit(self: *Renderer) void {
+        self.destroyTexture(&self.default_texture);
+
         self.context.deinit();
         self.allocator.destroy(self.context);
     }
@@ -79,11 +105,11 @@ pub const Renderer = struct {
             .render => {
                 try self.context.updateGlobalState(self.projection, self.view);
 
-                const data = GeometryRenderData{
-                    .object_id = @enumFromInt(0),
-                    .model = zm.mul(zm.translation(-5, 0.0, 0.0), zm.rotationY(-0.0)),
-                    .textures = undefined,
-                };
+                var data: GeometryRenderData = undefined;
+                data.object_id = @enumFromInt(0);
+                data.model = zm.mul(zm.translation(-5, 0.0, 0.0), zm.rotationY(-0.0));
+                data.textures = [_]?*Texture{null} ** 16;
+                data.textures[0] = &self.default_texture;
 
                 try self.context.updateObjectState(data);
 
@@ -113,12 +139,13 @@ pub const Renderer = struct {
         name: []const u8,
         width: u32,
         height: u32,
-        channel_count: u32,
+        channel_count: u8,
         has_transparency: bool,
         auto_release: bool,
         pixels: []const u8,
     ) !Texture {
         return try self.context.createTexture(
+            self.allocator,
             name,
             width,
             height,

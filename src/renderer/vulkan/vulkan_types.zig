@@ -4,7 +4,7 @@ const ID = @import("../../utils.zig").ID;
 const vk = @import("vk.zig");
 
 pub const max_object_count = 1024;
-pub const object_shader_descriptor_count = 1;
+pub const object_shader_descriptor_count = 2;
 
 pub const TextureData = struct {
     image: Image,

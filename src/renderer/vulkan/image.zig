@@ -107,8 +107,10 @@ pub const Image = struct {
         var barrier = vk.ImageMemoryBarrier{
             .old_layout = old_layout,
             .new_layout = new_layout,
-            .src_queue_family_index = self.context.device.graphics_family_index,
-            .dst_queue_family_index = self.context.device.graphics_family_index,
+            .src_queue_family_index = self.context.physical_device.graphics_family_index,
+            .dst_queue_family_index = self.context.physical_device.graphics_family_index,
+            .src_access_mask = undefined,
+            .dst_access_mask = undefined,
             .image = self.handle,
             .subresource_range = vk.ImageSubresourceRange{
                 .aspect_mask = .{ .color_bit = true },
@@ -128,7 +130,7 @@ pub const Image = struct {
 
             src_stage = .{ .top_of_pipe_bit = true };
             dst_stage = .{ .transfer_bit = true };
-        } else if (old_layout == .transfer_dst_optimal and .new_layout == .shader_read_only_optimal) {
+        } else if (old_layout == .transfer_dst_optimal and new_layout == .shader_read_only_optimal) {
             barrier.src_access_mask = .{ .transfer_write_bit = true };
             barrier.dst_access_mask = .{ .shader_read_bit = true };
 
@@ -157,7 +159,7 @@ pub const Image = struct {
             command_buffer.handle,
             buffer,
             self.handle,
-            .{ .transfer_dst_optimal = true },
+            .transfer_dst_optimal,
             1,
             @ptrCast(&vk.BufferImageCopy{
                 .buffer_offset = 0,

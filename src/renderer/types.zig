@@ -25,5 +25,5 @@ pub const ObjectUniformData = struct {
 pub const GeometryRenderData = struct {
     object_id: ID,
     model: zm.Mat,
-    textures: [16]*Texture,
+    textures: [16]?*Texture,
 };

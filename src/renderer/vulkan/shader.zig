@@ -8,6 +8,7 @@ const GlobalUniformData = @import("../types.zig").GlobalUniformData;
 const ObjectUniformData = @import("../types.zig").ObjectUniformData;
 const GeometryRenderData = @import("../types.zig").GeometryRenderData;
 const ObjectShaderObjectState = @import("vulkan_types.zig").ObjectShaderObjectState;
+const TextureData = @import("vulkan_types.zig").TextureData;
 const ID = @import("../../utils.zig").ID;
 const Allocator = std.mem.Allocator;
 const zm = @import("zmath");
@@ -84,48 +85,50 @@ pub const Shader = struct {
         };
 
         // global descriptors
-        const global_ubo_layout_binding = vk.DescriptorSetLayoutBinding{
-            .binding = 0,
-            .descriptor_count = 1,
-            .descriptor_type = .uniform_buffer,
-            .p_immutable_samplers = null,
-            .stage_flags = .{ .vertex_bit = true },
-        };
-
-        const global_ubo_layout_info = vk.DescriptorSetLayoutCreateInfo{
-            .binding_count = 1,
-            .p_bindings = @ptrCast(&global_ubo_layout_binding),
+        const global_ubo_layout_bindings = [_]vk.DescriptorSetLayoutBinding{
+            vk.DescriptorSetLayoutBinding{
+                .binding = 0,
+                .descriptor_count = 1,
+                .descriptor_type = .uniform_buffer,
+                .p_immutable_samplers = null,
+                .stage_flags = .{ .vertex_bit = true },
+            },
         };
 
         self.global_descriptor_set_layout = try context.device_api.createDescriptorSetLayout(
             context.device,
-            &global_ubo_layout_info,
+            &vk.DescriptorSetLayoutCreateInfo{
+                .binding_count = global_ubo_layout_bindings.len,
+                .p_bindings = &global_ubo_layout_bindings,
+            },
             null,
         );
         errdefer context.device_api.destroyDescriptorSetLayout(context.device, self.global_descriptor_set_layout, null);
 
-        const global_ubo_pool_size = vk.DescriptorPoolSize{
-            .type = .uniform_buffer,
-            .descriptor_count = @intCast(context.swapchain.images.len),
-        };
-
-        const global_ubo_pool_info = vk.DescriptorPoolCreateInfo{
-            .flags = .{},
-            .pool_size_count = 1,
-            .p_pool_sizes = @ptrCast(&global_ubo_pool_size),
-            .max_sets = @intCast(context.swapchain.images.len),
+        const global_ubo_pool_sizes = [_]vk.DescriptorPoolSize{
+            vk.DescriptorPoolSize{
+                .type = .uniform_buffer,
+                .descriptor_count = @intCast(context.swapchain.images.len),
+            },
         };
 
         self.global_descriptor_pool = try context.device_api.createDescriptorPool(
             context.device,
-            &global_ubo_pool_info,
+            &vk.DescriptorPoolCreateInfo{
+                .flags = .{},
+                .pool_size_count = global_ubo_pool_sizes.len,
+                .p_pool_sizes = &global_ubo_pool_sizes,
+                .max_sets = @intCast(context.swapchain.images.len),
+            },
             null,
         );
         errdefer context.device_api.destroyDescriptorPool(context.device, self.global_descriptor_pool, null);
 
-        // object descriptors
+        // local / object descriptors
+        const local_sampler_count: u32 = 1;
         const descriptor_types = [object_shader_descriptor_count]vk.DescriptorType{
             .uniform_buffer,
+            .combined_image_sampler,
         };
 
         var object_ubo_layout_bindings: [descriptor_types.len]vk.DescriptorSetLayoutBinding = undefined;
@@ -139,32 +142,35 @@ pub const Shader = struct {
             };
         }
 
-        const object_ubo_layout_info = vk.DescriptorSetLayoutCreateInfo{
-            .binding_count = object_ubo_layout_bindings.len,
-            .p_bindings = @ptrCast(&object_ubo_layout_bindings),
-        };
         self.object_descriptor_set_layout = try context.device_api.createDescriptorSetLayout(
             context.device,
-            &object_ubo_layout_info,
+            &vk.DescriptorSetLayoutCreateInfo{
+                .binding_count = object_ubo_layout_bindings.len,
+                .p_bindings = @ptrCast(&object_ubo_layout_bindings),
+            },
             null,
         );
         errdefer context.device_api.destroyDescriptorSetLayout(context.device, self.object_descriptor_set_layout, null);
 
-        const object_ubo_pool_size = vk.DescriptorPoolSize{
-            .type = .uniform_buffer,
-            .descriptor_count = @intCast(max_object_count),
-        };
-
-        const object_ubo_pool_info = vk.DescriptorPoolCreateInfo{
-            .flags = .{},
-            .pool_size_count = 1,
-            .p_pool_sizes = @ptrCast(&object_ubo_pool_size),
-            .max_sets = @intCast(max_object_count),
+        const object_ubo_pool_sizes = [_]vk.DescriptorPoolSize{
+            vk.DescriptorPoolSize{
+                .type = .uniform_buffer,
+                .descriptor_count = @intCast(max_object_count),
+            },
+            vk.DescriptorPoolSize{
+                .type = .combined_image_sampler,
+                .descriptor_count = local_sampler_count * @as(u32, @intCast(max_object_count)),
+            },
         };
 
         self.object_descriptor_pool = try context.device_api.createDescriptorPool(
             context.device,
-            &object_ubo_pool_info,
+            &vk.DescriptorPoolCreateInfo{
+                .flags = .{},
+                .pool_size_count = object_ubo_pool_sizes.len,
+                .p_pool_sizes = &object_ubo_pool_sizes,
+                .max_sets = @intCast(max_object_count),
+            },
             null,
         );
         errdefer context.device_api.destroyDescriptorPool(context.device, self.object_descriptor_pool, null);
@@ -474,6 +480,42 @@ pub const Shader = struct {
             object_state.descriptor_states[dst_binding].generations[image_index] = @enumFromInt(1);
         }
         dst_binding += 1;
+
+        const sampler_count: u32 = 1;
+        var image_infos: [sampler_count]vk.DescriptorImageInfo = undefined;
+        for (&image_infos, 0..sampler_count) |*image_info, sampler_index| {
+            const texture = data.textures[sampler_index];
+            const generation = &object_state.descriptor_states[dst_binding].generations[image_index];
+
+            if (texture != null and (generation.* != texture.?.generation or generation.* == .null_handle)) {
+                const internal_data: *TextureData = @ptrCast(texture.?.internal_data);
+
+                image_info.* = vk.DescriptorImageInfo{
+                    .image_layout = .shader_read_only_optimal,
+                    .image_view = internal_data.image.view,
+                    .sampler = internal_data.sampler,
+                };
+
+                const object_sampler_descriptor_write = vk.WriteDescriptorSet{
+                    .dst_set = object_descriptor_set,
+                    .dst_binding = dst_binding,
+                    .descriptor_type = .combined_image_sampler,
+                    .descriptor_count = 1,
+                    .dst_array_element = 0,
+                    .p_image_info = @ptrCast(image_info),
+                    .p_buffer_info = undefined,
+                    .p_texel_buffer_view = undefined,
+                };
+
+                descriptor_writes[write_count] = object_sampler_descriptor_write;
+                write_count += 1;
+
+                if (texture.?.generation != .null_handle) {
+                    generation.* = texture.?.generation;
+                }
+                dst_binding += 1;
+            }
+        }
 
         if (write_count > 0) {
             self.context.device_api.updateDescriptorSets(
