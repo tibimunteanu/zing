@@ -1,6 +1,7 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const Context = @import("context.zig").Context;
+const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Allocator = std.mem.Allocator;
 
 pub const Image = struct {
@@ -8,7 +9,7 @@ pub const Image = struct {
 
     handle: vk.Image,
     memory: vk.DeviceMemory,
-    view: ?vk.ImageView = null,
+    view: vk.ImageView = .null_handle,
     width: u32,
     height: u32,
     depth: u32,
@@ -22,17 +23,17 @@ pub const Image = struct {
             depth: u32 = 1,
             image_type: vk.ImageType = .@"2d",
             flags: vk.ImageCreateFlags = .{},
-            mip_levels: u32 = 4,
+            mip_levels: u32 = 1,
             array_layers: u32 = 1,
             samples: vk.SampleCountFlags = .{ .@"1_bit" = true },
-            format: vk.Format = .b8g8r8a8_srgb,
+            format: vk.Format,
             tiling: vk.ImageTiling = .optimal,
             usage: vk.ImageUsageFlags = .{ .color_attachment_bit = true },
             sharing_mode: vk.SharingMode = .exclusive,
             queue_family_index_count: u32 = 0,
             p_queue_family_indices: ?[*]const u32 = null,
             initial_layout: vk.ImageLayout = .undefined,
-            memory_flags: vk.MemoryPropertyFlags = .{ .device_local_bit = true },
+            memory_flags: vk.MemoryPropertyFlags,
             init_view: bool = false,
             view_type: vk.ImageViewType = .@"2d",
             view_aspect_flags: vk.ImageAspectFlags = .{ .color_bit = true },
@@ -94,6 +95,94 @@ pub const Image = struct {
         device_api.freeMemory(device, self.memory, null);
     }
 
+    pub fn transitionLayout(
+        self: *Image,
+        command_buffer: CommandBuffer,
+        format: vk.Format,
+        old_layout: vk.ImageLayout,
+        new_layout: vk.ImageLayout,
+    ) !void {
+        _ = format;
+
+        var barrier = vk.ImageMemoryBarrier{
+            .old_layout = old_layout,
+            .new_layout = new_layout,
+            .src_queue_family_index = self.context.device.graphics_family_index,
+            .dst_queue_family_index = self.context.device.graphics_family_index,
+            .image = self.handle,
+            .subresource_range = vk.ImageSubresourceRange{
+                .aspect_mask = .{ .color_bit = true },
+                .base_mip_level = 0,
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+        };
+
+        var src_stage: vk.PipelineStageFlags = undefined;
+        var dst_stage: vk.PipelineStageFlags = undefined;
+
+        if (old_layout == .undefined and new_layout == .transfer_dst_optimal) {
+            barrier.src_access_mask = .{};
+            barrier.dst_access_mask = .{ .transfer_write_bit = true };
+
+            src_stage = .{ .top_of_pipe_bit = true };
+            dst_stage = .{ .transfer_bit = true };
+        } else if (old_layout == .transfer_dst_optimal and .new_layout == .shader_read_only_optimal) {
+            barrier.src_access_mask = .{ .transfer_write_bit = true };
+            barrier.dst_access_mask = .{ .shader_read_bit = true };
+
+            src_stage = .{ .transfer_bit = true };
+            dst_stage = .{ .fragment_shader_bit = true };
+        } else {
+            return error.UnsupportedLayoutTransition;
+        }
+
+        self.context.device_api.cmdPipelineBarrier(
+            command_buffer.handle,
+            src_stage,
+            dst_stage,
+            .{},
+            0,
+            null,
+            0,
+            null,
+            1,
+            @ptrCast(&barrier),
+        );
+    }
+
+    pub fn copyFromBuffer(self: *Image, command_buffer: CommandBuffer, buffer: vk.Buffer) void {
+        self.context.device_api.cmdCopyBufferToImage(
+            command_buffer.handle,
+            buffer,
+            self.handle,
+            .{ .transfer_dst_optimal = true },
+            1,
+            @ptrCast(&vk.BufferImageCopy{
+                .buffer_offset = 0,
+                .buffer_row_length = 0,
+                .buffer_image_height = 0,
+                .image_subresource = vk.ImageSubresourceLayers{
+                    .aspect_mask = .{ .color_bit = true },
+                    .mip_level = 0,
+                    .base_array_layer = 0,
+                    .layer_count = 1,
+                },
+                .image_offset = vk.Offset3D{
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
+                },
+                .image_extent = vk.Extent3D{
+                    .width = self.width,
+                    .height = self.height,
+                    .depth = 1,
+                },
+            }),
+        );
+    }
+
     // utils
     fn initView(
         self: *Image,
@@ -117,9 +206,9 @@ pub const Image = struct {
     }
 
     fn deinitView(self: *Image) void {
-        if (self.view) |view| {
-            self.context.device_api.destroyImageView(self.context.device, view, null);
-            self.view = null;
+        if (self.view != .null_handle) {
+            self.context.device_api.destroyImageView(self.context.device, self.view, null);
+            self.view = .null_handle;
         }
     }
 };

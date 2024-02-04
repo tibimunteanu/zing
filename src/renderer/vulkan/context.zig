@@ -9,6 +9,9 @@ const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Shader = @import("shader.zig").Shader;
 const Buffer = @import("buffer.zig").Buffer;
 const BeginFrameResult = @import("../types.zig").BeginFrameResult;
+const Image = @import("image.zig").Image;
+const Texture = @import("../../resources/texture.zig").Texture;
+const TextureData = @import("vulkan_types.zig").TextureData;
 const Allocator = std.mem.Allocator;
 const zm = @import("zmath");
 
@@ -486,6 +489,110 @@ pub const Context = struct {
         self.device_api.cmdDrawIndexed(command_buffer.handle, 6, 1, 0, 0, 0);
     }
 
+    pub fn createTexture(
+        self: *Context,
+        allocator: Allocator,
+        name: []const u8,
+        width: u32,
+        height: u32,
+        channel_count: u32,
+        has_transparency: bool,
+        auto_release: bool,
+        pixels: []const u8,
+    ) !Texture {
+        _ = name;
+        _ = auto_release;
+
+        var texture: Texture = undefined;
+        texture.width = width;
+        texture.height = height;
+        texture.channel_count = channel_count;
+        texture.generation = 0;
+
+        const internal_data = try allocator.create(TextureData);
+        errdefer allocator.destroy(internal_data);
+
+        texture.internal_data = internal_data;
+
+        const image_size: vk.DeviceSize = width * height * channel_count;
+        const image_format: vk.Format = .r8g8b8a8_unorm;
+
+        var staging_buffer = try Buffer.init(
+            self,
+            .{ .transfer_src_bit = true },
+            image_size,
+            .{ .host_visible_bit = true, .host_coherent_bit = true },
+            .{ .bind_on_create = true },
+        );
+        defer staging_buffer.deinit();
+
+        try staging_buffer.loadData(0, image_size, .{}, pixels);
+
+        internal_data.image = try Image.init(self, .{
+            .width = width,
+            .height = height,
+            .format = image_format,
+            .usage = .{ .transfer_src_bit = true, .transfer_dst_bit = true, .color_attachment_bit = true },
+            .memory_flags = .{ .device_local_bit = true },
+            .init_view = true,
+            .view_aspect_flags = .{ .color_bit = true },
+        });
+        errdefer internal_data.image.deinit();
+
+        var command_buffer = try CommandBuffer.initAndBeginSingleUse(self.context, self.context.graphics_command_pool);
+
+        try internal_data.image.transitionLayout(
+            command_buffer,
+            image_format,
+            .undefined,
+            .transfer_dst_optimal,
+        );
+
+        internal_data.image.copyFromBuffer(command_buffer, staging_buffer.handle);
+
+        try internal_data.image.transitionLayout(
+            command_buffer,
+            image_format,
+            .transfer_dst_optimal,
+            .shader_read_only_optimal,
+        );
+
+        try command_buffer.endSingleUseAndDeinit(self.context.graphics_queue);
+
+        internal_data.sampler = self.device_api.createSampler(self.device, &vk.SamplerCreateInfo{
+            .mag_filter = .linear,
+            .min_filter = .linear,
+            .address_mode_u = .repeat,
+            .address_mode_v = .repeat,
+            .address_mode_w = .repeat,
+            .anisotropy_enable = true,
+            .max_anisotropy = 16,
+            .border_color = .int_opaque_black,
+            .unnormalized_coordinates = false,
+            .compare_enable = false,
+            .compare_op = .always,
+            .mipmap_mode = .linear,
+            .mip_lod_bias = 0,
+            .min_lod = 0,
+            .max_lod = 0,
+        }, null);
+
+        texture.has_transparency = has_transparency;
+        texture.generation += 1;
+
+        return texture;
+    }
+
+    pub fn destroyTexture(self: *Context, texture: *Texture) void {
+        const internal_data: *TextureData = @ptrCast(texture.internal_data);
+
+        internal_data.image.deinit();
+        self.device_api.destroySampler(self.device, internal_data.sampler, null);
+
+        self.allocator.destroy(texture.internal_data);
+        texture.* = undefined;
+    }
+
     // utils
     fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const u8) !vk.Instance {
         const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return blk: {
@@ -719,7 +826,7 @@ pub const Context = struct {
 
             const attachments = [_]vk.ImageView{
                 image.view,
-                self.swapchain.depth_image.view.?,
+                self.swapchain.depth_image.view,
             };
 
             framebuffer.* = try Framebuffer.init(

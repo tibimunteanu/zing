@@ -5,6 +5,7 @@ const zm = @import("zmath");
 const Allocator = std.mem.Allocator;
 const BeginFrameResult = @import("types.zig").BeginFrameResult;
 const Engine = @import("../engine.zig").Engine;
+const Texture = @import("../resources/texture.zig").Texture;
 const deg2rad = std.math.degreesToRadians;
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
@@ -100,5 +101,30 @@ pub const Renderer = struct {
 
     pub fn waitIdle(self: Renderer) !void {
         try self.context.swapchain.waitForAllFences();
+    }
+
+    pub fn createTexture(
+        self: *Renderer,
+        name: []const u8,
+        width: u32,
+        height: u32,
+        channel_count: u32,
+        has_transparency: bool,
+        auto_release: bool,
+        pixels: []const u8,
+    ) !Texture {
+        return try self.context.createTexture(
+            name,
+            width,
+            height,
+            channel_count,
+            has_transparency,
+            auto_release,
+            pixels,
+        );
+    }
+
+    pub fn destroyTexture(self: *Renderer, texture: *Texture) void {
+        self.context.destroyTexture(texture);
     }
 };

@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
 const Renderer = @import("renderer/renderer.zig").Renderer;
 const zm = @import("zmath");
+const utils = @import("utils.zig");
 const Allocator = std.mem.Allocator;
 
 fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
@@ -85,39 +86,19 @@ pub const Engine = struct {
                 var velocity: zm.Vec = zm.splat(zm.Vec, 0.0);
 
                 if (instance.window.getKey(.s) == .press) {
-                    const forward = zm.normalize3(zm.Vec{
-                        -camera_view[0][2],
-                        -camera_view[1][2],
-                        -camera_view[2][2],
-                        0.0,
-                    });
+                    const forward = utils.getForwardVec(camera_view);
                     velocity += forward;
                 }
                 if (instance.window.getKey(.w) == .press) {
-                    const backward = zm.normalize3(zm.Vec{
-                        camera_view[0][2],
-                        camera_view[1][2],
-                        camera_view[2][2],
-                        0.0,
-                    });
+                    const backward = utils.getBackwardVec(camera_view);
                     velocity += backward;
                 }
                 if (instance.window.getKey(.h) == .press) {
-                    const left = zm.normalize3(zm.Vec{
-                        -camera_view[0][0],
-                        -camera_view[1][0],
-                        -camera_view[2][0],
-                        0.0,
-                    });
+                    const left = utils.getLeftVec(camera_view);
                     velocity += left;
                 }
                 if (instance.window.getKey(.l) == .press) {
-                    const right = zm.normalize3(zm.Vec{
-                        camera_view[0][0],
-                        camera_view[1][0],
-                        camera_view[2][0],
-                        0.0,
-                    });
+                    const right = utils.getRightVec(camera_view);
                     velocity += right;
                 }
 

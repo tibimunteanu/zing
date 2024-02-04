@@ -275,6 +275,7 @@ pub const Swapchain = struct {
             .height = self.extent.height,
             .format = self.context.physical_device.depth_format,
             .usage = .{ .depth_stencil_attachment_bit = true },
+            .memory_flags = .{ .device_local_bit = true },
             .init_view = true,
             .view_aspect_flags = .{ .depth_bit = true },
         });
