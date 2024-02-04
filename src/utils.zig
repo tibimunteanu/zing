@@ -6,10 +6,10 @@ pub const ID = enum(u32) {
     _,
 
     pub fn increment(self: *ID) void {
-        if (self.* == .null_handle) {
+        if (self.* == .null_handle or self.* == @as(ID, @enumFromInt(std.math.maxInt(u32) - 1))) {
             self.* = @enumFromInt(0);
         } else {
-            self.* = @enumFromInt(1 + @intFromEnum(self.*));
+            self.* = @enumFromInt(@intFromEnum(self.*) + 1);
         }
     }
 };

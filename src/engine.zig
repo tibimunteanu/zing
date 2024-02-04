@@ -113,6 +113,10 @@ pub const Engine = struct {
                 recomputeCameraView();
                 instance.renderer.view = camera_view;
 
+                if (instance.window.getKey(.n) == .press) {
+                    try instance.renderer.changeTexture();
+                }
+
                 try instance.renderer.drawFrame(delta_time);
 
                 // const frame_end_time = glfw.getTime();

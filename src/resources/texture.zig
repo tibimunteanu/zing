@@ -8,5 +8,5 @@ pub const Texture = struct {
     channel_count: u8,
     has_transparency: bool,
     generation: ID,
-    internal_data: *anyopaque,
+    internal_data: ?*anyopaque,
 };

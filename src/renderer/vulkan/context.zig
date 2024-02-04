@@ -208,6 +208,8 @@ pub const Context = struct {
     desired_extent: glfw.Window.Size,
     desired_extent_generation: u32,
 
+    default_diffuse: *Texture,
+
     delta_time: f32,
 
     // public
@@ -294,7 +296,7 @@ pub const Context = struct {
         try self.initCommandBuffers(.{ .allocate = true, .allocator = self.allocator });
         errdefer self.deinitCommandbuffers(.{ .deallocate = true });
 
-        self.shader = try Shader.init(self.allocator, self, "basic", .graphics);
+        self.shader = try Shader.init(self.allocator, self, "basic", self.default_diffuse, .graphics);
         errdefer self.shader.deinit();
 
         // create buffers
@@ -609,13 +611,13 @@ pub const Context = struct {
     pub fn destroyTexture(self: *Context, texture: *Texture) void {
         self.device_api.deviceWaitIdle(self.device) catch {};
 
-        const internal_data: *TextureData = @ptrCast(@alignCast(texture.internal_data));
+        const internal_data: ?*TextureData = @ptrCast(@alignCast(texture.internal_data));
+        if (internal_data) |data| {
+            data.image.deinit();
+            self.device_api.destroySampler(self.device, data.sampler, null);
 
-        internal_data.image.deinit();
-        self.device_api.destroySampler(self.device, internal_data.sampler, null);
-
-        self.allocator.destroy(internal_data);
-        texture.* = undefined;
+            self.allocator.destroy(data);
+        }
     }
 
     // utils

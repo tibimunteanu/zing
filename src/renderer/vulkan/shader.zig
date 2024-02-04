@@ -7,8 +7,9 @@ const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const GlobalUniformData = @import("../types.zig").GlobalUniformData;
 const ObjectUniformData = @import("../types.zig").ObjectUniformData;
 const GeometryRenderData = @import("../types.zig").GeometryRenderData;
-const ObjectShaderObjectState = @import("vulkan_types.zig").ObjectShaderObjectState;
 const TextureData = @import("vulkan_types.zig").TextureData;
+const ObjectShaderObjectState = @import("vulkan_types.zig").ObjectShaderObjectState;
+const Texture = @import("../../resources/texture.zig").Texture;
 const ID = @import("../../utils.zig").ID;
 const Allocator = std.mem.Allocator;
 const zm = @import("zmath");
@@ -40,16 +41,20 @@ pub const Shader = struct {
     object_uniform_buffer_index: ID,
     object_states: [max_object_count]ObjectShaderObjectState,
 
+    default_diffuse: *Texture,
+
     // public
     pub fn init(
         allocator: Allocator,
         context: *const Context,
         name: []const u8,
+        default_diffuse: *Texture,
         bind_point: vk.PipelineBindPoint,
     ) !Shader {
         var self: Shader = undefined;
         self.context = context;
         self.allocator = allocator;
+        self.default_diffuse = default_diffuse;
 
         self.bind_point = bind_point;
 
@@ -446,11 +451,8 @@ pub const Shader = struct {
         const range: u32 = @sizeOf(ObjectUniformData);
         const offset: vk.DeviceSize = @sizeOf(ObjectUniformData) * @intFromEnum(data.object_id);
 
-        accumulator += self.context.delta_time;
-        const s: f32 = (@sin(accumulator) + 1.0) * 0.5;
-
         const object_uniform_data = ObjectUniformData{
-            .diffuse_color = zm.Vec{ s, s, s, 1.0 },
+            .diffuse_color = zm.Vec{ 1.0, 1.0, 1.0, 1.0 },
         };
 
         try self.object_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(object_uniform_data));
@@ -484,8 +486,14 @@ pub const Shader = struct {
         const sampler_count: u32 = 1;
         var image_infos: [sampler_count]vk.DescriptorImageInfo = undefined;
         for (&image_infos, 0..sampler_count) |*image_info, sampler_index| {
-            const texture = data.textures[sampler_index];
+            var texture = data.textures[sampler_index];
             const generation = &object_state.descriptor_states[dst_binding].generations[image_index];
+
+            // if the texture hasn't been loaded yet, use the default
+            if (texture != null and texture.?.generation == .null_handle) {
+                texture = self.default_diffuse;
+                generation.* = .null_handle; // reset if using the default
+            }
 
             if (texture != null and (generation.* != texture.?.generation or generation.* == .null_handle)) {
                 const internal_data: *TextureData = @ptrCast(@alignCast(texture.?.internal_data));

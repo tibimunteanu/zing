@@ -1,5 +1,6 @@
 const std = @import("std");
 const zmath = @import("zmath");
+const zstbi = @import("zstbi");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -15,8 +16,10 @@ pub fn build(b: *std.Build) void {
     const zmath_pkg = zmath.package(b, target, optimize, .{
         .options = .{ .enable_cross_platform_determinism = true },
     });
-
     zmath_pkg.link(exe);
+
+    const zstbi_pkg = zstbi.package(b, target, optimize, .{});
+    zstbi_pkg.link(exe);
 
     const glfw_dep = b.dependency("mach_glfw", .{
         .target = target,
