@@ -530,7 +530,7 @@ pub const Context = struct {
         const internal_data = try allocator.create(TextureData);
         errdefer allocator.destroy(internal_data);
 
-        texture.internal_data = @ptrCast(internal_data);
+        texture.internal_data = internal_data;
 
         const image_size: vk.DeviceSize = width * height * channel_count;
         const image_format: vk.Format = .r8g8b8a8_unorm;
@@ -609,12 +609,12 @@ pub const Context = struct {
     pub fn destroyTexture(self: *Context, texture: *Texture) void {
         self.device_api.deviceWaitIdle(self.device) catch {};
 
-        const internal_data: *TextureData = @ptrCast(texture.internal_data);
+        const internal_data: *TextureData = @ptrCast(@alignCast(texture.internal_data));
 
         internal_data.image.deinit();
         self.device_api.destroySampler(self.device, internal_data.sampler, null);
 
-        self.allocator.destroy(@as(*TextureData, @ptrCast(texture.internal_data)));
+        self.allocator.destroy(internal_data);
         texture.* = undefined;
     }
 

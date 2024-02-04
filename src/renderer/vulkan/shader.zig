@@ -488,7 +488,7 @@ pub const Shader = struct {
             const generation = &object_state.descriptor_states[dst_binding].generations[image_index];
 
             if (texture != null and (generation.* != texture.?.generation or generation.* == .null_handle)) {
-                const internal_data: *TextureData = @ptrCast(texture.?.internal_data);
+                const internal_data: *TextureData = @ptrCast(@alignCast(texture.?.internal_data));
 
                 image_info.* = vk.DescriptorImageInfo{
                     .image_layout = .shader_read_only_optimal,
