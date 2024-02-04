@@ -5,8 +5,16 @@ const Vertex = @import("context.zig").Vertex;
 const Buffer = @import("buffer.zig").Buffer;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const GlobalUniformData = @import("../types.zig").GlobalUniformData;
+const ObjectUniformData = @import("../types.zig").ObjectUniformData;
+const GeometryRenderData = @import("../types.zig").GeometryRenderData;
+const ObjectShaderObjectState = @import("vulkan_types.zig").ObjectShaderObjectState;
+const ID = @import("../../utils.zig").ID;
 const Allocator = std.mem.Allocator;
 const zm = @import("zmath");
+
+const max_object_count = @import("vulkan_types.zig").max_object_count;
+const object_shader_descriptor_count = @import("vulkan_types.zig").object_shader_descriptor_count;
+var accumulator: f32 = 0.0;
 
 pub const Shader = struct {
     context: *const Context,
@@ -24,6 +32,12 @@ pub const Shader = struct {
     global_descriptor_set_layout: vk.DescriptorSetLayout,
     global_descriptor_sets: [3]vk.DescriptorSet,
     global_uniform_buffer: Buffer,
+
+    object_descriptor_pool: vk.DescriptorPool,
+    object_descriptor_set_layout: vk.DescriptorSetLayout,
+    object_uniform_buffer: Buffer,
+    object_uniform_buffer_index: ID,
+    object_states: [max_object_count]ObjectShaderObjectState,
 
     // public
     pub fn init(
@@ -108,6 +122,52 @@ pub const Shader = struct {
             null,
         );
         errdefer context.device_api.destroyDescriptorPool(context.device, self.global_descriptor_pool, null);
+
+        // object descriptors
+        const descriptor_types = [object_shader_descriptor_count]vk.DescriptorType{
+            .uniform_buffer,
+        };
+
+        var object_ubo_layout_bindings: [descriptor_types.len]vk.DescriptorSetLayoutBinding = undefined;
+        for (&object_ubo_layout_bindings, descriptor_types, 0..) |*binding, descriptor_type, i| {
+            binding.* = vk.DescriptorSetLayoutBinding{
+                .binding = @intCast(i),
+                .descriptor_count = 1,
+                .descriptor_type = descriptor_type,
+                .p_immutable_samplers = null,
+                .stage_flags = .{ .fragment_bit = true },
+            };
+        }
+
+        const object_ubo_layout_info = vk.DescriptorSetLayoutCreateInfo{
+            .binding_count = object_ubo_layout_bindings.len,
+            .p_bindings = @ptrCast(&object_ubo_layout_bindings),
+        };
+        self.object_descriptor_set_layout = try context.device_api.createDescriptorSetLayout(
+            context.device,
+            &object_ubo_layout_info,
+            null,
+        );
+        errdefer context.device_api.destroyDescriptorSetLayout(context.device, self.object_descriptor_set_layout, null);
+
+        const object_ubo_pool_size = vk.DescriptorPoolSize{
+            .type = .uniform_buffer,
+            .descriptor_count = @intCast(max_object_count),
+        };
+
+        const object_ubo_pool_info = vk.DescriptorPoolCreateInfo{
+            .flags = .{},
+            .pool_size_count = 1,
+            .p_pool_sizes = @ptrCast(&object_ubo_pool_size),
+            .max_sets = @intCast(max_object_count),
+        };
+
+        self.object_descriptor_pool = try context.device_api.createDescriptorPool(
+            context.device,
+            &object_ubo_pool_info,
+            null,
+        );
+        errdefer context.device_api.destroyDescriptorPool(context.device, self.object_descriptor_pool, null);
 
         const viewport_state = vk.PipelineViewportStateCreateInfo{
             .flags = .{},
@@ -198,6 +258,7 @@ pub const Shader = struct {
         // descriptor set layouts
         const layouts = [_]vk.DescriptorSetLayout{
             self.global_descriptor_set_layout,
+            self.object_descriptor_set_layout,
         };
 
         const push_constant_range = vk.PushConstantRange{
@@ -247,8 +308,8 @@ pub const Shader = struct {
 
         self.global_uniform_buffer = try Buffer.init(
             context,
-            .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
             @sizeOf(GlobalUniformData) * 3,
+            .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
             .{ .device_local_bit = true, .host_visible_bit = true, .host_coherent_bit = true },
             .{ .bind_on_create = true },
         );
@@ -272,14 +333,29 @@ pub const Shader = struct {
             &self.global_descriptor_sets,
         );
 
+        self.object_uniform_buffer = try Buffer.init(
+            context,
+            @sizeOf(ObjectUniformData) * max_object_count * 3,
+            .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
+            .{ .device_local_bit = true, .host_visible_bit = true, .host_coherent_bit = true },
+            .{ .bind_on_create = true },
+        );
+        errdefer self.object_uniform_buffer.deinit();
+
+        self.object_uniform_buffer_index = @enumFromInt(0);
+
         return self;
     }
 
     pub fn deinit(self: *Shader) void {
+        self.object_uniform_buffer.deinit();
         self.global_uniform_buffer.deinit();
 
         self.context.device_api.destroyPipeline(self.context.device, self.pipeline, null);
         self.context.device_api.destroyPipelineLayout(self.context.device, self.pipeline_layout, null);
+
+        self.context.device_api.destroyDescriptorPool(self.context.device, self.object_descriptor_pool, null);
+        self.context.device_api.destroyDescriptorSetLayout(self.context.device, self.object_descriptor_set_layout, null);
 
         self.context.device_api.destroyDescriptorPool(self.context.device, self.global_descriptor_pool, null);
         self.context.device_api.destroyDescriptorSetLayout(self.context.device, self.global_descriptor_set_layout, null);
@@ -295,7 +371,7 @@ pub const Shader = struct {
     pub fn updateGlobalUniformData(self: *Shader) !void {
         const image_index = self.context.swapchain.image_index;
         const command_buffer = self.context.getCurrentCommandBuffer();
-        const global_descriptor = self.global_descriptor_sets[image_index];
+        const global_descriptor_set = self.global_descriptor_sets[image_index];
 
         const range: u32 = @sizeOf(GlobalUniformData);
         const offset: vk.DeviceSize = @sizeOf(GlobalUniformData) * image_index;
@@ -309,7 +385,7 @@ pub const Shader = struct {
         };
 
         const global_ubo_descriptor_write = vk.WriteDescriptorSet{
-            .dst_set = global_descriptor,
+            .dst_set = global_descriptor_set,
             .dst_binding = 0,
             .dst_array_element = 0,
             .descriptor_type = .uniform_buffer,
@@ -333,13 +409,14 @@ pub const Shader = struct {
             self.pipeline_layout,
             0,
             1,
-            @ptrCast(&global_descriptor),
+            @ptrCast(&global_descriptor_set),
             0,
             null,
         );
     }
 
-    pub fn updateObjectUniformData(self: *Shader, model: zm.Mat) void {
+    pub fn updateObjectUniformData(self: *Shader, data: GeometryRenderData) !void {
+        const image_index = self.context.swapchain.image_index;
         const command_buffer = self.context.getCurrentCommandBuffer();
 
         self.context.device_api.cmdPushConstants(
@@ -348,8 +425,127 @@ pub const Shader = struct {
             .{ .vertex_bit = true },
             0,
             @sizeOf(zm.Mat),
-            @ptrCast(&model),
+            @ptrCast(&data.model),
         );
+
+        // obtain material data
+        const object_state = &self.object_states[@intFromEnum(data.object_id)];
+        const object_descriptor_set = object_state.descriptor_sets[image_index];
+
+        var descriptor_writes: [object_shader_descriptor_count]vk.WriteDescriptorSet = undefined;
+        var write_count: u32 = 0;
+        var dst_binding: u32 = 0;
+
+        // descriptor 0 - uniform buffer
+        const range: u32 = @sizeOf(ObjectUniformData);
+        const offset: vk.DeviceSize = @sizeOf(ObjectUniformData) * @intFromEnum(data.object_id);
+
+        accumulator += self.context.delta_time;
+        const s: f32 = (@sin(accumulator) + 1.0) * 0.5;
+
+        const object_uniform_data = ObjectUniformData{
+            .diffuse_color = zm.Vec{ s, s, s, 1.0 },
+        };
+
+        try self.object_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(object_uniform_data));
+
+        // only do this if the descriptor has not yet been updated
+        if (object_state.descriptor_states[dst_binding].generations[image_index] == .null_handle) {
+            const object_ubo_buffer_info = vk.DescriptorBufferInfo{
+                .buffer = self.object_uniform_buffer.handle,
+                .offset = offset,
+                .range = range,
+            };
+
+            const object_ubo_descriptor_write = vk.WriteDescriptorSet{
+                .dst_set = object_descriptor_set,
+                .dst_binding = dst_binding,
+                .dst_array_element = 0,
+                .descriptor_type = .uniform_buffer,
+                .descriptor_count = 1,
+                .p_buffer_info = @ptrCast(&object_ubo_buffer_info),
+                .p_image_info = undefined,
+                .p_texel_buffer_view = undefined,
+            };
+
+            descriptor_writes[write_count] = object_ubo_descriptor_write;
+            write_count += 1;
+
+            object_state.descriptor_states[dst_binding].generations[image_index] = @enumFromInt(1);
+        }
+        dst_binding += 1;
+
+        if (write_count > 0) {
+            self.context.device_api.updateDescriptorSets(
+                self.context.device,
+                write_count,
+                &descriptor_writes,
+                0,
+                null,
+            );
+        }
+
+        self.context.device_api.cmdBindDescriptorSets(
+            command_buffer.handle,
+            self.bind_point,
+            self.pipeline_layout,
+            1,
+            1,
+            @ptrCast(&object_descriptor_set),
+            0,
+            null,
+        );
+    }
+
+    pub fn acquireResources(self: *Shader) !ID {
+        const object_id = self.object_uniform_buffer_index;
+        self.object_uniform_buffer_index.increment();
+
+        var object_state = &self.object_states[@intFromEnum(object_id)];
+
+        for (&object_state.descriptor_states) |*descriptor_state| {
+            for (0..3) |i| {
+                descriptor_state.generations[i] = .null_handle;
+            }
+        }
+
+        // allocate descriptor sets
+        const object_ubo_layouts = [_]vk.DescriptorSetLayout{
+            self.object_descriptor_set_layout,
+            self.object_descriptor_set_layout,
+            self.object_descriptor_set_layout,
+        };
+
+        const object_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
+            .descriptor_pool = self.object_descriptor_pool,
+            .descriptor_set_count = 3,
+            .p_set_layouts = &object_ubo_layouts,
+        };
+
+        try self.context.device_api.allocateDescriptorSets(
+            self.context.device,
+            &object_ubo_descriptor_set_alloc_info,
+            &object_state.descriptor_sets,
+        );
+
+        return object_id;
+    }
+
+    pub fn releaseResources(self: *Shader, object_id: ID) void {
+        const object_state = &self.object_states[object_id];
+
+        try self.context.device_api.freeDescriptorSets(
+            self.context.device,
+            self.object_descriptor_pool,
+            3,
+            &object_state.descriptor_sets,
+        );
+
+        for (object_state.descriptor_states) |*descriptor_state| {
+            for (0..3) |i| {
+                descriptor_state.generations[i] = .null_handle;
+            }
+        }
     }
 
     // utils

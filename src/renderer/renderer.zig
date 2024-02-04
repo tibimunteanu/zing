@@ -4,6 +4,7 @@ const glfw = @import("mach-glfw");
 const zm = @import("zmath");
 const Allocator = std.mem.Allocator;
 const BeginFrameResult = @import("types.zig").BeginFrameResult;
+const GeometryRenderData = @import("types.zig").GeometryRenderData;
 const Engine = @import("../engine.zig").Engine;
 const Texture = @import("../resources/texture.zig").Texture;
 const deg2rad = std.math.degreesToRadians;
@@ -62,25 +63,29 @@ pub const Renderer = struct {
         self.allocator.destroy(self.context);
     }
 
-    pub fn beginFrame(self: *Renderer) !BeginFrameResult {
-        return try self.context.beginFrame();
+    pub fn beginFrame(self: *Renderer, delta_time: f32) !BeginFrameResult {
+        return try self.context.beginFrame(delta_time);
     }
 
     pub fn endFrame(self: *Renderer) !void {
         try self.context.endFrame();
     }
 
-    pub fn drawFrame(self: *Renderer) !void {
-        switch (try self.beginFrame()) {
+    pub fn drawFrame(self: *Renderer, delta_time: f32) !void {
+        switch (try self.beginFrame(delta_time)) {
             .resize => {
                 // NOTE: Skip rendering this frame.
             },
             .render => {
                 try self.context.updateGlobalState(self.projection, self.view);
 
-                const model = zm.mul(zm.translation(-5, 0.0, 0.0), zm.rotationY(-0.0));
+                const data = GeometryRenderData{
+                    .object_id = @enumFromInt(0),
+                    .model = zm.mul(zm.translation(-5, 0.0, 0.0), zm.rotationY(-0.0)),
+                    .textures = undefined,
+                };
 
-                self.context.updateObjectState(model);
+                try self.context.updateObjectState(data);
 
                 self.context.drawFrame();
 

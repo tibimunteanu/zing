@@ -16,8 +16,8 @@ pub const Buffer = struct {
     // public
     pub fn init(
         context: *const Context,
-        usage: vk.BufferUsageFlags,
         size: usize,
+        usage: vk.BufferUsageFlags,
         memory_property_flags: vk.MemoryPropertyFlags,
         options: struct {
             bind_on_create: bool = false,
@@ -102,8 +102,8 @@ pub const Buffer = struct {
     pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queue: vk.Queue) !void {
         const new_buffer = try Buffer.init(
             self.context,
-            self.usage,
             new_size,
+            self.usage,
             self.memory_property_flags,
             .{ .bind_on_create = true },
         );

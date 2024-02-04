@@ -113,7 +113,7 @@ pub const Engine = struct {
                 recomputeCameraView();
                 instance.renderer.view = camera_view;
 
-                try instance.renderer.drawFrame();
+                try instance.renderer.drawFrame(delta_time);
 
                 // const frame_end_time = glfw.getTime();
                 // const frame_elapsed_time = frame_end_time - frame_start_time;

@@ -1,6 +1,15 @@
 const std = @import("std");
 const zm = @import("zmath");
 
+pub const ID = enum(u32) {
+    null_handle = std.math.maxInt(u32),
+    _,
+
+    pub fn increment(self: *ID) void {
+        self.* = @enumFromInt(1 + @intFromEnum(self.*));
+    }
+};
+
 pub fn getForwardVec(mat: zm.Mat) zm.Vec {
     return zm.normalize3(zm.Vec{ -mat[0][2], -mat[1][2], -mat[2][2], 0.0 });
 }

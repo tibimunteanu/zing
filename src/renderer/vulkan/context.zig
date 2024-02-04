@@ -9,6 +9,7 @@ const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Shader = @import("shader.zig").Shader;
 const Buffer = @import("buffer.zig").Buffer;
 const BeginFrameResult = @import("../types.zig").BeginFrameResult;
+const GeometryRenderData = @import("../types.zig").GeometryRenderData;
 const Image = @import("image.zig").Image;
 const Texture = @import("../../resources/texture.zig").Texture;
 const TextureData = @import("vulkan_types.zig").TextureData;
@@ -196,6 +197,8 @@ pub const Context = struct {
     desired_extent: glfw.Window.Size,
     desired_extent_generation: u32,
 
+    delta_time: f32,
+
     // public
     pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !void {
         self.allocator = allocator;
@@ -286,8 +289,8 @@ pub const Context = struct {
         // create buffers
         self.vertex_buffer = try Buffer.init(
             self,
-            .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             @sizeOf(@TypeOf(vertices)),
+            .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             .{ .device_local_bit = true },
             .{ .bind_on_create = true },
         );
@@ -296,8 +299,8 @@ pub const Context = struct {
 
         self.index_buffer = try Buffer.init(
             self,
-            .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             @sizeOf(@TypeOf(indices)),
+            .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             .{ .device_local_bit = true },
             .{ .bind_on_create = true },
         );
@@ -316,6 +319,8 @@ pub const Context = struct {
             .dst_offset = 0,
             .size = @sizeOf(@TypeOf(indices)),
         }, &std.mem.toBytes(indices));
+
+        _ = try self.shader.acquireResources();
     }
 
     pub fn deinit(self: *Context) void {
@@ -362,7 +367,9 @@ pub const Context = struct {
         }, null);
     }
 
-    pub fn beginFrame(self: *Context) !BeginFrameResult {
+    pub fn beginFrame(self: *Context, delta_time: f32) !BeginFrameResult {
+        self.delta_time = delta_time;
+
         if (self.desired_extent_generation != self.swapchain.extent_generation) {
             // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
             // which is handled by endFrame() by recreating resources, but this way we avoid a best practices warning
@@ -461,11 +468,11 @@ pub const Context = struct {
         try self.shader.updateGlobalUniformData();
     }
 
-    pub fn updateObjectState(self: *Context, model: zm.Mat) void {
+    pub fn updateObjectState(self: *Context, data: GeometryRenderData) !void {
         // const command_buffer = self.getCurrentCommandBuffer();
         // self.shader.bind(command_buffer);
 
-        self.shader.updateObjectUniformData(model);
+        try self.shader.updateObjectUniformData(data);
     }
 
     pub fn drawFrame(self: Context) void {
@@ -507,7 +514,7 @@ pub const Context = struct {
         texture.width = width;
         texture.height = height;
         texture.channel_count = channel_count;
-        texture.generation = 0;
+        texture.generation = .null_handle;
 
         const internal_data = try allocator.create(TextureData);
         errdefer allocator.destroy(internal_data);
@@ -519,8 +526,8 @@ pub const Context = struct {
 
         var staging_buffer = try Buffer.init(
             self,
-            .{ .transfer_src_bit = true },
             image_size,
+            .{ .transfer_src_bit = true },
             .{ .host_visible_bit = true, .host_coherent_bit = true },
             .{ .bind_on_create = true },
         );
@@ -584,6 +591,8 @@ pub const Context = struct {
     }
 
     pub fn destroyTexture(self: *Context, texture: *Texture) void {
+        self.device_api.deviceWaitIdle(self.device);
+
         const internal_data: *TextureData = @ptrCast(texture.internal_data);
 
         internal_data.image.deinit();
@@ -843,8 +852,8 @@ pub const Context = struct {
     fn uploadDataRegion(self: *Context, dst: *Buffer, region: vk.BufferCopy, data: []const u8) !void {
         var staging_buffer = try Buffer.init(
             self,
-            .{ .transfer_src_bit = true },
             dst.total_size,
+            .{ .transfer_src_bit = true },
             .{ .host_visible_bit = true, .host_coherent_bit = true },
             .{ .bind_on_create = true },
         );
