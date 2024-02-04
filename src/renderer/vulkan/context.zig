@@ -535,7 +535,7 @@ pub const Context = struct {
         texture.internal_data = internal_data;
 
         const image_size: vk.DeviceSize = width * height * channel_count;
-        const image_format: vk.Format = .r8g8b8a8_unorm;
+        const image_format: vk.Format = .r8g8b8a8_srgb;
 
         var staging_buffer = try Buffer.init(
             self,
@@ -893,6 +893,7 @@ pub const PhysicalDevice = struct {
     present_family_index: u32,
     compute_family_index: u32,
     transfer_family_index: u32,
+    supports_local_host_visible: bool,
     score: u32,
 
     // public
@@ -939,12 +940,15 @@ pub const PhysicalDevice = struct {
     }
 
     fn initMemorySupport(self: *PhysicalDevice, instance_api: InstanceAPI) !void {
+        self.supports_local_host_visible = false;
+
         const memory_properties = instance_api.getPhysicalDeviceMemoryProperties(self.handle);
 
         for (0..memory_properties.memory_type_count) |i| {
             const flags = memory_properties.memory_types[i].property_flags;
 
             if (flags.device_local_bit and flags.host_visible_bit) {
+                self.supports_local_host_visible = true;
                 self.score += 500;
                 break;
             }

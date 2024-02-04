@@ -321,7 +321,11 @@ pub const Shader = struct {
             context,
             @sizeOf(GlobalUniformData) * 3,
             .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
-            .{ .device_local_bit = true, .host_visible_bit = true, .host_coherent_bit = true },
+            .{
+                .device_local_bit = self.context.physical_device.supports_local_host_visible,
+                .host_visible_bit = true,
+                .host_coherent_bit = true,
+            },
             .{ .bind_on_create = true },
         );
         errdefer self.global_uniform_buffer.deinit();
@@ -348,7 +352,11 @@ pub const Shader = struct {
             context,
             @sizeOf(ObjectUniformData) * max_object_count * 3,
             .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
-            .{ .device_local_bit = true, .host_visible_bit = true, .host_coherent_bit = true },
+            .{
+                .device_local_bit = self.context.physical_device.supports_local_host_visible,
+                .host_visible_bit = true,
+                .host_coherent_bit = true,
+            },
             .{ .bind_on_create = true },
         );
         errdefer self.object_uniform_buffer.deinit();
