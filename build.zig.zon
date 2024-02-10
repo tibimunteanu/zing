@@ -5,9 +5,10 @@
     .dependencies = .{
         .zmath = .{ .path = "libs/zmath" },
         .zstbi = .{ .path = "libs/zstbi" },
-        .mach_glfw = .{
-            .url = "https://pkg.machengine.org/mach-glfw/63da35e57c3695a787b927e69e4140eb74ffc234.tar.gz",
-            .hash = "1220fda87b59df6353864651cdd3943f1159d8d517a45cd67bed493fe6c0a0c78c17",
-        },
+        .mach_glfw = .{ .path = "libs/mach-glfw" },
+        // .mach_glfw = .{
+        //     .url = "https://pkg.machengine.org/mach-glfw/63da35e57c3695a787b927e69e4140eb74ffc234.tar.gz",
+        //     .hash = "1220fda87b59df6353864651cdd3943f1159d8d517a45cd67bed493fe6c0a0c78c17",
+        // },
     },
 }
