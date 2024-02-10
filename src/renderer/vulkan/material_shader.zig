@@ -357,7 +357,7 @@ pub const MaterialShader = struct {
         );
         errdefer self.object_uniform_buffer.deinit();
 
-        self.object_uniform_buffer_index = @enumFromInt(0);
+        self.object_uniform_buffer_index.set(0);
 
         return self;
     }
@@ -444,7 +444,7 @@ pub const MaterialShader = struct {
         );
 
         // obtain material data
-        const object_state = &self.object_states[@intFromEnum(data.object_id)];
+        const object_state = &self.object_states[data.object_id.value()];
         const object_descriptor_set = object_state.descriptor_sets[image_index];
 
         var descriptor_writes: [object_shader_descriptor_count]vk.WriteDescriptorSet = undefined;
@@ -453,7 +453,7 @@ pub const MaterialShader = struct {
 
         // descriptor 0 - uniform buffer
         const range: u32 = @sizeOf(ObjectUniformData);
-        const offset: vk.DeviceSize = @sizeOf(ObjectUniformData) * @intFromEnum(data.object_id);
+        const offset: vk.DeviceSize = @sizeOf(ObjectUniformData) * data.object_id.value();
 
         const object_uniform_data = ObjectUniformData{
             .diffuse_color = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
@@ -483,7 +483,7 @@ pub const MaterialShader = struct {
             descriptor_writes[write_count] = object_ubo_descriptor_write;
             write_count += 1;
 
-            object_state.descriptor_states[dst_binding].generations[image_index] = @enumFromInt(1);
+            object_state.descriptor_states[dst_binding].generations[image_index].set(1);
         }
         dst_binding += 1;
 
@@ -555,7 +555,7 @@ pub const MaterialShader = struct {
         const object_id = self.object_uniform_buffer_index;
         self.object_uniform_buffer_index.increment();
 
-        var object_state = &self.object_states[@intFromEnum(object_id)];
+        var object_state = &self.object_states[object_id.value()];
 
         for (&object_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {

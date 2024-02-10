@@ -2,15 +2,26 @@ const std = @import("std");
 const math = @import("zmath");
 
 pub const ID = enum(u32) {
-    null_handle = std.math.maxInt(u32),
+    const null_value = std.math.maxInt(u32);
+
+    null_handle = null_value,
     _,
 
+    pub fn value(self: ID) u32 {
+        std.debug.assert(self != .null_handle);
+        return @intFromEnum(self);
+    }
+
+    pub fn set(self: *ID, newValue: u32) void {
+        self.* = @enumFromInt(newValue);
+    }
+
     pub fn increment(self: *ID) void {
-        if (self.* == .null_handle or self.* == @as(ID, @enumFromInt(std.math.maxInt(u32) - 1))) {
-            self.* = @enumFromInt(0);
-        } else {
-            self.* = @enumFromInt(@intFromEnum(self.*) + 1);
+        var currentValue = @intFromEnum(self.*);
+        if (currentValue == null_value - 1) {
+            currentValue += 1;
         }
+        self.* = @enumFromInt(currentValue +% 1);
     }
 };
 

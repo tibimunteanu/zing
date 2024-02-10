@@ -127,7 +127,7 @@ pub const Renderer = struct {
                 try self.context.updateGlobalState(self.projection, self.view);
 
                 var data: GeometryRenderData = undefined;
-                data.object_id = @enumFromInt(0);
+                data.object_id.set(0);
                 data.model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0));
                 data.textures = [_]?*Texture{null} ** 16;
                 data.textures[0] = &self.test_diffuse;

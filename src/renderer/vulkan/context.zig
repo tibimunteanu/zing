@@ -603,7 +603,7 @@ pub const Context = struct {
         }, null);
 
         texture.has_transparency = has_transparency;
-        texture.generation = @enumFromInt(0);
+        texture.generation.set(0);
 
         return texture;
     }
