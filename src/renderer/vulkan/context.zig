@@ -527,7 +527,7 @@ pub const Context = struct {
         texture.width = width;
         texture.height = height;
         texture.channel_count = channel_count;
-        texture.generation = .null_handle;
+        texture.generation = null;
 
         const internal_data = try allocator.create(TextureData);
         errdefer allocator.destroy(internal_data);
@@ -603,7 +603,7 @@ pub const Context = struct {
         }, null);
 
         texture.has_transparency = has_transparency;
-        texture.generation.set(0);
+        texture.generation = 0;
 
         return texture;
     }

@@ -1,6 +1,5 @@
 const std = @import("std");
 const Image = @import("image.zig").Image;
-const ID = @import("../../utils.zig").ID;
 const vk = @import("vk.zig");
 
 pub const max_object_count = 1024;
@@ -12,7 +11,7 @@ pub const TextureData = struct {
 };
 
 pub const DescriptorState = struct {
-    generations: [3]ID,
+    generations: [3]?u32,
 };
 
 pub const ObjectShaderObjectState = struct {

@@ -97,7 +97,7 @@ pub const Renderer = struct {
         );
         errdefer self.destroyTexture(&self.default_texture);
 
-        self.default_texture.generation = .null_handle;
+        self.default_texture.generation = null;
 
         resetTexture(&self.test_diffuse);
     }
@@ -127,7 +127,7 @@ pub const Renderer = struct {
                 try self.context.updateGlobalState(self.projection, self.view);
 
                 var data: GeometryRenderData = undefined;
-                data.object_id.set(0);
+                data.object_id = 0;
                 data.model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0));
                 data.textures = [_]?*Texture{null} ** 16;
                 data.textures[0] = &self.test_diffuse;
@@ -189,7 +189,7 @@ pub const Renderer = struct {
         texture.height = 0;
         texture.channel_count = 0;
         texture.has_transparency = false;
-        texture.generation = .null_handle;
+        texture.generation = null;
         texture.internal_data = null;
     }
 
@@ -230,7 +230,7 @@ pub const Renderer = struct {
         );
 
         temp_texture.generation = texture.generation;
-        temp_texture.generation.increment();
+        temp_texture.generation = if (temp_texture.generation) |g| g +% 1 else 0;
 
         self.destroyTexture(texture);
         texture.* = temp_texture;

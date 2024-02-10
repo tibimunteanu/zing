@@ -10,7 +10,6 @@ const GeometryRenderData = @import("../types.zig").GeometryRenderData;
 const TextureData = @import("vulkan_types.zig").TextureData;
 const ObjectShaderObjectState = @import("vulkan_types.zig").ObjectShaderObjectState;
 const Texture = @import("../../resources/texture.zig").Texture;
-const ID = @import("../../utils.zig").ID;
 const Allocator = std.mem.Allocator;
 const math = @import("zmath");
 
@@ -39,7 +38,7 @@ pub const MaterialShader = struct {
     object_descriptor_pool: vk.DescriptorPool,
     object_descriptor_set_layout: vk.DescriptorSetLayout,
     object_uniform_buffer: Buffer,
-    object_uniform_buffer_index: ID,
+    object_uniform_buffer_index: ?u32,
     object_states: [max_object_count]ObjectShaderObjectState,
 
     default_diffuse: *Texture,
@@ -357,7 +356,7 @@ pub const MaterialShader = struct {
         );
         errdefer self.object_uniform_buffer.deinit();
 
-        self.object_uniform_buffer_index.set(0);
+        self.object_uniform_buffer_index = 0;
 
         return self;
     }
@@ -444,7 +443,7 @@ pub const MaterialShader = struct {
         );
 
         // obtain material data
-        const object_state = &self.object_states[data.object_id.value()];
+        const object_state = &self.object_states[data.object_id.?];
         const object_descriptor_set = object_state.descriptor_sets[image_index];
 
         var descriptor_writes: [object_shader_descriptor_count]vk.WriteDescriptorSet = undefined;
@@ -453,7 +452,7 @@ pub const MaterialShader = struct {
 
         // descriptor 0 - uniform buffer
         const range: u32 = @sizeOf(ObjectUniformData);
-        const offset: vk.DeviceSize = @sizeOf(ObjectUniformData) * data.object_id.value();
+        const offset: vk.DeviceSize = @sizeOf(ObjectUniformData) * data.object_id.?;
 
         const object_uniform_data = ObjectUniformData{
             .diffuse_color = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
@@ -462,7 +461,7 @@ pub const MaterialShader = struct {
         try self.object_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(object_uniform_data));
 
         // only do this if the descriptor has not yet been updated
-        if (object_state.descriptor_states[dst_binding].generations[image_index] == .null_handle) {
+        if (object_state.descriptor_states[dst_binding].generations[image_index] == null) {
             const object_ubo_buffer_info = vk.DescriptorBufferInfo{
                 .buffer = self.object_uniform_buffer.handle,
                 .offset = offset,
@@ -483,7 +482,7 @@ pub const MaterialShader = struct {
             descriptor_writes[write_count] = object_ubo_descriptor_write;
             write_count += 1;
 
-            object_state.descriptor_states[dst_binding].generations[image_index].set(1);
+            object_state.descriptor_states[dst_binding].generations[image_index] = 1;
         }
         dst_binding += 1;
 
@@ -494,12 +493,12 @@ pub const MaterialShader = struct {
             const generation = &object_state.descriptor_states[dst_binding].generations[image_index];
 
             // if the texture hasn't been loaded yet, use the default
-            if (texture != null and texture.?.generation == .null_handle) {
+            if (texture != null and texture.?.generation == null) {
                 texture = self.default_diffuse;
-                generation.* = .null_handle; // reset if using the default
+                generation.* = null; // reset if using the default
             }
 
-            if (texture != null and (generation.* != texture.?.generation or generation.* == .null_handle)) {
+            if (texture != null and (generation.* != texture.?.generation or generation.* == null)) {
                 const internal_data: *TextureData = @ptrCast(@alignCast(texture.?.internal_data));
 
                 image_info.* = vk.DescriptorImageInfo{
@@ -522,7 +521,7 @@ pub const MaterialShader = struct {
                 descriptor_writes[write_count] = object_sampler_descriptor_write;
                 write_count += 1;
 
-                if (texture.?.generation != .null_handle) {
+                if (texture.?.generation != null) {
                     generation.* = texture.?.generation;
                 }
                 dst_binding += 1;
@@ -551,15 +550,15 @@ pub const MaterialShader = struct {
         );
     }
 
-    pub fn acquireResources(self: *MaterialShader) !ID {
+    pub fn acquireResources(self: *MaterialShader) !?u32 {
         const object_id = self.object_uniform_buffer_index;
-        self.object_uniform_buffer_index.increment();
+        self.object_uniform_buffer_index = if (self.object_uniform_buffer_index) |g| g +% 1 else 0;
 
-        var object_state = &self.object_states[object_id.value()];
+        var object_state = &self.object_states[object_id.?];
 
         for (&object_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {
-                descriptor_state.generations[i] = .null_handle;
+                descriptor_state.generations[i] = null;
             }
         }
 
@@ -585,7 +584,7 @@ pub const MaterialShader = struct {
         return object_id;
     }
 
-    pub fn releaseResources(self: *MaterialShader, object_id: ID) void {
+    pub fn releaseResources(self: *MaterialShader, object_id: ?u32) void {
         const object_state = &self.object_states[object_id];
 
         try self.context.device_api.freeDescriptorSets(
@@ -597,7 +596,7 @@ pub const MaterialShader = struct {
 
         for (object_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {
-                descriptor_state.generations[i] = .null_handle;
+                descriptor_state.generations[i] = null;
             }
         }
     }

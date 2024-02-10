@@ -1,7 +1,6 @@
 const std = @import("std");
 const math = @import("zmath");
 const Texture = @import("../resources/texture.zig").Texture;
-const ID = @import("../utils.zig").ID;
 
 pub const BeginFrameResult = enum {
     render,
@@ -23,7 +22,7 @@ pub const ObjectUniformData = struct {
 };
 
 pub const GeometryRenderData = struct {
-    object_id: ID,
+    object_id: ?u32,
     model: math.Mat,
     textures: [16]?*Texture,
 };
