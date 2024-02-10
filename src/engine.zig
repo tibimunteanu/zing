@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
 const Renderer = @import("renderer/renderer.zig").Renderer;
-const zm = @import("zmath");
+const math = @import("zmath");
 const utils = @import("utils.zig");
 const Allocator = std.mem.Allocator;
 
@@ -21,10 +21,10 @@ pub const Engine = struct {
     last_time: f64,
     frame_count: f64,
 
-    var camera_view: zm.Mat = undefined;
+    var camera_view: math.Mat = undefined;
     var camera_view_dirty: bool = true;
-    var camera_position: zm.Vec = zm.Vec{ 0.0, 0.0, -30.0, 0.0 };
-    var camera_euler: zm.Vec = zm.splat(zm.Vec, 0.0); // pitch, yaw, roll
+    var camera_position: math.Vec = math.Vec{ 0.0, 0.0, -30.0, 0.0 };
+    var camera_euler: math.Vec = math.splat(math.Vec, 0.0); // pitch, yaw, roll
 
     pub fn init(allocator: Allocator) !void {
         instance.allocator = allocator;
@@ -83,7 +83,7 @@ pub const Engine = struct {
                     cameraPitch(-1.0 * delta_time);
                 }
 
-                var velocity: zm.Vec = zm.splat(zm.Vec, 0.0);
+                var velocity: math.Vec = math.splat(math.Vec, 0.0);
 
                 if (instance.window.getKey(.s) == .press) {
                     const forward = utils.getForwardVec(camera_view);
@@ -102,10 +102,10 @@ pub const Engine = struct {
                     velocity += right;
                 }
 
-                if (!zm.all(zm.isNearEqual(velocity, zm.splat(zm.Vec, 0.0), zm.splat(zm.Vec, 0.0001)), 3)) {
-                    velocity = zm.normalize3(velocity);
+                if (!math.all(math.isNearEqual(velocity, math.splat(math.Vec, 0.0), math.splat(math.Vec, 0.0001)), 3)) {
+                    velocity = math.normalize3(velocity);
 
-                    const move_speed = zm.splat(zm.Vec, 5.0 * delta_time);
+                    const move_speed = math.splat(math.Vec, 5.0 * delta_time);
                     camera_position += velocity * move_speed;
                     camera_view_dirty = true;
                 }
@@ -138,10 +138,10 @@ pub const Engine = struct {
     // utils
     fn recomputeCameraView() void {
         if (camera_view_dirty) {
-            const rotation = zm.matFromRollPitchYawV(camera_euler);
-            const translation = zm.translationV(camera_position);
+            const rotation = math.matFromRollPitchYawV(camera_euler);
+            const translation = math.translationV(camera_position);
 
-            camera_view = zm.inverse(zm.mul(rotation, translation));
+            camera_view = math.inverse(math.mul(rotation, translation));
         }
         camera_view_dirty = false;
     }

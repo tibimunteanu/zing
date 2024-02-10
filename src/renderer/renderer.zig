@@ -1,13 +1,13 @@
 const std = @import("std");
 const Context = @import("vulkan/context.zig").Context;
 const glfw = @import("mach-glfw");
-const zm = @import("zmath");
+const math = @import("zmath");
 const Allocator = std.mem.Allocator;
 const BeginFrameResult = @import("types.zig").BeginFrameResult;
 const GeometryRenderData = @import("types.zig").GeometryRenderData;
 const Engine = @import("../engine.zig").Engine;
 const Texture = @import("../resources/texture.zig").Texture;
-const zstbi = @import("zstbi");
+const stbi = @import("zstbi");
 const deg2rad = std.math.degreesToRadians;
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
@@ -18,8 +18,8 @@ pub const Renderer = struct {
     allocator: Allocator,
     context: *Context,
 
-    projection: zm.Mat,
-    view: zm.Mat,
+    projection: math.Mat,
+    view: math.Mat,
     fov: f32,
     near_clip: f32,
     far_clip: f32,
@@ -57,14 +57,14 @@ pub const Renderer = struct {
 
         const fb_size = window.getFramebufferSize();
 
-        self.projection = zm.perspectiveFovLh(
+        self.projection = math.perspectiveFovLh(
             self.fov,
             @as(f32, @floatFromInt(fb_size.width)) / @as(f32, @floatFromInt(fb_size.height)),
             self.near_clip,
             self.far_clip,
         );
 
-        self.view = zm.inverse(zm.translation(0.0, 0.0, -30.0));
+        self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
 
         const tex_dimension: u32 = 64;
         const channels: u32 = 4;
@@ -128,7 +128,7 @@ pub const Renderer = struct {
 
                 var data: GeometryRenderData = undefined;
                 data.object_id = @enumFromInt(0);
-                data.model = zm.mul(zm.translation(-5, 0.0, 0.0), zm.rotationY(-0.0));
+                data.model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0));
                 data.textures = [_]?*Texture{null} ** 16;
                 data.textures[0] = &self.test_diffuse;
 
@@ -142,7 +142,7 @@ pub const Renderer = struct {
     }
 
     pub fn onResized(self: *Renderer, new_desired_extent: glfw.Window.Size) void {
-        self.projection = zm.perspectiveFovLh(
+        self.projection = math.perspectiveFovLh(
             self.fov,
             @as(f32, @floatFromInt(new_desired_extent.width)) / @as(f32, @floatFromInt(new_desired_extent.height)),
             self.near_clip,
@@ -194,17 +194,17 @@ pub const Renderer = struct {
     }
 
     fn loadTexture(self: *Renderer, allocator: Allocator, name: []const u8, texture: *Texture) !void {
-        zstbi.init(allocator);
-        defer zstbi.deinit();
+        stbi.init(allocator);
+        defer stbi.deinit();
 
         const path_format = "assets/textures/{s}.{s}";
 
         const texture_path = try std.fmt.allocPrintZ(allocator, path_format, .{ name, "png" });
         defer allocator.free(texture_path);
 
-        zstbi.setFlipVerticallyOnLoad(true);
+        stbi.setFlipVerticallyOnLoad(true);
 
-        var image = try zstbi.Image.loadFromFile(texture_path, 4);
+        var image = try stbi.Image.loadFromFile(texture_path, 4);
         defer image.deinit();
 
         var has_transparency = false;

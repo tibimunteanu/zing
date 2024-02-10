@@ -32,18 +32,18 @@ pub fn build(b: *std.Build) void {
 
     const compile_vert_shader = b.addSystemCommand(&.{
         "glslc",
-        "assets/shaders/basic.vert",
+        "assets/shaders/material_shader.vert",
         "--target-env=vulkan1.3",
         "-o",
-        "assets/shaders/basic_vert.spv",
+        "assets/shaders/material_shader.vert.spv",
     });
 
     const compile_frag_shader = b.addSystemCommand(&.{
         "glslc",
-        "assets/shaders/basic.frag",
+        "assets/shaders/material_shader.frag",
         "--target-env=vulkan1.3",
         "-o",
-        "assets/shaders/basic_frag.spv",
+        "assets/shaders/material_shader.frag.spv",
     });
 
     const copy_assets = b.addSystemCommand(&.{ "xcopy", "assets", "zig-out\\bin\\assets\\", "/E/D/Y" });

@@ -12,15 +12,16 @@ const ObjectShaderObjectState = @import("vulkan_types.zig").ObjectShaderObjectSt
 const Texture = @import("../../resources/texture.zig").Texture;
 const ID = @import("../../utils.zig").ID;
 const Allocator = std.mem.Allocator;
-const zm = @import("zmath");
+const math = @import("zmath");
 
+const shader_path_format = "assets/shaders/{s}.{s}.spv";
+const material_shader_name = "material_shader";
 const max_object_count = @import("vulkan_types.zig").max_object_count;
 const object_shader_descriptor_count = @import("vulkan_types.zig").object_shader_descriptor_count;
-var accumulator: f32 = 0.0;
 
-pub const Shader = struct {
+pub const MaterialShader = struct {
     context: *const Context,
-    allocator: Allocator,
+    allocator: Allocator, // TODO: replace this with a scratch arena
 
     vertex_shader_module: vk.ShaderModule,
     fragment_shader_module: vk.ShaderModule,
@@ -47,26 +48,21 @@ pub const Shader = struct {
     pub fn init(
         allocator: Allocator,
         context: *const Context,
-        name: []const u8,
         default_diffuse: *Texture,
-        bind_point: vk.PipelineBindPoint,
-    ) !Shader {
-        var self: Shader = undefined;
+    ) !MaterialShader {
+        var self: MaterialShader = undefined;
         self.context = context;
         self.allocator = allocator;
         self.default_diffuse = default_diffuse;
+        self.bind_point = .graphics;
 
-        self.bind_point = bind_point;
-
-        const base_path = "assets/shaders";
-
-        const vert_path = try std.fmt.allocPrint(allocator, "{s}/{s}_vert.spv", .{ base_path, name });
+        const vert_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ material_shader_name, "vert" });
         defer allocator.free(vert_path);
 
         self.vertex_shader_module = try createShaderModule(self, vert_path);
         errdefer context.device_api.destroyShaderModule(context.device, self.vertex_shader_module, null);
 
-        const frag_path = try std.fmt.allocPrint(allocator, "{s}/{s}_frag.spv", .{ base_path, name });
+        const frag_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ material_shader_name, "frag" });
         defer allocator.free(frag_path);
 
         self.fragment_shader_module = try createShaderModule(self, frag_path);
@@ -274,8 +270,8 @@ pub const Shader = struct {
 
         const push_constant_range = vk.PushConstantRange{
             .stage_flags = .{ .vertex_bit = true },
-            .offset = @sizeOf(zm.Mat) * 0,
-            .size = @sizeOf(zm.Mat) * 2,
+            .offset = @sizeOf(math.Mat) * 0,
+            .size = @sizeOf(math.Mat) * 2,
         };
 
         self.pipeline_layout = try context.device_api.createPipelineLayout(context.device, &.{
@@ -366,7 +362,7 @@ pub const Shader = struct {
         return self;
     }
 
-    pub fn deinit(self: *Shader) void {
+    pub fn deinit(self: *MaterialShader) void {
         self.object_uniform_buffer.deinit();
         self.global_uniform_buffer.deinit();
 
@@ -383,11 +379,11 @@ pub const Shader = struct {
         self.context.device_api.destroyShaderModule(self.context.device, self.vertex_shader_module, null);
     }
 
-    pub fn bind(self: Shader, command_buffer: *const CommandBuffer) void {
+    pub fn bind(self: MaterialShader, command_buffer: *const CommandBuffer) void {
         self.context.device_api.cmdBindPipeline(command_buffer.handle, self.bind_point, self.pipeline);
     }
 
-    pub fn updateGlobalUniformData(self: *Shader) !void {
+    pub fn updateGlobalUniformData(self: *MaterialShader) !void {
         const image_index = self.context.swapchain.image_index;
         const command_buffer = self.context.getCurrentCommandBuffer();
         const global_descriptor_set = self.global_descriptor_sets[image_index];
@@ -434,7 +430,7 @@ pub const Shader = struct {
         );
     }
 
-    pub fn updateObjectUniformData(self: *Shader, data: GeometryRenderData) !void {
+    pub fn updateObjectUniformData(self: *MaterialShader, data: GeometryRenderData) !void {
         const image_index = self.context.swapchain.image_index;
         const command_buffer = self.context.getCurrentCommandBuffer();
 
@@ -443,7 +439,7 @@ pub const Shader = struct {
             self.pipeline_layout,
             .{ .vertex_bit = true },
             0,
-            @sizeOf(zm.Mat),
+            @sizeOf(math.Mat),
             @ptrCast(&data.model),
         );
 
@@ -460,7 +456,7 @@ pub const Shader = struct {
         const offset: vk.DeviceSize = @sizeOf(ObjectUniformData) * @intFromEnum(data.object_id);
 
         const object_uniform_data = ObjectUniformData{
-            .diffuse_color = zm.Vec{ 1.0, 1.0, 1.0, 1.0 },
+            .diffuse_color = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
         };
 
         try self.object_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(object_uniform_data));
@@ -555,7 +551,7 @@ pub const Shader = struct {
         );
     }
 
-    pub fn acquireResources(self: *Shader) !ID {
+    pub fn acquireResources(self: *MaterialShader) !ID {
         const object_id = self.object_uniform_buffer_index;
         self.object_uniform_buffer_index.increment();
 
@@ -589,7 +585,7 @@ pub const Shader = struct {
         return object_id;
     }
 
-    pub fn releaseResources(self: *Shader, object_id: ID) void {
+    pub fn releaseResources(self: *MaterialShader, object_id: ID) void {
         const object_state = &self.object_states[object_id];
 
         try self.context.device_api.freeDescriptorSets(
@@ -607,7 +603,7 @@ pub const Shader = struct {
     }
 
     // utils
-    fn createShaderModule(self: Shader, path: []const u8) !vk.ShaderModule {
+    fn createShaderModule(self: MaterialShader, path: []const u8) !vk.ShaderModule {
         const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
         defer file.close();
 

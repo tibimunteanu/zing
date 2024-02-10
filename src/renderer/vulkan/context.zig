@@ -6,7 +6,7 @@ const Swapchain = @import("swapchain.zig").Swapchain;
 const RenderPass = @import("renderpass.zig").RenderPass;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
-const Shader = @import("shader.zig").Shader;
+const MaterialShader = @import("material_shader.zig").MaterialShader;
 const Buffer = @import("buffer.zig").Buffer;
 const BeginFrameResult = @import("../types.zig").BeginFrameResult;
 const GeometryRenderData = @import("../types.zig").GeometryRenderData;
@@ -14,7 +14,7 @@ const Image = @import("image.zig").Image;
 const Texture = @import("../../resources/texture.zig").Texture;
 const TextureData = @import("vulkan_types.zig").TextureData;
 const Allocator = std.mem.Allocator;
-const zm = @import("zmath");
+const math = @import("zmath");
 
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
@@ -197,7 +197,7 @@ pub const Context = struct {
     graphics_command_pool: vk.CommandPool,
     graphics_command_buffers: std.ArrayList(CommandBuffer),
 
-    shader: Shader,
+    material_shader: MaterialShader,
 
     vertex_buffer: Buffer,
     vertex_offset: usize,
@@ -296,8 +296,8 @@ pub const Context = struct {
         try self.initCommandBuffers(.{ .allocate = true, .allocator = self.allocator });
         errdefer self.deinitCommandbuffers(.{ .deallocate = true });
 
-        self.shader = try Shader.init(self.allocator, self, "basic", self.default_diffuse, .graphics);
-        errdefer self.shader.deinit();
+        self.material_shader = try MaterialShader.init(self.allocator, self, self.default_diffuse);
+        errdefer self.material_shader.deinit();
 
         // create buffers
         self.vertex_buffer = try Buffer.init(
@@ -333,7 +333,7 @@ pub const Context = struct {
             .size = @sizeOf(@TypeOf(indices)),
         }, &std.mem.toBytes(indices));
 
-        _ = try self.shader.acquireResources();
+        _ = try self.material_shader.acquireResources();
     }
 
     pub fn deinit(self: *Context) void {
@@ -341,7 +341,7 @@ pub const Context = struct {
 
         self.vertex_buffer.deinit();
         self.index_buffer.deinit();
-        self.shader.deinit();
+        self.material_shader.deinit();
         self.deinitCommandbuffers(.{ .deallocate = true });
         self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
         for (self.framebuffers.items) |*framebuffer| {
@@ -471,21 +471,21 @@ pub const Context = struct {
         return &self.framebuffers.items[self.swapchain.image_index];
     }
 
-    pub fn updateGlobalState(self: *Context, projection: zm.Mat, view: zm.Mat) !void {
+    pub fn updateGlobalState(self: *Context, projection: math.Mat, view: math.Mat) !void {
         const command_buffer = self.getCurrentCommandBuffer();
-        self.shader.bind(command_buffer);
+        self.material_shader.bind(command_buffer);
 
-        self.shader.global_uniform_data.projection = projection;
-        self.shader.global_uniform_data.view = view;
+        self.material_shader.global_uniform_data.projection = projection;
+        self.material_shader.global_uniform_data.view = view;
 
-        try self.shader.updateGlobalUniformData();
+        try self.material_shader.updateGlobalUniformData();
     }
 
     pub fn updateObjectState(self: *Context, data: GeometryRenderData) !void {
         // const command_buffer = self.getCurrentCommandBuffer();
         // self.shader.bind(command_buffer);
 
-        try self.shader.updateObjectUniformData(data);
+        try self.material_shader.updateObjectUniformData(data);
     }
 
     pub fn drawFrame(self: Context) void {
