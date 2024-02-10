@@ -27,7 +27,6 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
-    @import("mach_glfw").addPaths(exe);
 
     b.installArtifact(exe);
 
