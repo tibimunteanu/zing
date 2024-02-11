@@ -1,4 +1,5 @@
 const std = @import("std");
+const Engine = @import("../engine.zig").Engine;
 const Texture = @import("../resources/texture.zig").Texture;
 const Renderer = @import("../renderer/renderer.zig").Renderer;
 const stbi = @import("zstbi");
@@ -21,7 +22,7 @@ pub const TextureRef = struct {
     }
 
     pub fn deinit(self: *TextureRef) void {
-        self.handle.deinit();
+        self.handle = TextureHandle.nil;
         self.reference_count = 0;
         self.auto_release = false;
     }
@@ -39,14 +40,12 @@ pub const TextureSystem = struct {
 
     allocator: Allocator,
     config: Config,
-    renderer: *Renderer,
     default_texture: TextureHandle,
     textures: TexturePool,
     lookup: std.StringHashMap(TextureRef),
 
-    pub fn init(self: *TextureSystem, allocator: Allocator, config: Config, renderer: *Renderer) !void {
+    pub fn init(self: *TextureSystem, allocator: Allocator, config: Config) !void {
         self.allocator = allocator;
-        self.renderer = renderer;
         self.config = config;
 
         self.textures = try TexturePool.initMaxCapacity(allocator);
@@ -67,7 +66,7 @@ pub const TextureSystem = struct {
         self.textures.deinit();
     }
 
-    pub fn acquireTexture(self: *TextureSystem, name: []const u8, auto_release: bool) !?TextureHandle {
+    pub fn acquireTexture(self: *TextureSystem, name: []const u8, auto_release: bool) !TextureHandle {
         if (std.mem.eql(u8, name, default_texture_name)) {
             std.log.warn("TextureSystem.acquireTexture() called for default texture. Use getDefaultTexture() instead!", .{});
             return self.default_texture;
@@ -93,10 +92,6 @@ pub const TextureSystem = struct {
 
             const handle = try self.textures.add(texture);
 
-            // NOTE: also set the handle id to texture.id
-            const id = try self.textures.getColumnPtr(handle, .id);
-            id.* = handle.id;
-
             const ref = TextureRef.init(handle, auto_release);
             try self.lookup.put(name, ref);
 
@@ -109,7 +104,7 @@ pub const TextureSystem = struct {
         }
 
         std.log.err("TextureSystem.acquireTexture() failed!");
-        return null;
+        return TextureHandle.nil;
     }
 
     pub fn releaseTexture(self: *TextureSystem, name: []const u8) void {
@@ -132,7 +127,7 @@ pub const TextureSystem = struct {
                 self.textures.removeAssumeLive(ref.handle);
                 _ = self.lookup.remove(name);
 
-                self.renderer.destroyTexture(&texture);
+                Engine.instance.renderer.destroyTexture(&texture);
                 texture.deinit();
 
                 std.log.info("TextureSystem.releaseTexture(): texture '{s}' was unloaded", .{name});
@@ -177,7 +172,7 @@ pub const TextureSystem = struct {
             }
         }
 
-        var temp_texture = try self.renderer.createTexture(
+        var temp_texture = try Engine.instance.renderer.createTexture(
             self.allocator,
             name,
             image.width,
@@ -190,7 +185,7 @@ pub const TextureSystem = struct {
         temp_texture.generation = texture.generation;
         temp_texture.generation = if (temp_texture.generation) |g| g +% 1 else 0;
 
-        self.renderer.destroyTexture(texture);
+        Engine.instance.renderer.destroyTexture(texture);
         texture.* = temp_texture;
     }
 
@@ -214,7 +209,7 @@ pub const TextureSystem = struct {
             }
         }
 
-        var default_texture = try self.renderer.createTexture(
+        var default_texture = try Engine.instance.renderer.createTexture(
             self.allocator,
             "default",
             tex_dimension,
@@ -223,7 +218,7 @@ pub const TextureSystem = struct {
             false,
             &pixels,
         );
-        errdefer self.renderer.destroyTexture(&default_texture);
+        errdefer Engine.instance.renderer.destroyTexture(&default_texture);
 
         default_texture.generation = null;
 
@@ -237,14 +232,14 @@ pub const TextureSystem = struct {
         while (it.next()) |h| {
             if (h.id != self.default_texture.id) {
                 const t = @constCast(&self.textures.getColumnsAssumeLive(h));
-                self.renderer.destroyTexture(t);
+                Engine.instance.renderer.destroyTexture(t);
             }
         }
     }
 
     fn destroyDefaultTextures(self: *TextureSystem) void {
         if (self.textures.getColumnsIfLive(self.default_texture)) |texture| {
-            self.renderer.destroyTexture(@constCast(&texture));
+            Engine.instance.renderer.destroyTexture(@constCast(&texture));
             self.textures.removeAssumeLive(self.default_texture);
         }
     }

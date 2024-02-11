@@ -25,7 +25,7 @@ pub const Renderer = struct {
     far_clip: f32,
 
     // TODO: temporary
-    test_diffuse: ?TextureHandle,
+    test_diffuse: TextureHandle,
 
     pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
         self.allocator = allocator;
@@ -87,12 +87,12 @@ pub const Renderer = struct {
                 data.object_id = 0;
                 data.model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0));
 
-                if (self.test_diffuse == null or !Engine.instance.texture_system.textures.isLiveHandle(self.test_diffuse.?)) {
+                if (!Engine.instance.texture_system.textures.isLiveHandle(self.test_diffuse)) {
                     self.test_diffuse = Engine.instance.texture_system.getDefaultTexture();
                 }
 
-                data.textures = [_]?*Texture{null} ** 16;
-                data.textures[0] = @constCast(&Engine.instance.texture_system.textures.getColumnsAssumeLive(self.test_diffuse.?));
+                data.textures = [_]TextureHandle{TextureHandle.nil} ** 16;
+                data.textures[0] = self.test_diffuse;
 
                 try self.context.updateObjectState(data);
 

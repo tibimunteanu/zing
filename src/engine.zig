@@ -56,7 +56,7 @@ pub const Engine = struct {
         instance.texture_system = try allocator.create(TextureSystem);
         errdefer allocator.destroy(instance.texture_system);
 
-        try instance.texture_system.init(allocator, .{ .max_texture_count = 1 }, instance.renderer);
+        try instance.texture_system.init(allocator, .{ .max_texture_count = 1 });
         errdefer instance.texture_system.deinit();
     }
 

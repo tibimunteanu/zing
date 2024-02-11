@@ -102,13 +102,6 @@ pub fn Handle(
             return .{ .id = u.id };
         }
 
-        pub fn deinit(self: *Self) void {
-            var invalid = self.addressable();
-            invalid.cycle = 0;
-            invalid.index = 0;
-            self.* = invalid.handle();
-        }
-
         pub fn cycle(self: Self) CycleType {
             const u = HandleUnion{ .id = self.id };
             return u.bits.cycle;
