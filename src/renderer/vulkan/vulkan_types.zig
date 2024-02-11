@@ -12,6 +12,7 @@ pub const TextureData = struct {
 
 pub const DescriptorState = struct {
     generations: [3]?u32,
+    ids: [3]?u32,
 };
 
 pub const ObjectShaderObjectState = struct {

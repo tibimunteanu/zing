@@ -5,6 +5,7 @@
     .dependencies = .{
         .zmath = .{ .path = "libs/zmath" },
         .zstbi = .{ .path = "libs/zstbi" },
+        .zpool = .{ .path = "libs/zpool" },
         .mach_glfw = .{ .path = "libs/mach-glfw" },
         // .mach_glfw = .{
         //     .url = "https://pkg.machengine.org/mach-glfw/63da35e57c3695a787b927e69e4140eb74ffc234.tar.gz",

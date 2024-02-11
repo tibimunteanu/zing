@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("mach-glfw");
 const Renderer = @import("renderer/renderer.zig").Renderer;
+const TextureSystem = @import("systems/texture_system.zig").TextureSystem;
 const math = @import("zmath");
 const utils = @import("utils.zig");
 const Allocator = std.mem.Allocator;
@@ -18,6 +19,7 @@ pub const Engine = struct {
     allocator: Allocator,
     window: glfw.Window,
     renderer: *Renderer,
+    texture_system: *TextureSystem,
     last_time: f64,
     frame_count: f64,
 
@@ -50,9 +52,17 @@ pub const Engine = struct {
 
         try instance.renderer.init(allocator, instance.window);
         errdefer instance.renderer.deinit();
+
+        instance.texture_system = try allocator.create(TextureSystem);
+        errdefer allocator.destroy(instance.texture_system);
+
+        try instance.texture_system.init(allocator, .{ .max_texture_count = 1 }, instance.renderer);
+        errdefer instance.texture_system.deinit();
     }
 
     pub fn deinit() void {
+        instance.texture_system.deinit();
+        instance.allocator.destroy(instance.texture_system);
         instance.renderer.deinit();
         instance.allocator.destroy(instance.renderer);
         instance.window.destroy();

@@ -7,7 +7,7 @@ const BeginFrameResult = @import("types.zig").BeginFrameResult;
 const GeometryRenderData = @import("types.zig").GeometryRenderData;
 const Engine = @import("../engine.zig").Engine;
 const Texture = @import("../resources/texture.zig").Texture;
-const stbi = @import("zstbi");
+const TextureHandle = @import("../systems/texture_system.zig").TextureHandle;
 const deg2rad = std.math.degreesToRadians;
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
@@ -24,19 +24,14 @@ pub const Renderer = struct {
     near_clip: f32,
     far_clip: f32,
 
-    default_texture: Texture,
-
     // TODO: temporary
-    test_diffuse: Texture,
+    test_diffuse: ?TextureHandle,
 
     pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
         self.allocator = allocator;
 
         self.context = try allocator.create(Context);
         errdefer allocator.destroy(self.context);
-
-        // this is used in init
-        self.context.default_diffuse = &self.default_texture;
 
         try self.context.init(allocator, "Zing app", window);
         errdefer self.context.deinit();
@@ -65,47 +60,9 @@ pub const Renderer = struct {
         );
 
         self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
-
-        const tex_dimension: u32 = 64;
-        const channels: u32 = 4;
-        const pixel_count = tex_dimension * tex_dimension;
-
-        var pixels: [pixel_count * channels]u8 = undefined;
-        @memset(&pixels, 255);
-
-        for (0..tex_dimension) |row| {
-            for (0..tex_dimension) |col| {
-                const index = (row * tex_dimension) + col;
-                const index_channel = index * channels;
-
-                if (row % 2 == col % 2) {
-                    pixels[index_channel + 0] = 0;
-                    pixels[index_channel + 1] = 0;
-                }
-            }
-        }
-
-        self.default_texture = try self.createTexture(
-            allocator,
-            "default",
-            tex_dimension,
-            tex_dimension,
-            4,
-            false,
-            false,
-            &pixels,
-        );
-        errdefer self.destroyTexture(&self.default_texture);
-
-        self.default_texture.generation = null;
-
-        resetTexture(&self.test_diffuse);
     }
 
     pub fn deinit(self: *Renderer) void {
-        self.destroyTexture(&self.test_diffuse);
-        self.destroyTexture(&self.default_texture);
-
         self.context.deinit();
         self.allocator.destroy(self.context);
     }
@@ -129,8 +86,13 @@ pub const Renderer = struct {
                 var data: GeometryRenderData = undefined;
                 data.object_id = 0;
                 data.model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0));
+
+                if (self.test_diffuse == null or !Engine.instance.texture_system.textures.isLiveHandle(self.test_diffuse.?)) {
+                    self.test_diffuse = Engine.instance.texture_system.getDefaultTexture();
+                }
+
                 data.textures = [_]?*Texture{null} ** 16;
-                data.textures[0] = &self.test_diffuse;
+                data.textures[0] = @constCast(&Engine.instance.texture_system.textures.getColumnsAssumeLive(self.test_diffuse.?));
 
                 try self.context.updateObjectState(data);
 
@@ -163,77 +125,13 @@ pub const Renderer = struct {
         height: u32,
         channel_count: u8,
         has_transparency: bool,
-        auto_release: bool,
         pixels: []const u8,
     ) !Texture {
-        return try self.context.createTexture(
-            allocator,
-            name,
-            width,
-            height,
-            channel_count,
-            has_transparency,
-            auto_release,
-            pixels,
-        );
+        return try self.context.createTexture(allocator, name, width, height, channel_count, has_transparency, pixels);
     }
 
     pub fn destroyTexture(self: *Renderer, texture: *Texture) void {
         self.context.destroyTexture(texture);
-    }
-
-    // utils
-    fn resetTexture(texture: *Texture) void {
-        texture.id = 0;
-        texture.width = 0;
-        texture.height = 0;
-        texture.channel_count = 0;
-        texture.has_transparency = false;
-        texture.generation = null;
-        texture.internal_data = null;
-    }
-
-    fn loadTexture(self: *Renderer, allocator: Allocator, name: []const u8, texture: *Texture) !void {
-        stbi.init(allocator);
-        defer stbi.deinit();
-
-        const path_format = "assets/textures/{s}.{s}";
-
-        const texture_path = try std.fmt.allocPrintZ(allocator, path_format, .{ name, "png" });
-        defer allocator.free(texture_path);
-
-        stbi.setFlipVerticallyOnLoad(true);
-
-        var image = try stbi.Image.loadFromFile(texture_path, 4);
-        defer image.deinit();
-
-        var has_transparency = false;
-        var i: u32 = 0;
-        const total_size: usize = image.width * image.height * image.num_components;
-        while (i < total_size) : (i += image.num_components) {
-            const a: u8 = image.data[i + 3];
-            if (a < 255) {
-                has_transparency = true;
-                break;
-            }
-        }
-
-        var temp_texture = try self.createTexture(
-            allocator,
-            name,
-            image.width,
-            image.height,
-            @truncate(image.num_components),
-            has_transparency,
-            true,
-            image.data,
-        );
-
-        temp_texture.generation = texture.generation;
-        temp_texture.generation = if (temp_texture.generation) |g| g +% 1 else 0;
-
-        self.destroyTexture(texture);
-        texture.* = temp_texture;
     }
 
     // TODO: temporary
@@ -244,10 +142,13 @@ pub const Renderer = struct {
             "paving",
             "paving2",
         };
+        const prev_name = names[choice];
 
         choice += 1;
         choice %= names.len;
 
-        try self.loadTexture(self.allocator, names[choice], &self.test_diffuse);
+        self.test_diffuse = try Engine.instance.texture_system.acquireTexture(names[choice], false);
+
+        Engine.instance.texture_system.releaseTexture(prev_name);
     }
 };

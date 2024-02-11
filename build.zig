@@ -1,6 +1,7 @@
 const std = @import("std");
 const zmath = @import("zmath");
 const zstbi = @import("zstbi");
+const zpool = @import("zpool");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -20,6 +21,9 @@ pub fn build(b: *std.Build) void {
 
     const zstbi_pkg = zstbi.package(b, target, optimize, .{});
     zstbi_pkg.link(exe);
+
+    const zpool_pkg = zpool.package(b, target, optimize, .{});
+    zpool_pkg.link(exe);
 
     const glfw_dep = b.dependency("mach_glfw", .{
         .target = target,

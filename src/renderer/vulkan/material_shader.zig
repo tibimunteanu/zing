@@ -1,5 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
+const Engine = @import("../../engine.zig").Engine;
 const Context = @import("context.zig").Context;
 const Vertex = @import("context.zig").Vertex;
 const Buffer = @import("buffer.zig").Buffer;
@@ -41,18 +42,14 @@ pub const MaterialShader = struct {
     object_uniform_buffer_index: ?u32,
     object_states: [max_object_count]ObjectShaderObjectState,
 
-    default_diffuse: *Texture,
-
     // public
     pub fn init(
         allocator: Allocator,
         context: *const Context,
-        default_diffuse: *Texture,
     ) !MaterialShader {
         var self: MaterialShader = undefined;
         self.context = context;
         self.allocator = allocator;
-        self.default_diffuse = default_diffuse;
         self.bind_point = .graphics;
 
         const vert_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ material_shader_name, "vert" });
@@ -491,14 +488,16 @@ pub const MaterialShader = struct {
         for (&image_infos, 0..sampler_count) |*image_info, sampler_index| {
             var texture = data.textures[sampler_index];
             const generation = &object_state.descriptor_states[dst_binding].generations[image_index];
+            const id = &object_state.descriptor_states[dst_binding].ids[image_index];
 
             // if the texture hasn't been loaded yet, use the default
             if (texture != null and texture.?.generation == null) {
-                texture = self.default_diffuse;
+                const defaultTextureHandle = Engine.instance.texture_system.getDefaultTexture();
+                texture = @constCast(&Engine.instance.texture_system.textures.getColumnsAssumeLive(defaultTextureHandle));
                 generation.* = null; // reset if using the default
             }
 
-            if (texture != null and (generation.* != texture.?.generation or generation.* == null)) {
+            if (texture != null and (id.* != texture.?.id or generation.* != texture.?.generation or generation.* == null)) {
                 const internal_data: *TextureData = @ptrCast(@alignCast(texture.?.internal_data));
 
                 image_info.* = vk.DescriptorImageInfo{
@@ -521,8 +520,10 @@ pub const MaterialShader = struct {
                 descriptor_writes[write_count] = object_sampler_descriptor_write;
                 write_count += 1;
 
+                // NOTE: sync frame generation if not using a default texture
                 if (texture.?.generation != null) {
                     generation.* = texture.?.generation;
+                    id.* = texture.?.id;
                 }
                 dst_binding += 1;
             }
@@ -559,6 +560,7 @@ pub const MaterialShader = struct {
         for (&object_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {
                 descriptor_state.generations[i] = null;
+                descriptor_state.ids[i] = null;
             }
         }
 
@@ -597,6 +599,7 @@ pub const MaterialShader = struct {
         for (object_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {
                 descriptor_state.generations[i] = null;
+                descriptor_state.ids[i] = null;
             }
         }
     }

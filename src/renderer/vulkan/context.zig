@@ -208,8 +208,6 @@ pub const Context = struct {
     desired_extent: glfw.Window.Size,
     desired_extent_generation: u32,
 
-    default_diffuse: *Texture,
-
     delta_time: f32,
 
     // public
@@ -296,7 +294,7 @@ pub const Context = struct {
         try self.initCommandBuffers(.{ .allocate = true, .allocator = self.allocator });
         errdefer self.deinitCommandbuffers(.{ .deallocate = true });
 
-        self.material_shader = try MaterialShader.init(self.allocator, self, self.default_diffuse);
+        self.material_shader = try MaterialShader.init(self.allocator, self);
         errdefer self.material_shader.deinit();
 
         // create buffers
@@ -517,11 +515,9 @@ pub const Context = struct {
         height: u32,
         channel_count: u8,
         has_transparency: bool,
-        auto_release: bool,
         pixels: []const u8,
     ) !Texture {
         _ = name;
-        _ = auto_release;
 
         var texture: Texture = undefined;
         texture.width = width;
