@@ -510,6 +510,7 @@ pub const Context = struct {
     pub fn createTexture(
         self: *Context,
         allocator: Allocator,
+        name: []const u8,
         width: u32,
         height: u32,
         channel_count: u8,
@@ -517,6 +518,7 @@ pub const Context = struct {
         pixels: []const u8,
     ) !Texture {
         var texture: Texture = undefined;
+        texture.name = name;
         texture.width = width;
         texture.height = height;
         texture.channel_count = channel_count;

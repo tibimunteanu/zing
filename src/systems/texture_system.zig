@@ -6,12 +6,6 @@ const stbi = @import("zstbi");
 const pool = @import("zpool");
 const Allocator = std.mem.Allocator;
 
-pub const TextureRef = struct {
-    handle: TextureHandle,
-    reference_count: usize,
-    auto_release: bool,
-};
-
 pub const TexturePool = pool.Pool(16, 16, Texture, Texture);
 pub const TextureHandle = TexturePool.Handle;
 
@@ -26,7 +20,7 @@ pub const TextureSystem = struct {
     config: Config,
     default_texture: TextureHandle,
     textures: TexturePool,
-    lookup: std.StringHashMap(TextureRef),
+    lookup: std.StringHashMap(TextureHandle),
 
     pub fn init(self: *TextureSystem, allocator: Allocator, config: Config) !void {
         self.allocator = allocator;
@@ -35,7 +29,7 @@ pub const TextureSystem = struct {
         self.textures = try TexturePool.initMaxCapacity(allocator);
         errdefer self.textures.deinit();
 
-        self.lookup = std.StringHashMap(TextureRef).init(allocator);
+        self.lookup = std.StringHashMap(TextureHandle).init(allocator);
         errdefer self.lookup.deinit();
 
         try self.lookup.ensureTotalCapacity(@truncate(self.textures.capacity()));
@@ -57,56 +51,67 @@ pub const TextureSystem = struct {
 
         const result = try self.lookup.getOrPut(name);
         if (result.found_existing) {
-            const ref = result.value_ptr;
+            const handle = result.value_ptr.*;
 
-            try self.textures.requireLiveHandle(ref.handle);
-
-            ref.reference_count +|= 1;
+            const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
+            reference_count.* +|= 1;
 
             std.log.info(
                 "TextureSystem.acquireTexture(): texture '{s}' was acquired. ref count is {}",
-                .{ name, ref.reference_count },
+                .{ name, reference_count.* },
             );
 
-            return ref.handle;
+            return handle;
         } else {
             var texture = Texture.init();
+            texture.reference_count = 1;
+            texture.auto_release = auto_release;
+
             try self.loadTexture(name, &texture);
 
             const handle = try self.textures.add(texture);
 
-            try self.lookup.put(name, TextureRef{
-                .handle = handle,
-                .reference_count = 1,
-                .auto_release = auto_release,
-            });
+            try self.lookup.put(name, handle);
 
-            std.log.info("TextureSystem.acquireTexture(): texture '{s}' was loaded. ref count is 1", .{name});
+            std.log.info(
+                "TextureSystem.acquireTexture(): texture '{s}' was loaded. ref count is {}",
+                .{ name, texture.reference_count },
+            );
 
             return handle;
         }
     }
 
-    // TODO: move reference_count and auto_release to pool and use the lookup only to get handle by name
-    // TODO: add functions that work directly with the handle instead of the name
-    pub fn releaseTexture(self: *TextureSystem, name: []const u8) void {
-        if (std.mem.eql(u8, name, default_texture_name)) {
-            // NOTE: ignore calls to release the default texture
-            return;
+    pub fn releaseTextureByName(self: *TextureSystem, name: []const u8) void {
+        if (self.lookup.get(name)) |handle| {
+            self.releaseTextureByHandle(handle);
+        } else {
+            std.log.warn("TextureSystem.releaseTexture() called for non-existent texture!", .{});
         }
+    }
 
-        if (self.lookup.getPtr(name)) |ref| {
-            if (ref.reference_count == 0) {
+    pub fn releaseTextureByHandle(self: *TextureSystem, handle: TextureHandle) void {
+        if (self.textures.isLiveHandle(handle)) {
+            const name = self.textures.getColumnAssumeLive(handle, .name);
+            if (std.mem.eql(u8, name, default_texture_name)) {
+                // NOTE: ignore calls to release the default texture
+                return;
+            }
+
+            const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
+            const auto_release = self.textures.getColumnAssumeLive(handle, .auto_release);
+
+            if (reference_count.* == 0) {
                 std.log.warn("TextureSystem.releaseTexture() called for texture with ref count 0!", .{});
                 return;
             }
 
-            ref.reference_count -|= 1;
+            reference_count.* -|= 1;
 
-            if (ref.reference_count == 0 and ref.auto_release) {
-                var texture = self.textures.getColumnsAssumeLive(ref.handle);
+            if (reference_count.* == 0 and auto_release) {
+                var texture = self.textures.getColumnsAssumeLive(handle);
 
-                self.textures.removeAssumeLive(ref.handle);
+                self.textures.removeAssumeLive(handle);
                 _ = self.lookup.remove(name);
 
                 Engine.instance.renderer.destroyTexture(&texture);
@@ -115,11 +120,11 @@ pub const TextureSystem = struct {
             } else {
                 std.log.info(
                     "TextureSystem.releaseTexture(): texture '{s}' was released. ref count is {}",
-                    .{ name, ref.reference_count },
+                    .{ name, reference_count.* },
                 );
             }
         } else {
-            std.log.warn("TextureSystem.releaseTexture() called for non-existent texture!", .{});
+            std.log.warn("TextureSystem.releaseTexture() called for invalid texture handle!", .{});
         }
     }
 
@@ -155,6 +160,7 @@ pub const TextureSystem = struct {
 
         var temp_texture = try Engine.instance.renderer.createTexture(
             self.allocator,
+            name,
             image.width,
             image.height,
             @truncate(image.num_components),
@@ -166,6 +172,8 @@ pub const TextureSystem = struct {
         // TODO: just use handle update instead of manual generation
         temp_texture.generation = texture.generation;
         temp_texture.generation = if (temp_texture.generation) |g| g +% 1 else 0;
+        temp_texture.reference_count = texture.reference_count;
+        temp_texture.auto_release = texture.auto_release;
 
         Engine.instance.renderer.destroyTexture(texture);
         texture.* = temp_texture;
@@ -193,6 +201,7 @@ pub const TextureSystem = struct {
 
         var temp_texture = try Engine.instance.renderer.createTexture(
             self.allocator,
+            default_texture_name,
             tex_dimension,
             tex_dimension,
             4,
@@ -203,14 +212,12 @@ pub const TextureSystem = struct {
 
         // default texture always has null generation
         temp_texture.generation = null;
+        temp_texture.reference_count = 1;
+        temp_texture.auto_release = false;
 
         self.default_texture = try self.textures.add(temp_texture);
 
-        try self.lookup.put(default_texture_name, TextureRef{
-            .handle = self.default_texture,
-            .reference_count = 1,
-            .auto_release = false,
-        });
+        try self.lookup.put(default_texture_name, self.default_texture);
     }
 
     fn releaseAllTextures(self: *TextureSystem) void {
@@ -218,6 +225,7 @@ pub const TextureSystem = struct {
         while (it.next()) |h| {
             const texture = @constCast(&self.textures.getColumnsAssumeLive(h));
             self.textures.removeAssumeLive(h);
+            _ = self.lookup.remove(texture.name);
             Engine.instance.renderer.destroyTexture(texture);
         }
     }
