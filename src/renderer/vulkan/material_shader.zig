@@ -497,7 +497,7 @@ pub const MaterialShader = struct {
                 descriptorTextureGeneration.* = null; // reset if using the default
             }
 
-            const texture = Engine.instance.texture_system.textures.getColumnsAssumeLive(textureHandle);
+            const texture = Engine.instance.texture_system.textures.getColumnPtrAssumeLive(textureHandle, .texture);
 
             if (descriptorTextureHandle.*.id != textureHandle.id // different texture
             or descriptorTextureGeneration.* == null // default texture

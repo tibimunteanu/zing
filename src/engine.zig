@@ -28,6 +28,8 @@ pub const Engine = struct {
     var camera_position: math.Vec = math.Vec{ 0.0, 0.0, -30.0, 0.0 };
     var camera_euler: math.Vec = math.splat(math.Vec, 0.0); // pitch, yaw, roll
 
+    var prevPressN: glfw.Action = .release;
+
     pub fn init(allocator: Allocator) !void {
         instance.allocator = allocator;
 
@@ -123,9 +125,11 @@ pub const Engine = struct {
                 recomputeCameraView();
                 instance.renderer.view = camera_view;
 
-                if (instance.window.getKey(.n) == .press) {
+                const pressN = instance.window.getKey(.n);
+                if (pressN == .press and prevPressN == .release) {
                     try instance.renderer.changeTexture();
                 }
+                prevPressN = pressN;
 
                 try instance.renderer.drawFrame(delta_time);
 
