@@ -44,10 +44,7 @@ pub const TextureSystem = struct {
     }
 
     pub fn acquireTextureByName(self: *TextureSystem, name: []const u8, auto_release: bool) !TextureHandle {
-        const result = try self.lookup.getOrPut(name);
-        if (result.found_existing) {
-            const handle = result.value_ptr.*;
-
+        if (self.lookup.get(name)) |handle| {
             return self.acquireTextureByHandle(handle);
         } else {
             var texture = Texture.init();
@@ -57,78 +54,71 @@ pub const TextureSystem = struct {
             try self.loadTexture(name, &texture);
 
             const handle = try self.textures.add(texture);
+            errdefer self.textures.removeAssumeLive(handle);
 
             try self.lookup.put(name, handle);
+            errdefer self.lookup.remove(name);
 
-            std.log.info(
-                "TextureSystem.acquireTexture(): texture '{s}' was loaded. ref count is {}",
-                .{ name, texture.reference_count },
-            );
+            std.log.info("TextureSystem: Texture '{s}' was loaded. Ref count: {}", .{ name, texture.reference_count });
 
             return handle;
         }
-    }
-
-    pub fn acquireTextureByHandle(self: *TextureSystem, handle: TextureHandle) !TextureHandle {
-        try self.textures.requireLiveHandle(handle);
-
-        const name = self.textures.getColumnAssumeLive(handle, .name);
-        const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
-
-        if (std.mem.eql(u8, name, default_texture_name)) {
-            std.log.warn("TextureSystem.acquireTexture() called for default texture. Use getDefaultTexture() instead!", .{});
-            return self.default_texture;
-        }
-
-        reference_count.* +|= 1;
-
-        std.log.info(
-            "TextureSystem.acquireTexture(): texture '{s}' was acquired. ref count is {}",
-            .{ name, reference_count.* },
-        );
-
-        return handle;
     }
 
     pub fn releaseTextureByName(self: *TextureSystem, name: []const u8) void {
         if (self.lookup.get(name)) |handle| {
             self.releaseTextureByHandle(handle);
         } else {
-            std.log.warn("TextureSystem.releaseTexture() called for non-existent texture!", .{});
+            std.log.warn("TextureSystem: Cannot release non-existent texture!", .{});
         }
     }
 
+    pub fn acquireTextureByHandle(self: *TextureSystem, handle: TextureHandle) !TextureHandle {
+        try self.textures.requireLiveHandle(handle);
+
+        if (handle.id == self.default_texture.id) {
+            std.log.warn("TextureSystem: Cannot acquire default texture. Use getDefaultTexture() instead!", .{});
+            return self.default_texture;
+        }
+
+        const name = self.textures.getColumnAssumeLive(handle, .name);
+        const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
+
+        reference_count.* +|= 1;
+
+        std.log.info("TextureSystem: Texture '{s}' was acquired. Ref count: {}", .{ name, reference_count.* });
+
+        return handle;
+    }
+
     pub fn releaseTextureByHandle(self: *TextureSystem, handle: TextureHandle) void {
-        if (self.textures.isLiveHandle(handle)) {
-            const name = self.textures.getColumnAssumeLive(handle, .name);
-            if (std.mem.eql(u8, name, default_texture_name)) {
-                // NOTE: ignore calls to release the default texture
-                std.log.warn("TextureSystem.releaseTexture() called for default texture handle!", .{});
-                return;
-            }
+        if (!self.textures.isLiveHandle(handle)) {
+            std.log.warn("TextureSystem: Cannot release texture with invalid handle!", .{});
+            return;
+        }
 
-            const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
-            const auto_release = self.textures.getColumnAssumeLive(handle, .auto_release);
+        if (handle.id == self.default_texture.id) {
+            std.log.warn("TextureSystem: Cannot release default texture!", .{});
+            return;
+        }
 
-            if (reference_count.* == 0) {
-                std.log.warn("TextureSystem.releaseTexture() called for texture with ref count 0!", .{});
-                return;
-            }
+        const name = self.textures.getColumnAssumeLive(handle, .name);
+        const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
+        const auto_release = self.textures.getColumnAssumeLive(handle, .auto_release);
 
-            reference_count.* -|= 1;
+        if (reference_count.* == 0) {
+            std.log.warn("TextureSystem: Cannot release texture with ref count 0!", .{});
+            return;
+        }
 
-            if (reference_count.* == 0 and auto_release) {
-                self.unloadTexture(handle);
+        reference_count.* -|= 1;
 
-                std.log.info("TextureSystem.releaseTexture(): texture '{s}' was unloaded", .{name});
-            } else {
-                std.log.info(
-                    "TextureSystem.releaseTexture(): texture '{s}' was released. ref count is {}",
-                    .{ name, reference_count.* },
-                );
-            }
+        if (reference_count.* == 0 and auto_release) {
+            self.unloadTexture(handle);
+
+            std.log.info("TextureSystem: Texture '{s}' was unloaded", .{name});
         } else {
-            std.log.warn("TextureSystem.releaseTexture() called for invalid texture handle!", .{});
+            std.log.info("TextureSystem: Texture '{s}' was released. Ref count: {}", .{ name, reference_count.* });
         }
     }
 

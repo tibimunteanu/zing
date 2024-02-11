@@ -485,6 +485,7 @@ pub const MaterialShader = struct {
 
         const sampler_count: u32 = 1;
         var image_infos: [sampler_count]vk.DescriptorImageInfo = undefined;
+
         for (&image_infos, 0..sampler_count) |*image_info, sampler_index| {
             const descriptorTextureHandle = &object_state.descriptor_states[dst_binding].handles[image_index];
             const descriptorTextureGeneration = &object_state.descriptor_states[dst_binding].generations[image_index];

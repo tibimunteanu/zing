@@ -25,7 +25,7 @@ pub const Renderer = struct {
     far_clip: f32,
 
     // TODO: temporary
-    test_diffuse: TextureHandle,
+    test_diffuse: TextureHandle = TextureHandle.nil,
 
     pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
         self.allocator = allocator;
