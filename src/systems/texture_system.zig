@@ -10,22 +10,6 @@ pub const TextureRef = struct {
     handle: TextureHandle,
     reference_count: usize,
     auto_release: bool,
-
-    pub fn init(handle: TextureHandle, auto_release: bool) TextureRef {
-        var self: TextureRef = undefined;
-
-        self.handle = handle;
-        self.reference_count = 1;
-        self.auto_release = auto_release;
-
-        return self;
-    }
-
-    pub fn deinit(self: *TextureRef) void {
-        self.handle = TextureHandle.nil;
-        self.reference_count = 0;
-        self.auto_release = false;
-    }
 };
 
 pub const TexturePool = pool.Pool(16, 16, Texture, Texture);
@@ -60,8 +44,7 @@ pub const TextureSystem = struct {
     }
 
     pub fn deinit(self: *TextureSystem) void {
-        self.destroyAcquiredTextures();
-        self.destroyDefaultTextures();
+        self.releaseAllTextures();
         self.lookup.deinit();
         self.textures.deinit();
     }
@@ -92,21 +75,20 @@ pub const TextureSystem = struct {
 
             const handle = try self.textures.add(texture);
 
-            const ref = TextureRef.init(handle, auto_release);
-            try self.lookup.put(name, ref);
+            try self.lookup.put(name, TextureRef{
+                .handle = handle,
+                .reference_count = 1,
+                .auto_release = auto_release,
+            });
 
-            std.log.info(
-                "TextureSystem.acquireTexture(): texture '{s}' was loaded. ref count is {}",
-                .{ name, ref.reference_count },
-            );
+            std.log.info("TextureSystem.acquireTexture(): texture '{s}' was loaded. ref count is 1", .{name});
 
-            return ref.handle;
+            return handle;
         }
-
-        std.log.err("TextureSystem.acquireTexture() failed!");
-        return TextureHandle.nil;
     }
 
+    // TODO: move reference_count and auto_release to pool and use the lookup only to get handle by name
+    // TODO: add functions that work directly with the handle instead of the name
     pub fn releaseTexture(self: *TextureSystem, name: []const u8) void {
         if (std.mem.eql(u8, name, default_texture_name)) {
             // NOTE: ignore calls to release the default texture
@@ -128,7 +110,6 @@ pub const TextureSystem = struct {
                 _ = self.lookup.remove(name);
 
                 Engine.instance.renderer.destroyTexture(&texture);
-                texture.deinit();
 
                 std.log.info("TextureSystem.releaseTexture(): texture '{s}' was unloaded", .{name});
             } else {
@@ -174,14 +155,15 @@ pub const TextureSystem = struct {
 
         var temp_texture = try Engine.instance.renderer.createTexture(
             self.allocator,
-            name,
             image.width,
             image.height,
             @truncate(image.num_components),
             has_transparency,
             image.data,
         );
+        errdefer Engine.instance.renderer.destroyTexture(&temp_texture);
 
+        // TODO: just use handle update instead of manual generation
         temp_texture.generation = texture.generation;
         temp_texture.generation = if (temp_texture.generation) |g| g +% 1 else 0;
 
@@ -209,38 +191,34 @@ pub const TextureSystem = struct {
             }
         }
 
-        var default_texture = try Engine.instance.renderer.createTexture(
+        var temp_texture = try Engine.instance.renderer.createTexture(
             self.allocator,
-            "default",
             tex_dimension,
             tex_dimension,
             4,
             false,
             &pixels,
         );
-        errdefer Engine.instance.renderer.destroyTexture(&default_texture);
+        errdefer Engine.instance.renderer.destroyTexture(&temp_texture);
 
-        default_texture.generation = null;
+        // default texture always has null generation
+        temp_texture.generation = null;
 
-        self.default_texture = try self.textures.add(default_texture);
+        self.default_texture = try self.textures.add(temp_texture);
 
-        try self.lookup.put(default_texture_name, TextureRef.init(self.default_texture, false));
+        try self.lookup.put(default_texture_name, TextureRef{
+            .handle = self.default_texture,
+            .reference_count = 1,
+            .auto_release = false,
+        });
     }
 
-    fn destroyAcquiredTextures(self: *TextureSystem) void {
+    fn releaseAllTextures(self: *TextureSystem) void {
         var it = self.textures.liveHandles();
         while (it.next()) |h| {
-            if (h.id != self.default_texture.id) {
-                const t = @constCast(&self.textures.getColumnsAssumeLive(h));
-                Engine.instance.renderer.destroyTexture(t);
-            }
-        }
-    }
-
-    fn destroyDefaultTextures(self: *TextureSystem) void {
-        if (self.textures.getColumnsIfLive(self.default_texture)) |texture| {
-            Engine.instance.renderer.destroyTexture(@constCast(&texture));
-            self.textures.removeAssumeLive(self.default_texture);
+            const texture = @constCast(&self.textures.getColumnsAssumeLive(h));
+            self.textures.removeAssumeLive(h);
+            Engine.instance.renderer.destroyTexture(texture);
         }
     }
 };

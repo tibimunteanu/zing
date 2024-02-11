@@ -510,20 +510,18 @@ pub const Context = struct {
     pub fn createTexture(
         self: *Context,
         allocator: Allocator,
-        name: []const u8,
         width: u32,
         height: u32,
         channel_count: u8,
         has_transparency: bool,
         pixels: []const u8,
     ) !Texture {
-        _ = name;
-
         var texture: Texture = undefined;
         texture.width = width;
         texture.height = height;
         texture.channel_count = channel_count;
-        texture.generation = null;
+        texture.has_transparency = has_transparency;
+        texture.generation = 0;
 
         const internal_data = try allocator.create(TextureData);
         errdefer allocator.destroy(internal_data);
@@ -598,9 +596,6 @@ pub const Context = struct {
             .max_lod = 0,
         }, null);
 
-        texture.has_transparency = has_transparency;
-        texture.generation = 0;
-
         return texture;
     }
 
@@ -614,6 +609,8 @@ pub const Context = struct {
 
             self.allocator.destroy(data);
         }
+
+        texture.deinit();
     }
 
     // utils

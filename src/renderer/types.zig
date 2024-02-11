@@ -1,6 +1,5 @@
 const std = @import("std");
 const math = @import("zmath");
-const Texture = @import("../resources/texture.zig").Texture;
 const TextureHandle = @import("../systems/texture_system.zig").TextureHandle;
 
 pub const BeginFrameResult = enum {

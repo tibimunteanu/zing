@@ -120,14 +120,13 @@ pub const Renderer = struct {
     pub fn createTexture(
         self: *Renderer,
         allocator: Allocator,
-        name: []const u8,
         width: u32,
         height: u32,
         channel_count: u8,
         has_transparency: bool,
         pixels: []const u8,
     ) !Texture {
-        return try self.context.createTexture(allocator, name, width, height, channel_count, has_transparency, pixels);
+        return try self.context.createTexture(allocator, width, height, channel_count, has_transparency, pixels);
     }
 
     pub fn destroyTexture(self: *Renderer, texture: *Texture) void {
