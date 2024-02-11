@@ -486,21 +486,22 @@ pub const MaterialShader = struct {
         const sampler_count: u32 = 1;
         var image_infos: [sampler_count]vk.DescriptorImageInfo = undefined;
         for (&image_infos, 0..sampler_count) |*image_info, sampler_index| {
-            const descriptorTextureId = &object_state.descriptor_states[dst_binding].ids[image_index];
+            const descriptorTextureHandle = &object_state.descriptor_states[dst_binding].handles[image_index];
             const descriptorTextureGeneration = &object_state.descriptor_states[dst_binding].generations[image_index];
 
-            var textureId = data.textures[sampler_index];
+            var textureHandle = data.textures[sampler_index];
             // if the texture hasn't been loaded yet, use the default
-            if (!Engine.instance.texture_system.textures.isLiveHandle(textureId)) {
-                textureId = Engine.instance.texture_system.getDefaultTexture();
+            if (!Engine.instance.texture_system.textures.isLiveHandle(textureHandle)) {
+                textureHandle = Engine.instance.texture_system.getDefaultTexture();
                 descriptorTextureGeneration.* = null; // reset if using the default
             }
 
-            const texture = Engine.instance.texture_system.textures.getColumnsAssumeLive(textureId);
+            const texture = Engine.instance.texture_system.textures.getColumnsAssumeLive(textureHandle);
 
-            if (descriptorTextureId.*.id != textureId.id //
-            or descriptorTextureGeneration.* == null //
-            or descriptorTextureGeneration.* != texture.generation) {
+            if (descriptorTextureHandle.*.id != textureHandle.id // different texture
+            or descriptorTextureGeneration.* == null // default texture
+            or descriptorTextureGeneration.* != texture.generation // texture generation changed
+            ) {
                 const internal_data: *TextureData = @ptrCast(@alignCast(texture.internal_data));
 
                 image_info.* = vk.DescriptorImageInfo{
@@ -526,7 +527,7 @@ pub const MaterialShader = struct {
                 // NOTE: sync frame generation if not using a default texture
                 if (texture.generation != null) {
                     descriptorTextureGeneration.* = texture.generation;
-                    descriptorTextureId.* = textureId;
+                    descriptorTextureHandle.* = textureHandle;
                 }
                 dst_binding += 1;
             }
@@ -563,7 +564,7 @@ pub const MaterialShader = struct {
         for (&object_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {
                 descriptor_state.generations[i] = null;
-                descriptor_state.ids[i] = TextureHandle.nil;
+                descriptor_state.handles[i] = TextureHandle.nil;
             }
         }
 
@@ -602,7 +603,7 @@ pub const MaterialShader = struct {
         for (object_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {
                 descriptor_state.generations[i] = null;
-                descriptor_state.ids[i] = TextureHandle.nil;
+                descriptor_state.handles[i] = TextureHandle.nil;
             }
         }
     }

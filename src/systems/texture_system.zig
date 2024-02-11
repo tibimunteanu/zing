@@ -38,30 +38,17 @@ pub const TextureSystem = struct {
     }
 
     pub fn deinit(self: *TextureSystem) void {
-        self.releaseAllTextures();
+        self.unloadAllTextures();
         self.lookup.deinit();
         self.textures.deinit();
     }
 
-    pub fn acquireTexture(self: *TextureSystem, name: []const u8, auto_release: bool) !TextureHandle {
-        if (std.mem.eql(u8, name, default_texture_name)) {
-            std.log.warn("TextureSystem.acquireTexture() called for default texture. Use getDefaultTexture() instead!", .{});
-            return self.default_texture;
-        }
-
+    pub fn acquireTextureByName(self: *TextureSystem, name: []const u8, auto_release: bool) !TextureHandle {
         const result = try self.lookup.getOrPut(name);
         if (result.found_existing) {
             const handle = result.value_ptr.*;
 
-            const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
-            reference_count.* +|= 1;
-
-            std.log.info(
-                "TextureSystem.acquireTexture(): texture '{s}' was acquired. ref count is {}",
-                .{ name, reference_count.* },
-            );
-
-            return handle;
+            return self.acquireTextureByHandle(handle);
         } else {
             var texture = Texture.init();
             texture.reference_count = 1;
@@ -82,6 +69,27 @@ pub const TextureSystem = struct {
         }
     }
 
+    pub fn acquireTextureByHandle(self: *TextureSystem, handle: TextureHandle) !TextureHandle {
+        try self.textures.requireLiveHandle(handle);
+
+        const name = self.textures.getColumnAssumeLive(handle, .name);
+        const reference_count = self.textures.getColumnPtrAssumeLive(handle, .reference_count);
+
+        if (std.mem.eql(u8, name, default_texture_name)) {
+            std.log.warn("TextureSystem.acquireTexture() called for default texture. Use getDefaultTexture() instead!", .{});
+            return self.default_texture;
+        }
+
+        reference_count.* +|= 1;
+
+        std.log.info(
+            "TextureSystem.acquireTexture(): texture '{s}' was acquired. ref count is {}",
+            .{ name, reference_count.* },
+        );
+
+        return handle;
+    }
+
     pub fn releaseTextureByName(self: *TextureSystem, name: []const u8) void {
         if (self.lookup.get(name)) |handle| {
             self.releaseTextureByHandle(handle);
@@ -95,6 +103,7 @@ pub const TextureSystem = struct {
             const name = self.textures.getColumnAssumeLive(handle, .name);
             if (std.mem.eql(u8, name, default_texture_name)) {
                 // NOTE: ignore calls to release the default texture
+                std.log.warn("TextureSystem.releaseTexture() called for default texture handle!", .{});
                 return;
             }
 
@@ -109,12 +118,7 @@ pub const TextureSystem = struct {
             reference_count.* -|= 1;
 
             if (reference_count.* == 0 and auto_release) {
-                var texture = self.textures.getColumnsAssumeLive(handle);
-
-                self.textures.removeAssumeLive(handle);
-                _ = self.lookup.remove(name);
-
-                Engine.instance.renderer.destroyTexture(&texture);
+                self.unloadTexture(handle);
 
                 std.log.info("TextureSystem.releaseTexture(): texture '{s}' was unloaded", .{name});
             } else {
@@ -220,13 +224,18 @@ pub const TextureSystem = struct {
         try self.lookup.put(default_texture_name, self.default_texture);
     }
 
-    fn releaseAllTextures(self: *TextureSystem) void {
-        var it = self.textures.liveHandles();
-        while (it.next()) |h| {
-            const texture = @constCast(&self.textures.getColumnsAssumeLive(h));
-            self.textures.removeAssumeLive(h);
+    fn unloadTexture(self: *TextureSystem, handle: TextureHandle) void {
+        if (self.textures.getColumnsIfLive(handle)) |texture| {
+            self.textures.removeAssumeLive(handle);
             _ = self.lookup.remove(texture.name);
-            Engine.instance.renderer.destroyTexture(texture);
+            Engine.instance.renderer.destroyTexture(@constCast(&texture));
+        }
+    }
+
+    fn unloadAllTextures(self: *TextureSystem) void {
+        var it = self.textures.liveHandles();
+        while (it.next()) |handle| {
+            self.unloadTexture(handle);
         }
     }
 };

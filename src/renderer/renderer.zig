@@ -86,11 +86,6 @@ pub const Renderer = struct {
                 var data: GeometryRenderData = undefined;
                 data.object_id = 0;
                 data.model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0));
-
-                if (!Engine.instance.texture_system.textures.isLiveHandle(self.test_diffuse)) {
-                    self.test_diffuse = Engine.instance.texture_system.getDefaultTexture();
-                }
-
                 data.textures = [_]TextureHandle{TextureHandle.nil} ** 16;
                 data.textures[0] = self.test_diffuse;
 
@@ -135,20 +130,18 @@ pub const Renderer = struct {
     }
 
     // TODO: temporary
-    pub var choice: usize = 2;
+    var choice: usize = 2;
+    const names = [_][]const u8{
+        "cobblestone",
+        "paving",
+        "paving2",
+    };
     pub fn changeTexture(self: *Renderer) !void {
-        const names = [_][]const u8{
-            "cobblestone",
-            "paving",
-            "paving2",
-        };
-        const prev_name = names[choice];
-
         choice += 1;
         choice %= names.len;
 
-        self.test_diffuse = try Engine.instance.texture_system.acquireTexture(names[choice], false);
-
-        Engine.instance.texture_system.releaseTextureByName(prev_name);
+        const prev_texture = self.test_diffuse;
+        self.test_diffuse = try Engine.instance.texture_system.acquireTextureByName(names[choice], false);
+        Engine.instance.texture_system.releaseTextureByHandle(prev_texture);
     }
 };
