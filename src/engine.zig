@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const glfw = @import("mach-glfw");
+const glfw = @import("glfw");
 const Renderer = @import("renderer/renderer.zig").Renderer;
 const TextureSystem = @import("systems/texture_system.zig").TextureSystem;
 const math = @import("zmath");

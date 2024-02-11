@@ -1,5 +1,5 @@
 const std = @import("std");
-const glfw = @import("mach-glfw");
+const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const Context = @import("context.zig").Context;
 const Image = @import("image.zig").Image;

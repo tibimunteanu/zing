@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const glfw = @import("mach-glfw");
+const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const Swapchain = @import("swapchain.zig").Swapchain;
 const RenderPass = @import("renderpass.zig").RenderPass;

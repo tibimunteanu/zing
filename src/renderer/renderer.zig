@@ -1,6 +1,6 @@
 const std = @import("std");
 const Context = @import("vulkan/context.zig").Context;
-const glfw = @import("mach-glfw");
+const glfw = @import("glfw");
 const math = @import("zmath");
 const Allocator = std.mem.Allocator;
 const BeginFrameResult = @import("types.zig").BeginFrameResult;

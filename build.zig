@@ -2,6 +2,7 @@ const std = @import("std");
 const zmath = @import("zmath");
 const zstbi = @import("zstbi");
 const zpool = @import("zpool");
+const yaml = @import("yaml");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -25,12 +26,17 @@ pub fn build(b: *std.Build) void {
     const zpool_pkg = zpool.package(b, target, optimize, .{});
     zpool_pkg.link(exe);
 
+    const yaml_dep = b.dependency("zig_yaml", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("yaml", yaml_dep.module("yaml"));
+
     const glfw_dep = b.dependency("mach_glfw", .{
         .target = target,
         .optimize = optimize,
     });
-
-    exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
+    exe.root_module.addImport("glfw", glfw_dep.module("mach-glfw"));
 
     b.installArtifact(exe);
 
