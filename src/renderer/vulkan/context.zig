@@ -511,27 +511,15 @@ pub const Context = struct {
     pub fn createTexture(
         self: *Context,
         allocator: Allocator,
-        name: []const u8,
-        width: u32,
-        height: u32,
-        channel_count: u8,
-        has_transparency: bool,
+        texture: *Texture,
         pixels: []const u8,
-    ) !Texture {
-        var texture: Texture = undefined;
-        texture.name = try TextureName.fromSlice(name);
-        texture.width = width;
-        texture.height = height;
-        texture.channel_count = channel_count;
-        texture.has_transparency = has_transparency;
-        texture.generation = 0;
-
+    ) !void {
         const internal_data = try allocator.create(TextureData);
         errdefer allocator.destroy(internal_data);
 
         texture.internal_data = internal_data;
 
-        const image_size: vk.DeviceSize = width * height * channel_count;
+        const image_size: vk.DeviceSize = texture.width * texture.height * texture.channel_count;
         const image_format: vk.Format = .r8g8b8a8_srgb;
 
         var staging_buffer = try Buffer.init(
@@ -546,8 +534,8 @@ pub const Context = struct {
         try staging_buffer.loadData(0, image_size, .{}, pixels);
 
         internal_data.image = try Image.init(self, .{
-            .width = width,
-            .height = height,
+            .width = texture.width,
+            .height = texture.height,
             .format = image_format,
             .usage = .{
                 .transfer_src_bit = true,
@@ -598,8 +586,6 @@ pub const Context = struct {
             .min_lod = 0,
             .max_lod = 0,
         }, null);
-
-        return texture;
     }
 
     pub fn destroyTexture(self: *Context, texture: *Texture) void {
@@ -612,8 +598,6 @@ pub const Context = struct {
 
             self.allocator.destroy(data);
         }
-
-        texture.deinit();
     }
 
     // utils

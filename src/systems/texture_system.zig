@@ -1,6 +1,7 @@
 const std = @import("std");
 const Engine = @import("../engine.zig").Engine;
 const Texture = @import("../resources/texture.zig").Texture;
+const TextureName = @import("../resources/texture.zig").TextureName;
 const Renderer = @import("../renderer/renderer.zig").Renderer;
 const stbi = @import("zstbi");
 const pool = @import("zpool");
@@ -120,8 +121,6 @@ pub const TextureSystem = struct {
 
         if (reference_count.* == 0 and auto_release) {
             self.unloadTexture(handle);
-
-            std.log.info("TextureSystem: Texture '{s}' was unloaded", .{texture.name.slice()});
         } else {
             std.log.info("TextureSystem: Texture '{s}' was released. Ref count: {}", .{ texture.name.slice(), reference_count.* });
         }
@@ -157,19 +156,20 @@ pub const TextureSystem = struct {
             }
         }
 
-        var temp_texture = try Engine.instance.renderer.createTexture(
+        var temp_texture = try Texture.init();
+        temp_texture.name = try TextureName.fromSlice(name);
+        temp_texture.width = image.width;
+        temp_texture.height = image.height;
+        temp_texture.channel_count = @truncate(image.num_components);
+        temp_texture.has_transparency = has_transparency;
+        temp_texture.generation = if (texture.generation) |g| g +% 1 else 0;
+
+        try Engine.instance.renderer.createTexture(
             self.allocator,
-            name,
-            image.width,
-            image.height,
-            @truncate(image.num_components),
-            has_transparency,
+            &temp_texture,
             image.data,
         );
         errdefer Engine.instance.renderer.destroyTexture(&temp_texture);
-
-        temp_texture.generation = texture.generation;
-        temp_texture.generation = if (temp_texture.generation) |g| g +% 1 else 0;
 
         Engine.instance.renderer.destroyTexture(texture);
         texture.* = temp_texture;
@@ -195,19 +195,20 @@ pub const TextureSystem = struct {
             }
         }
 
-        var texture = try Engine.instance.renderer.createTexture(
+        var texture = try Texture.init();
+        texture.name = try TextureName.fromSlice(default_texture_name);
+        texture.width = tex_dimension;
+        texture.height = tex_dimension;
+        texture.channel_count = 4;
+        texture.has_transparency = false;
+        texture.generation = null; // NOTE: default texture always has null generation
+
+        try Engine.instance.renderer.createTexture(
             self.allocator,
-            default_texture_name,
-            tex_dimension,
-            tex_dimension,
-            4,
-            false,
+            &texture,
             &pixels,
         );
         errdefer Engine.instance.renderer.destroyTexture(&texture);
-
-        // default texture always has null generation
-        texture.generation = null;
 
         self.default_texture = try self.textures.add(.{
             .texture = texture,
@@ -220,9 +221,13 @@ pub const TextureSystem = struct {
 
     fn unloadTexture(self: *TextureSystem, handle: TextureHandle) void {
         if (self.textures.getColumnPtrIfLive(handle, .texture)) |texture| {
+            const texture_name = texture.name; // NOTE: take a copy of the name
+
             Engine.instance.renderer.destroyTexture(texture);
             self.textures.removeAssumeLive(handle); // NOTE: this calls texture.deinit()
-            _ = self.lookup.remove(texture.name.slice());
+            _ = self.lookup.remove(texture_name.slice());
+
+            std.log.info("TextureSystem: Texture '{s}' was unloaded", .{texture_name.slice()});
         }
     }
 

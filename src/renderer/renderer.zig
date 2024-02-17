@@ -115,14 +115,10 @@ pub const Renderer = struct {
     pub fn createTexture(
         self: *Renderer,
         allocator: Allocator,
-        name: []const u8,
-        width: u32,
-        height: u32,
-        channel_count: u8,
-        has_transparency: bool,
+        texture: *Texture,
         pixels: []const u8,
-    ) !Texture {
-        return try self.context.createTexture(allocator, name, width, height, channel_count, has_transparency, pixels);
+    ) !void {
+        try self.context.createTexture(allocator, texture, pixels);
     }
 
     pub fn destroyTexture(self: *Renderer, texture: *Texture) void {
@@ -141,7 +137,7 @@ pub const Renderer = struct {
         choice %= names.len;
 
         const prev_texture = self.test_diffuse;
-        self.test_diffuse = try Engine.instance.texture_system.acquireTextureByName(names[choice], false);
+        self.test_diffuse = try Engine.instance.texture_system.acquireTextureByName(names[choice], true);
         Engine.instance.texture_system.releaseTextureByHandle(prev_texture);
     }
 };
