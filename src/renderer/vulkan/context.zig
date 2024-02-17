@@ -12,6 +12,7 @@ const BeginFrameResult = @import("../types.zig").BeginFrameResult;
 const GeometryRenderData = @import("../types.zig").GeometryRenderData;
 const Image = @import("image.zig").Image;
 const Texture = @import("../../resources/texture.zig").Texture;
+const TextureName = @import("../../resources/texture.zig").TextureName;
 const TextureData = @import("vulkan_types.zig").TextureData;
 const Allocator = std.mem.Allocator;
 const math = @import("zmath");
@@ -518,7 +519,7 @@ pub const Context = struct {
         pixels: []const u8,
     ) !Texture {
         var texture: Texture = undefined;
-        texture.name = name;
+        texture.name = try TextureName.fromSlice(name);
         texture.width = width;
         texture.height = height;
         texture.channel_count = channel_count;

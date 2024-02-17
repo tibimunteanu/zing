@@ -1,7 +1,9 @@
 const std = @import("std");
 
+pub const TextureName = std.BoundedArray(u8, 256);
+
 pub const Texture = struct {
-    name: []const u8,
+    name: TextureName,
     width: u32,
     height: u32,
     channel_count: u8,
@@ -9,9 +11,9 @@ pub const Texture = struct {
     generation: ?u32,
     internal_data: ?*anyopaque,
 
-    pub fn init() Texture {
+    pub fn init() !Texture {
         var self: Texture = undefined;
-        self.name = "";
+        self.name = try TextureName.fromSlice("none");
         self.width = 0;
         self.height = 0;
         self.channel_count = 0;
@@ -22,7 +24,7 @@ pub const Texture = struct {
     }
 
     pub fn deinit(self: *Texture) void {
-        self.name = "";
+        self.name.len = 0;
         self.width = 0;
         self.height = 0;
         self.channel_count = 0;

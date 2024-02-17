@@ -51,7 +51,7 @@ pub const TextureSystem = struct {
         if (self.lookup.get(name)) |handle| {
             return self.acquireTextureByHandle(handle);
         } else {
-            var texture = Texture.init();
+            var texture = try Texture.init();
             try self.loadTexture(name, &texture);
 
             const handle = try self.textures.add(.{
@@ -91,7 +91,7 @@ pub const TextureSystem = struct {
 
         reference_count.* +|= 1;
 
-        std.log.info("TextureSystem: Texture '{s}' was acquired. Ref count: {}", .{ texture.name, reference_count.* });
+        std.log.info("TextureSystem: Texture '{s}' was acquired. Ref count: {}", .{ texture.name.slice(), reference_count.* });
 
         return handle;
     }
@@ -121,9 +121,9 @@ pub const TextureSystem = struct {
         if (reference_count.* == 0 and auto_release) {
             self.unloadTexture(handle);
 
-            std.log.info("TextureSystem: Texture '{s}' was unloaded", .{texture.name});
+            std.log.info("TextureSystem: Texture '{s}' was unloaded", .{texture.name.slice()});
         } else {
-            std.log.info("TextureSystem: Texture '{s}' was released. Ref count: {}", .{ texture.name, reference_count.* });
+            std.log.info("TextureSystem: Texture '{s}' was released. Ref count: {}", .{ texture.name.slice(), reference_count.* });
         }
     }
 
@@ -222,7 +222,7 @@ pub const TextureSystem = struct {
         if (self.textures.getColumnPtrIfLive(handle, .texture)) |texture| {
             Engine.instance.renderer.destroyTexture(texture);
             self.textures.removeAssumeLive(handle); // NOTE: this calls texture.deinit()
-            _ = self.lookup.remove(texture.name);
+            _ = self.lookup.remove(texture.name.slice());
         }
     }
 
