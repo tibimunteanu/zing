@@ -95,7 +95,23 @@ pub const Engine = struct {
         errdefer instance.geometry_system.deinit();
 
         // TODO: temporary
-        instance.test_geometry = instance.geometry_system.getDefaultGeometry();
+        // instance.test_geometry = instance.geometry_system.getDefaultGeometry();
+        var plane_config = try GeometrySystem.GeometryConfig.initPlane(
+            allocator,
+            "test geometry",
+            "test",
+            .{
+                .width = 20,
+                .height = 20,
+                .segment_count_x = 4,
+                .segment_count_y = 4,
+                .tile_x = 2,
+                .tile_y = 2,
+            },
+        );
+        defer plane_config.deinit();
+
+        instance.test_geometry = try instance.geometry_system.acquireGeometryByConfig(plane_config, .{ .auto_release = true });
         // TODO: end temporary
     }
 

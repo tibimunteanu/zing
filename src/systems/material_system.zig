@@ -27,23 +27,20 @@ pub const MaterialSystem = struct {
     pub const Config = struct {};
 
     pub const MaterialConfig = struct {
-        parsed: ?std.json.Parsed(MaterialConfig) = null,
-
         name: []const u8 = "New Material",
         diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
         diffuse_map_name: []const u8 = TextureSystem.default_texture_name,
         auto_release: bool = false,
 
-        pub fn initFromFile(allocator: Allocator, path: []const u8) !MaterialConfig {
+        pub fn initFromFile(allocator: Allocator, path: []const u8) !std.json.Parsed(MaterialConfig) {
             const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
             defer file.close();
 
             const stat = try file.stat();
+            const content = try file.readToEndAlloc(allocator, stat.size);
+            defer allocator.free(content);
 
-            const content: [stat.size]u8 = undefined;
-            try file.readAll(&content);
-
-            const parsed = try std.json.parseFromSlice(
+            return try std.json.parseFromSlice(
                 MaterialConfig,
                 allocator,
                 content,
@@ -52,17 +49,6 @@ pub const MaterialSystem = struct {
                     .ignore_unknown_fields = true,
                 },
             );
-            errdefer parsed.deinit();
-
-            parsed.value.parsed = parsed;
-
-            return parsed.value;
-        }
-
-        pub fn deinit(self: *MaterialConfig) void {
-            if (self.parsed) |parsed| {
-                parsed.deinit();
-            }
         }
     };
 
@@ -121,10 +107,10 @@ pub const MaterialSystem = struct {
             const config_path = try std.fmt.allocPrintZ(self.allocator, path_format, .{name});
             defer self.allocator.free(config_path);
 
-            const config = try MaterialConfig.initFromFile(config_path);
-            defer config.deinit();
+            var parsed_config = try MaterialConfig.initFromFile(self.allocator, config_path);
+            defer parsed_config.deinit();
 
-            return self.acquireMaterialByConfig(config);
+            return self.acquireMaterialByConfig(parsed_config.value);
         }
     }
 
