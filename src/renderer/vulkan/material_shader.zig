@@ -482,83 +482,75 @@ pub const MaterialShader = struct {
         try self.material_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(material_uniform_data));
 
         // only do this if the descriptor has not yet been updated
-        const material_ubo_generation = &material_state.descriptor_states[dst_binding].generations[image_index];
-        if (material_ubo_generation.* == null or material_ubo_generation.* != material.generation) {
-            const material_ubo_buffer_info = vk.DescriptorBufferInfo{
-                .buffer = self.material_uniform_buffer.handle,
-                .offset = offset,
-                .range = range,
-            };
-
-            const material_ubo_descriptor_write = vk.WriteDescriptorSet{
+        const descriptor_material_generation = &material_state.descriptor_states[dst_binding].generations[image_index];
+        if (descriptor_material_generation.* == null or descriptor_material_generation.* != material.generation) {
+            descriptor_writes[write_count] = vk.WriteDescriptorSet{
                 .dst_set = material_descriptor_set,
                 .dst_binding = dst_binding,
                 .dst_array_element = 0,
                 .descriptor_type = .uniform_buffer,
                 .descriptor_count = 1,
-                .p_buffer_info = @ptrCast(&material_ubo_buffer_info),
+                .p_buffer_info = @ptrCast(&vk.DescriptorBufferInfo{
+                    .buffer = self.material_uniform_buffer.handle,
+                    .offset = offset,
+                    .range = range,
+                }),
                 .p_image_info = undefined,
                 .p_texel_buffer_view = undefined,
             };
-
-            descriptor_writes[write_count] = material_ubo_descriptor_write;
             write_count += 1;
 
-            material_ubo_generation.* = material.generation;
+            descriptor_material_generation.* = material.generation;
         }
         dst_binding += 1;
 
         const sampler_count: u32 = 1;
-        var image_infos: [sampler_count]vk.DescriptorImageInfo = undefined;
 
-        for (&image_infos, 0..sampler_count) |*image_info, sampler_index| {
-            const descriptorTextureHandle = &material_state.descriptor_states[dst_binding].handles[image_index];
-            const descriptorTextureGeneration = &material_state.descriptor_states[dst_binding].generations[image_index];
+        for (0..sampler_count) |sampler_index| {
+            const descriptor_texture_handle = &material_state.descriptor_states[dst_binding].handles[image_index];
+            const descriptor_texture_generation = &material_state.descriptor_states[dst_binding].generations[image_index];
 
-            const use = self.sampler_uses[sampler_index];
-            var textureHandle = TextureHandle.nil;
-            switch (use) {
-                .map_diffuse => textureHandle = material.diffuse_map.texture,
+            const sampler_use = self.sampler_uses[sampler_index];
+            var texture_handle = TextureHandle.nil;
+            switch (sampler_use) {
+                .map_diffuse => texture_handle = material.diffuse_map.texture,
                 else => return error.UnableToBindSamplerToUnknownUse,
             }
+
             // if the texture hasn't been loaded yet, use the default
-            if (!Engine.instance.texture_system.textures.isLiveHandle(textureHandle)) {
-                textureHandle = Engine.instance.texture_system.getDefaultTexture();
-                descriptorTextureGeneration.* = null; // reset if using the default
+            if (!Engine.instance.texture_system.textures.isLiveHandle(texture_handle)) {
+                texture_handle = Engine.instance.texture_system.getDefaultTexture();
+                descriptor_texture_generation.* = null; // reset if using the default
             }
 
-            const texture = Engine.instance.texture_system.textures.getColumnPtrAssumeLive(textureHandle, .texture);
+            const texture = Engine.instance.texture_system.textures.getColumnPtrAssumeLive(texture_handle, .texture);
 
-            if (descriptorTextureHandle.*.id != textureHandle.id // different texture
-            or descriptorTextureGeneration.* == null // default texture
-            or descriptorTextureGeneration.* != texture.generation // texture generation changed
+            if (descriptor_texture_handle.*.id != texture_handle.id // different texture
+            or descriptor_texture_generation.* == null // default texture
+            or descriptor_texture_generation.* != texture.generation // texture generation changed
             ) {
                 const internal_data: *TextureData = @ptrCast(@alignCast(texture.internal_data));
 
-                image_info.* = vk.DescriptorImageInfo{
-                    .image_layout = .shader_read_only_optimal,
-                    .image_view = internal_data.image.view,
-                    .sampler = internal_data.sampler,
-                };
-
-                const material_sampler_descriptor_write = vk.WriteDescriptorSet{
+                descriptor_writes[write_count] = vk.WriteDescriptorSet{
                     .dst_set = material_descriptor_set,
                     .dst_binding = dst_binding,
                     .descriptor_type = .combined_image_sampler,
                     .descriptor_count = 1,
                     .dst_array_element = 0,
-                    .p_image_info = @ptrCast(image_info),
+                    .p_image_info = @ptrCast(&vk.DescriptorImageInfo{
+                        .image_layout = .shader_read_only_optimal,
+                        .image_view = internal_data.image.view,
+                        .sampler = internal_data.sampler,
+                    }),
                     .p_buffer_info = undefined,
                     .p_texel_buffer_view = undefined,
                 };
-
-                descriptor_writes[write_count] = material_sampler_descriptor_write;
                 write_count += 1;
 
                 // NOTE: sync frame generation if not using a default texture
                 if (texture.generation != null) {
-                    descriptorTextureGeneration.* = texture.generation;
-                    descriptorTextureHandle.* = textureHandle;
+                    descriptor_texture_generation.* = texture.generation;
+                    descriptor_texture_handle.* = texture_handle;
                 }
                 dst_binding += 1;
             }

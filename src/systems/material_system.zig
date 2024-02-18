@@ -10,6 +10,7 @@ const resources_texture = @import("../resources/texture.zig");
 const Material = resources_material.Material;
 const MaterialName = resources_material.MaterialName;
 const TextureName = resources_texture.TextureName;
+const TextureMap = resources_texture.TextureMap;
 const Allocator = std.mem.Allocator;
 
 pub const MaterialPool = pool.Pool(16, 16, Material, struct {
@@ -194,11 +195,13 @@ pub const MaterialSystem = struct {
         temp_material.diffuse_color = config.diffuse_color;
 
         if (config.diffuse_map_name.len > 0) {
-            temp_material.diffuse_map.use = .map_diffuse;
-            temp_material.diffuse_map.texture = Engine.instance.texture_system.acquireTextureByName(
-                config.diffuse_map_name.slice(),
-                true,
-            ) catch Engine.instance.texture_system.getDefaultTexture();
+            temp_material.diffuse_map = TextureMap{
+                .use = .map_diffuse,
+                .texture = Engine.instance.texture_system.acquireTextureByName(
+                    config.diffuse_map_name.slice(),
+                    true,
+                ) catch Engine.instance.texture_system.getDefaultTexture(),
+            };
         }
 
         temp_material.generation = if (material.generation) |g| g +% 1 else 0;
