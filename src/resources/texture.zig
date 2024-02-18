@@ -1,40 +1,33 @@
 const std = @import("std");
+const math = @import("zmath");
+const TextureHandle = @import("../systems/texture_system.zig").TextureHandle;
 
 pub const TextureName = std.BoundedArray(u8, 256);
 
 pub const Texture = struct {
-    name: TextureName,
-    width: u32,
-    height: u32,
-    channel_count: u8,
-    has_transparency: bool,
-    generation: ?u32,
-    internal_data: ?*anyopaque,
+    name: TextureName = .{},
+    width: u32 = 0,
+    height: u32 = 0,
+    channel_count: u8 = 0,
+    has_transparency: bool = false,
+    generation: ?u32 = null,
+    internal_data: ?*anyopaque = null,
 
-    pub fn init() !Texture {
-        return Texture{
-            .name = try TextureName.fromSlice("none"),
-            .width = 0,
-            .height = 0,
-            .channel_count = 0,
-            .has_transparency = false,
-            .generation = null,
-            .internal_data = null,
-        };
+    pub fn init() Texture {
+        return .{};
     }
 
     pub fn deinit(self: *Texture) void {
-        self.name.len = 0;
-        self.width = 0;
-        self.height = 0;
-        self.channel_count = 0;
-        self.has_transparency = false;
-        self.generation = null;
-        self.internal_data = null;
+        self.* = .{};
     }
 };
 
 pub const TextureUse = enum(u8) {
     unknown = 0,
     map_diffuse = 1,
+};
+
+pub const TextureMap = struct {
+    texture: TextureHandle = TextureHandle.nil,
+    use: TextureUse = .unknown,
 };

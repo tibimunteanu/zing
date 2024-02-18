@@ -2,20 +2,28 @@ const std = @import("std");
 const builtin = @import("builtin");
 const glfw = @import("glfw");
 const vk = @import("vk.zig");
+const math = @import("zmath");
+
 const Swapchain = @import("swapchain.zig").Swapchain;
 const RenderPass = @import("renderpass.zig").RenderPass;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const MaterialShader = @import("material_shader.zig").MaterialShader;
 const Buffer = @import("buffer.zig").Buffer;
-const BeginFrameResult = @import("../types.zig").BeginFrameResult;
-const GeometryRenderData = @import("../types.zig").GeometryRenderData;
 const Image = @import("image.zig").Image;
-const Texture = @import("../../resources/texture.zig").Texture;
-const TextureName = @import("../../resources/texture.zig").TextureName;
-const TextureData = @import("vulkan_types.zig").TextureData;
+
+const renderer_types = @import("../types.zig");
+const vulkan_types = @import("vulkan_types.zig");
+const resources_texture = @import("../../resources/texture.zig");
+const resources_material = @import("../../resources/material.zig");
+
+const BeginFrameResult = renderer_types.BeginFrameResult;
+const GeometryRenderData = renderer_types.GeometryRenderData;
+const Texture = resources_texture.Texture;
+const TextureName = resources_texture.TextureName;
+const Material = resources_material.Material;
+const TextureData = vulkan_types.TextureData;
 const Allocator = std.mem.Allocator;
-const math = @import("zmath");
 
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
@@ -64,6 +72,7 @@ const DeviceAPI = vk.DeviceWrapper(.{
     .allocateDescriptorSets = true,
     .cmdBindDescriptorSets = true,
     .updateDescriptorSets = true,
+    .freeDescriptorSets = true,
     .createSampler = true,
     .destroySampler = true,
     .destroyImageView = true,
@@ -331,8 +340,6 @@ pub const Context = struct {
             .dst_offset = 0,
             .size = @sizeOf(@TypeOf(indices)),
         }, &std.mem.toBytes(indices));
-
-        _ = try self.material_shader.acquireResources();
     }
 
     pub fn deinit(self: *Context) void {
@@ -480,11 +487,11 @@ pub const Context = struct {
         try self.material_shader.updateGlobalUniformData();
     }
 
-    pub fn updateObjectState(self: *Context, data: GeometryRenderData) !void {
+    pub fn updateMaterialState(self: *Context, data: GeometryRenderData) !void {
         // const command_buffer = self.getCurrentCommandBuffer();
         // self.shader.bind(command_buffer);
 
-        try self.material_shader.updateObjectUniformData(data);
+        try self.material_shader.updateMaterialUniformData(data);
     }
 
     pub fn drawFrame(self: Context) void {
@@ -508,14 +515,9 @@ pub const Context = struct {
         self.device_api.cmdDrawIndexed(command_buffer.handle, 6, 1, 0, 0, 0);
     }
 
-    pub fn createTexture(
-        self: *Context,
-        allocator: Allocator,
-        texture: *Texture,
-        pixels: []const u8,
-    ) !void {
-        const internal_data = try allocator.create(TextureData);
-        errdefer allocator.destroy(internal_data);
+    pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !void {
+        const internal_data = try self.allocator.create(TextureData);
+        errdefer self.allocator.destroy(internal_data);
 
         texture.internal_data = internal_data;
 
@@ -597,6 +599,16 @@ pub const Context = struct {
             self.device_api.destroySampler(self.device, data.sampler, null);
 
             self.allocator.destroy(data);
+        }
+    }
+
+    pub fn createMaterial(self: *Context, material: *Material) !void {
+        try self.material_shader.acquireResources(material);
+    }
+
+    pub fn destroyMaterial(self: *Context, material: *Material) void {
+        if (material.internal_id != null) {
+            self.material_shader.releaseResources(material);
         }
     }
 

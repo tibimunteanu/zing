@@ -1,0 +1,6 @@
+{
+  "type": "material",
+  "name": "test",
+  "diffuse_color": [1.0, 1.0, 1.0, 1.0],
+  "diffuse_map_name": "paving"
+}

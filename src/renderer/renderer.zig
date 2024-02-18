@@ -3,11 +3,13 @@ const Context = @import("vulkan/context.zig").Context;
 const glfw = @import("glfw");
 const math = @import("zmath");
 const Allocator = std.mem.Allocator;
-const BeginFrameResult = @import("types.zig").BeginFrameResult;
-const GeometryRenderData = @import("types.zig").GeometryRenderData;
+const renderer_types = @import("types.zig");
+const BeginFrameResult = renderer_types.BeginFrameResult;
+const GeometryRenderData = renderer_types.GeometryRenderData;
 const Engine = @import("../engine.zig").Engine;
 const Texture = @import("../resources/texture.zig").Texture;
-const TextureHandle = @import("../systems/texture_system.zig").TextureHandle;
+const Material = @import("../resources/material.zig").Material;
+const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
 const deg2rad = std.math.degreesToRadians;
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
@@ -25,7 +27,7 @@ pub const Renderer = struct {
     far_clip: f32,
 
     // TODO: temporary
-    test_diffuse: TextureHandle = TextureHandle.nil,
+    test_material: MaterialHandle,
 
     pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
         self.allocator = allocator;
@@ -60,6 +62,9 @@ pub const Renderer = struct {
         );
 
         self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
+
+        // TODO: temporary
+        self.test_material = MaterialHandle.nil;
     }
 
     pub fn deinit(self: *Renderer) void {
@@ -83,13 +88,16 @@ pub const Renderer = struct {
             .render => {
                 try self.context.updateGlobalState(self.projection, self.view);
 
-                var data: GeometryRenderData = undefined;
-                data.object_id = 0;
-                data.model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0));
-                data.textures = [_]TextureHandle{TextureHandle.nil} ** 16;
-                data.textures[0] = self.test_diffuse;
+                if (self.test_material.id == MaterialHandle.nil.id) {
+                    self.test_material = try Engine.instance.material_system.acquireMaterialByName("test");
+                }
 
-                try self.context.updateObjectState(data);
+                const data = GeometryRenderData{
+                    .model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0)),
+                    .material = self.test_material,
+                };
+
+                try self.context.updateMaterialState(data);
 
                 self.context.drawFrame();
 
@@ -112,17 +120,20 @@ pub const Renderer = struct {
         try self.context.swapchain.waitForAllFences();
     }
 
-    pub fn createTexture(
-        self: *Renderer,
-        allocator: Allocator,
-        texture: *Texture,
-        pixels: []const u8,
-    ) !void {
-        try self.context.createTexture(allocator, texture, pixels);
+    pub fn createTexture(self: *Renderer, texture: *Texture, pixels: []const u8) !void {
+        try self.context.createTexture(texture, pixels);
     }
 
     pub fn destroyTexture(self: *Renderer, texture: *Texture) void {
         self.context.destroyTexture(texture);
+    }
+
+    pub fn createMaterial(self: *Renderer, material: *Material) !void {
+        try self.context.createMaterial(material);
+    }
+
+    pub fn destroyMaterial(self: *Renderer, material: *Material) void {
+        self.context.destroyMaterial(material);
     }
 
     // TODO: temporary
@@ -136,8 +147,10 @@ pub const Renderer = struct {
         choice += 1;
         choice %= names.len;
 
-        const prev_texture = self.test_diffuse;
-        self.test_diffuse = try Engine.instance.texture_system.acquireTextureByName(names[choice], true);
+        const material = Engine.instance.material_system.materials.getColumnPtrAssumeLive(self.test_material, .material);
+
+        const prev_texture = material.diffuse_map.texture;
+        material.diffuse_map.texture = try Engine.instance.texture_system.acquireTextureByName(names[choice], true);
         Engine.instance.texture_system.releaseTextureByHandle(prev_texture);
     }
 };

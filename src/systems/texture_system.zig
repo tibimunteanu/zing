@@ -1,10 +1,14 @@
 const std = @import("std");
-const Engine = @import("../engine.zig").Engine;
-const Texture = @import("../resources/texture.zig").Texture;
-const TextureName = @import("../resources/texture.zig").TextureName;
-const Renderer = @import("../renderer/renderer.zig").Renderer;
 const stbi = @import("zstbi");
 const pool = @import("zpool");
+
+const Engine = @import("../engine.zig").Engine;
+const Renderer = @import("../renderer/renderer.zig").Renderer;
+
+const resources_texture = @import("../resources/texture.zig");
+
+const Texture = resources_texture.Texture;
+const TextureName = resources_texture.TextureName;
 const Allocator = std.mem.Allocator;
 
 pub const TexturePool = pool.Pool(16, 16, Texture, struct {
@@ -18,6 +22,7 @@ pub const TextureSystem = struct {
     pub const default_texture_name = "default";
 
     pub const Config = struct {
+        // TODO: set handle and cycle bits instead and bring the pool and handle types inside
         max_texture_count: u32,
     };
 
@@ -52,7 +57,7 @@ pub const TextureSystem = struct {
         if (self.lookup.get(name)) |handle| {
             return self.acquireTextureByHandle(handle);
         } else {
-            var texture = try Texture.init();
+            var texture = Texture.init();
             try self.loadTexture(name, &texture);
 
             const handle = try self.textures.add(.{
@@ -68,14 +73,6 @@ pub const TextureSystem = struct {
             std.log.info("TextureSystem: Texture '{s}' was loaded. Ref count: 1", .{name});
 
             return handle;
-        }
-    }
-
-    pub fn releaseTextureByName(self: *TextureSystem, name: []const u8) void {
-        if (self.lookup.get(name)) |handle| {
-            self.releaseTextureByHandle(handle);
-        } else {
-            std.log.warn("TextureSystem: Cannot release non-existent texture!", .{});
         }
     }
 
@@ -95,6 +92,14 @@ pub const TextureSystem = struct {
         std.log.info("TextureSystem: Texture '{s}' was acquired. Ref count: {}", .{ texture.name.slice(), reference_count.* });
 
         return handle;
+    }
+
+    pub fn releaseTextureByName(self: *TextureSystem, name: []const u8) void {
+        if (self.lookup.get(name)) |handle| {
+            self.releaseTextureByHandle(handle);
+        } else {
+            std.log.warn("TextureSystem: Cannot release non-existent texture!", .{});
+        }
     }
 
     pub fn releaseTextureByHandle(self: *TextureSystem, handle: TextureHandle) void {
@@ -156,7 +161,7 @@ pub const TextureSystem = struct {
             }
         }
 
-        var temp_texture = try Texture.init();
+        var temp_texture = Texture.init();
         temp_texture.name = try TextureName.fromSlice(name);
         temp_texture.width = image.width;
         temp_texture.height = image.height;
@@ -164,11 +169,7 @@ pub const TextureSystem = struct {
         temp_texture.has_transparency = has_transparency;
         temp_texture.generation = if (texture.generation) |g| g +% 1 else 0;
 
-        try Engine.instance.renderer.createTexture(
-            self.allocator,
-            &temp_texture,
-            image.data,
-        );
+        try Engine.instance.renderer.createTexture(&temp_texture, image.data);
         errdefer Engine.instance.renderer.destroyTexture(&temp_texture);
 
         Engine.instance.renderer.destroyTexture(texture);
@@ -195,7 +196,7 @@ pub const TextureSystem = struct {
             }
         }
 
-        var texture = try Texture.init();
+        var texture = Texture.init();
         texture.name = try TextureName.fromSlice(default_texture_name);
         texture.width = tex_dimension;
         texture.height = tex_dimension;
@@ -203,11 +204,7 @@ pub const TextureSystem = struct {
         texture.has_transparency = false;
         texture.generation = null; // NOTE: default texture always has null generation
 
-        try Engine.instance.renderer.createTexture(
-            self.allocator,
-            &texture,
-            &pixels,
-        );
+        try Engine.instance.renderer.createTexture(&texture, &pixels);
         errdefer Engine.instance.renderer.destroyTexture(&texture);
 
         self.default_texture = try self.textures.add(.{
@@ -224,6 +221,7 @@ pub const TextureSystem = struct {
             const texture_name = texture.name; // NOTE: take a copy of the name
 
             Engine.instance.renderer.destroyTexture(texture);
+
             self.textures.removeAssumeLive(handle); // NOTE: this calls texture.deinit()
             _ = self.lookup.remove(texture_name.slice());
 
