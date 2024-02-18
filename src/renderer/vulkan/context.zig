@@ -4,6 +4,7 @@ const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
+const Engine = @import("../../engine.zig").Engine;
 const Swapchain = @import("swapchain.zig").Swapchain;
 const RenderPass = @import("renderpass.zig").RenderPass;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
@@ -12,18 +13,27 @@ const MaterialShader = @import("material_shader.zig").MaterialShader;
 const Buffer = @import("buffer.zig").Buffer;
 const Image = @import("image.zig").Image;
 
-const renderer_types = @import("../types.zig");
+const renderer_types = @import("../renderer_types.zig");
 const vulkan_types = @import("vulkan_types.zig");
 const resources_texture = @import("../../resources/texture.zig");
 const resources_material = @import("../../resources/material.zig");
+const resources_geomerty = @import("../../resources/geometry.zig");
 
-const BeginFrameResult = renderer_types.BeginFrameResult;
-const GeometryRenderData = renderer_types.GeometryRenderData;
 const Texture = resources_texture.Texture;
 const TextureName = resources_texture.TextureName;
 const Material = resources_material.Material;
+const Geometry = resources_geomerty.Geometry;
+
+const Vertex = renderer_types.Vertex;
+const BeginFrameResult = renderer_types.BeginFrameResult;
+const GeometryRenderData = renderer_types.GeometryRenderData;
+
 const TextureData = vulkan_types.TextureData;
+const GeometryData = vulkan_types.GeometryData;
+
 const Allocator = std.mem.Allocator;
+
+const geometry_max_count = vulkan_types.geometry_max_count;
 
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
@@ -140,48 +150,6 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d24_unorm_s8_uint,
 };
 
-pub const Vertex = struct {
-    pub const binding_description = vk.VertexInputBindingDescription{
-        .binding = 0,
-        .stride = @sizeOf(Vertex),
-        .input_rate = .vertex,
-    };
-
-    pub const attribute_description = [_]vk.VertexInputAttributeDescription{
-        .{
-            .binding = 0,
-            .location = 0,
-            .format = .r32g32b32_sfloat,
-            .offset = @offsetOf(Vertex, "position"),
-        },
-        .{
-            .binding = 0,
-            .location = 1,
-            .format = .r32g32_sfloat,
-            .offset = @offsetOf(Vertex, "texcoord"),
-        },
-        .{
-            .binding = 0,
-            .location = 2,
-            .format = .r32g32b32_sfloat,
-            .offset = @offsetOf(Vertex, "color"),
-        },
-    };
-
-    position: [3]f32,
-    texcoord: [2]f32,
-    color: [4]f32,
-};
-
-pub const vertices = [_]Vertex{
-    .{ .position = .{ -5.0, -5.0, 0.0 }, .texcoord = .{ 0.0, 0.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
-    .{ .position = .{ 5.0, -5.0, 0.0 }, .texcoord = .{ 1.0, 0.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
-    .{ .position = .{ 5.0, 5.0, 0.0 }, .texcoord = .{ 1.0, 1.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } },
-    .{ .position = .{ -5.0, 5.0, 0.0 }, .texcoord = .{ 0.0, 1.0 }, .color = .{ 1.0, 1.0, 0.0, 1.0 } },
-};
-
-pub const indices = [_]u32{ 0, 1, 2, 0, 2, 3 };
-
 pub const Context = struct {
     allocator: Allocator,
 
@@ -214,6 +182,8 @@ pub const Context = struct {
 
     index_buffer: Buffer,
     index_offset: usize,
+
+    geometries: [geometry_max_count]GeometryData,
 
     desired_extent: glfw.Window.Size,
     desired_extent_generation: u32,
@@ -310,7 +280,7 @@ pub const Context = struct {
         // create buffers
         self.vertex_buffer = try Buffer.init(
             self,
-            @sizeOf(@TypeOf(vertices)),
+            @sizeOf(Vertex) * 1024 * 1024,
             .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             .{ .device_local_bit = true },
             .{ .bind_on_create = true },
@@ -320,7 +290,7 @@ pub const Context = struct {
 
         self.index_buffer = try Buffer.init(
             self,
-            @sizeOf(@TypeOf(indices)),
+            @sizeOf(u32) * 1024 * 1024,
             .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             .{ .device_local_bit = true },
             .{ .bind_on_create = true },
@@ -328,18 +298,10 @@ pub const Context = struct {
         self.index_offset = 0;
         errdefer self.index_buffer.deinit();
 
-        // upload data to buffers
-        try self.uploadDataRegion(&self.vertex_buffer, vk.BufferCopy{
-            .src_offset = 0,
-            .dst_offset = 0,
-            .size = @sizeOf(@TypeOf(vertices)),
-        }, &std.mem.toBytes(vertices));
-
-        try self.uploadDataRegion(&self.index_buffer, vk.BufferCopy{
-            .src_offset = 0,
-            .dst_offset = 0,
-            .size = @sizeOf(@TypeOf(indices)),
-        }, &std.mem.toBytes(indices));
+        for (&self.geometries) |*geometry| {
+            geometry.*.id = null;
+            geometry.*.generation = null;
+        }
     }
 
     pub fn deinit(self: *Context) void {
@@ -487,34 +449,6 @@ pub const Context = struct {
         try self.material_shader.updateGlobalUniformData();
     }
 
-    pub fn updateMaterialState(self: *Context, data: GeometryRenderData) !void {
-        // const command_buffer = self.getCurrentCommandBuffer();
-        // self.shader.bind(command_buffer);
-
-        try self.material_shader.updateMaterialUniformData(data);
-    }
-
-    pub fn drawFrame(self: Context) void {
-        const command_buffer = self.getCurrentCommandBuffer();
-
-        self.device_api.cmdBindVertexBuffers(
-            command_buffer.handle,
-            0,
-            1,
-            @ptrCast(&self.vertex_buffer.handle),
-            @ptrCast(&[_]u64{0}),
-        );
-
-        self.device_api.cmdBindIndexBuffer(
-            command_buffer.handle,
-            self.index_buffer.handle,
-            0,
-            .uint32,
-        );
-
-        self.device_api.cmdDrawIndexed(command_buffer.handle, 6, 1, 0, 0, 0);
-    }
-
     pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !void {
         const internal_data = try self.allocator.create(TextureData);
         errdefer self.allocator.destroy(internal_data);
@@ -609,6 +543,151 @@ pub const Context = struct {
     pub fn destroyMaterial(self: *Context, material: *Material) void {
         if (material.internal_id != null) {
             self.material_shader.releaseResources(material);
+        }
+    }
+
+    pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
+        if (vertices.len == 0) {
+            return error.VerticesCannotBeEmpty;
+        }
+
+        var old_region: GeometryData = undefined;
+        var internal_data: ?*GeometryData = null;
+
+        const is_reupload = geometry.internal_id != null;
+        if (is_reupload) {
+            internal_data = &self.geometries[geometry.internal_id.?];
+
+            // take a copy of the old region
+            old_region = internal_data.?.*;
+        } else {
+            for (&self.geometries, 0..) |*slot, i| {
+                if (slot.id == null) {
+                    const id: u32 = @truncate(i);
+                    geometry.internal_id = id;
+                    slot.*.id = id;
+                    internal_data = slot;
+                    break;
+                }
+            }
+        }
+
+        if (internal_data) |data| {
+            // vertex data
+            data.vertex_buffer_offset = @truncate(self.vertex_offset);
+            data.vertex_count = @truncate(vertices.len);
+            data.vertex_size = @truncate(@sizeOf(Vertex) * vertices.len);
+
+            // upload data to buffers
+            try self.uploadDataRegion(
+                &self.vertex_buffer,
+                data.vertex_buffer_offset,
+                data.vertex_size,
+                std.mem.sliceAsBytes(vertices),
+            );
+
+            self.vertex_offset += data.vertex_size;
+
+            if (indices.len > 0) {
+                data.index_buffer_offset = @truncate(self.index_offset);
+                data.index_count = @truncate(indices.len);
+                data.index_size = @truncate(@sizeOf(u32) * indices.len);
+
+                try self.uploadDataRegion(
+                    &self.index_buffer,
+                    data.index_buffer_offset,
+                    data.index_size,
+                    std.mem.sliceAsBytes(indices),
+                );
+
+                self.index_offset += data.index_size;
+            }
+
+            data.generation = if (geometry.generation) |g| g +% 1 else 0;
+
+            if (is_reupload) {
+                self.freeDataRegion(
+                    &self.vertex_buffer,
+                    old_region.vertex_buffer_offset,
+                    old_region.vertex_size,
+                );
+
+                if (old_region.index_size > 0) {
+                    self.freeDataRegion(
+                        &self.index_buffer,
+                        old_region.index_buffer_offset,
+                        old_region.index_size,
+                    );
+                }
+            }
+        } else {
+            return error.FaildToReserveInternalData;
+        }
+    }
+
+    pub fn destroyGeometry(self: *Context, geometry: *Geometry) void {
+        if (geometry.internal_id != null) {
+            self.device_api.deviceWaitIdle(self.device) catch {
+                std.log.err("Could not destroy geometry {s}", .{geometry.name.slice()});
+            };
+
+            const internal_data = &self.geometries[geometry.internal_id.?];
+
+            self.freeDataRegion(
+                &self.vertex_buffer,
+                internal_data.vertex_buffer_offset,
+                internal_data.vertex_size,
+            );
+
+            if (internal_data.index_size > 0) {
+                self.freeDataRegion(
+                    &self.index_buffer,
+                    internal_data.index_buffer_offset,
+                    internal_data.index_size,
+                );
+            }
+
+            internal_data.* = std.mem.zeroes(GeometryData);
+            internal_data.id = null;
+            internal_data.generation = null;
+        }
+    }
+
+    pub fn drawGeometry(self: *Context, data: GeometryRenderData) !void {
+        const geometry: *Geometry = try Engine.instance.geometry_system.geometries.getColumnPtr(data.geometry, .geometry);
+
+        const command_buffer = self.getCurrentCommandBuffer();
+
+        self.material_shader.bind(command_buffer);
+
+        self.material_shader.setModel(data.model);
+
+        const material = if (Engine.instance.material_system.materials.isLiveHandle(geometry.material)) geometry.material //
+        else Engine.instance.material_system.getDefaultMaterial();
+
+        try self.material_shader.applyMaterial(material);
+
+        const buffer_data = self.geometries[geometry.internal_id.?];
+
+        self.device_api.cmdBindVertexBuffers(
+            command_buffer.handle,
+            0,
+            1,
+            @ptrCast(&self.vertex_buffer.handle),
+            @ptrCast(&[_]u64{buffer_data.vertex_buffer_offset}),
+        );
+
+        if (buffer_data.index_count > 0) {
+            self.device_api.cmdBindIndexBuffer(
+                command_buffer.handle,
+                self.index_buffer.handle,
+                buffer_data.index_buffer_offset,
+                .uint32,
+            );
+
+            self.device_api.cmdDrawIndexed(command_buffer.handle, buffer_data.index_count, 1, 0, 0, 0);
+        } else {
+            self.device_api.cmdDraw(command_buffer.handle, buffer_data.vertex_count, 1, 0, 0);
         }
     }
 
@@ -859,19 +938,30 @@ pub const Context = struct {
         }
     }
 
-    fn uploadDataRegion(self: *Context, dst: *Buffer, region: vk.BufferCopy, data: []const u8) !void {
+    fn uploadDataRegion(self: *Context, buffer: *Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, data: []const u8) !void {
         var staging_buffer = try Buffer.init(
             self,
-            dst.total_size,
+            buffer.total_size,
             .{ .transfer_src_bit = true },
             .{ .host_visible_bit = true, .host_coherent_bit = true },
             .{ .bind_on_create = true },
         );
         defer staging_buffer.deinit();
 
-        try staging_buffer.loadData(0, dst.total_size, .{}, data);
+        try staging_buffer.loadData(0, buffer.total_size, .{}, data);
 
-        try staging_buffer.copyTo(dst, self.graphics_command_pool, self.graphics_queue.handle, region);
+        try staging_buffer.copyTo(buffer, self.graphics_command_pool, self.graphics_queue.handle, vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = offset,
+            .size = size,
+        });
+    }
+
+    fn freeDataRegion(self: *Context, buffer: *Buffer, offset: vk.DeviceSize, size: vk.DeviceSize) void {
+        _ = self; // autofix
+        _ = buffer; // autofix
+        _ = offset; // autofix
+        _ = size; // autofix
     }
 };
 

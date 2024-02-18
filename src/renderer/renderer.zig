@@ -1,15 +1,27 @@
 const std = @import("std");
-const Context = @import("vulkan/context.zig").Context;
 const glfw = @import("glfw");
 const math = @import("zmath");
-const Allocator = std.mem.Allocator;
-const renderer_types = @import("types.zig");
+
+const Engine = @import("../engine.zig").Engine;
+const Context = @import("vulkan/context.zig").Context;
+const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
+
+const renderer_types = @import("renderer_types.zig");
+const resources_texture = @import("../resources/texture.zig");
+const resources_material = @import("../resources/material.zig");
+const resources_geomerty = @import("../resources/geometry.zig");
+
+const Vertex = renderer_types.Vertex;
+const RenderPacket = renderer_types.RenderPacket;
 const BeginFrameResult = renderer_types.BeginFrameResult;
 const GeometryRenderData = renderer_types.GeometryRenderData;
-const Engine = @import("../engine.zig").Engine;
-const Texture = @import("../resources/texture.zig").Texture;
-const Material = @import("../resources/material.zig").Material;
-const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
+
+const Texture = resources_texture.Texture;
+const Material = resources_material.Material;
+const Geometry = resources_geomerty.Geometry;
+
+const Allocator = std.mem.Allocator;
+
 const deg2rad = std.math.degreesToRadians;
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
@@ -25,9 +37,6 @@ pub const Renderer = struct {
     fov: f32,
     near_clip: f32,
     far_clip: f32,
-
-    // TODO: temporary
-    test_material: MaterialHandle,
 
     pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
         self.allocator = allocator;
@@ -62,9 +71,6 @@ pub const Renderer = struct {
         );
 
         self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
-
-        // TODO: temporary
-        self.test_material = MaterialHandle.nil;
     }
 
     pub fn deinit(self: *Renderer) void {
@@ -80,26 +86,17 @@ pub const Renderer = struct {
         try self.context.endFrame();
     }
 
-    pub fn drawFrame(self: *Renderer, delta_time: f32) !void {
-        switch (try self.beginFrame(delta_time)) {
+    pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
+        switch (try self.beginFrame(packet.delta_time)) {
             .resize => {
                 // NOTE: Skip rendering this frame.
             },
             .render => {
                 try self.context.updateGlobalState(self.projection, self.view);
 
-                if (self.test_material.id == MaterialHandle.nil.id) {
-                    self.test_material = try Engine.instance.material_system.acquireMaterialByName("test");
+                for (packet.geometries) |geometry| {
+                    try self.context.drawGeometry(geometry);
                 }
-
-                const data = GeometryRenderData{
-                    .model = math.mul(math.translation(-5, 0.0, 0.0), math.rotationY(-0.0)),
-                    .material = self.test_material,
-                };
-
-                try self.context.updateMaterialState(data);
-
-                self.context.drawFrame();
 
                 try self.endFrame();
             },
@@ -136,21 +133,13 @@ pub const Renderer = struct {
         self.context.destroyMaterial(material);
     }
 
-    // TODO: temporary
-    var choice: usize = 2;
-    const names = [_][]const u8{
-        "cobblestone",
-        "paving",
-        "paving2",
-    };
-    pub fn changeTexture(self: *Renderer) !void {
-        choice += 1;
-        choice %= names.len;
+    pub fn createGeometry(self: *Renderer, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
+        try self.context.createGeometry(geometry, vertices, indices);
+    }
 
-        const material = Engine.instance.material_system.materials.getColumnPtrAssumeLive(self.test_material, .material);
-
-        const prev_texture = material.diffuse_map.texture;
-        material.diffuse_map.texture = try Engine.instance.texture_system.acquireTextureByName(names[choice], true);
-        Engine.instance.texture_system.releaseTextureByHandle(prev_texture);
+    pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {
+        if (geometry.internal_id != null) {
+            self.context.destroyGeometry(geometry);
+        }
     }
 };

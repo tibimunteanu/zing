@@ -21,10 +21,7 @@ pub const TextureHandle = TexturePool.Handle;
 pub const TextureSystem = struct {
     pub const default_texture_name = "default";
 
-    pub const Config = struct {
-        // TODO: set handle and cycle bits instead and bring the pool and handle types inside
-        max_texture_count: u32,
-    };
+    pub const Config = struct {};
 
     allocator: Allocator,
     config: Config,
@@ -53,7 +50,7 @@ pub const TextureSystem = struct {
         self.textures.deinit();
     }
 
-    pub fn acquireTextureByName(self: *TextureSystem, name: []const u8, auto_release: bool) !TextureHandle {
+    pub fn acquireTextureByName(self: *TextureSystem, name: []const u8, options: struct { auto_release: bool }) !TextureHandle {
         if (self.lookup.get(name)) |handle| {
             return self.acquireTextureByHandle(handle);
         } else {
@@ -63,7 +60,7 @@ pub const TextureSystem = struct {
             const handle = try self.textures.add(.{
                 .texture = texture,
                 .reference_count = 1,
-                .auto_release = auto_release,
+                .auto_release = options.auto_release,
             });
             errdefer self.textures.removeAssumeLive(handle);
 
@@ -136,46 +133,6 @@ pub const TextureSystem = struct {
     }
 
     // utils
-    fn loadTexture(self: *TextureSystem, name: []const u8, texture: *Texture) !void {
-        stbi.init(self.allocator);
-        defer stbi.deinit();
-
-        const path_format = "assets/textures/{s}.{s}";
-
-        const texture_path = try std.fmt.allocPrintZ(self.allocator, path_format, .{ name, "png" });
-        defer self.allocator.free(texture_path);
-
-        stbi.setFlipVerticallyOnLoad(true);
-
-        var image = try stbi.Image.loadFromFile(texture_path, 4);
-        defer image.deinit();
-
-        var has_transparency = false;
-        var i: u32 = 0;
-        const total_size: usize = image.width * image.height * image.num_components;
-        while (i < total_size) : (i += image.num_components) {
-            const a: u8 = image.data[i + 3];
-            if (a < 255) {
-                has_transparency = true;
-                break;
-            }
-        }
-
-        var temp_texture = Texture.init();
-        temp_texture.name = try TextureName.fromSlice(name);
-        temp_texture.width = image.width;
-        temp_texture.height = image.height;
-        temp_texture.channel_count = @truncate(image.num_components);
-        temp_texture.has_transparency = has_transparency;
-        temp_texture.generation = if (texture.generation) |g| g +% 1 else 0;
-
-        try Engine.instance.renderer.createTexture(&temp_texture, image.data);
-        errdefer Engine.instance.renderer.destroyTexture(&temp_texture);
-
-        Engine.instance.renderer.destroyTexture(texture);
-        texture.* = temp_texture;
-    }
-
     fn createDefaultTextures(self: *TextureSystem) !void {
         const tex_dimension: u32 = 64;
         const channels: u32 = 4;
@@ -214,6 +171,46 @@ pub const TextureSystem = struct {
         });
 
         try self.lookup.put(default_texture_name, self.default_texture);
+    }
+
+    fn loadTexture(self: *TextureSystem, name: []const u8, texture: *Texture) !void {
+        stbi.init(self.allocator);
+        defer stbi.deinit();
+
+        const path_format = "assets/textures/{s}.{s}";
+
+        const texture_path = try std.fmt.allocPrintZ(self.allocator, path_format, .{ name, "png" });
+        defer self.allocator.free(texture_path);
+
+        stbi.setFlipVerticallyOnLoad(true);
+
+        var image = try stbi.Image.loadFromFile(texture_path, 4);
+        defer image.deinit();
+
+        var has_transparency = false;
+        var i: u32 = 0;
+        const total_size: usize = image.width * image.height * image.num_components;
+        while (i < total_size) : (i += image.num_components) {
+            const a: u8 = image.data[i + 3];
+            if (a < 255) {
+                has_transparency = true;
+                break;
+            }
+        }
+
+        var temp_texture = Texture.init();
+        temp_texture.name = try TextureName.fromSlice(name);
+        temp_texture.width = image.width;
+        temp_texture.height = image.height;
+        temp_texture.channel_count = @truncate(image.num_components);
+        temp_texture.has_transparency = has_transparency;
+        temp_texture.generation = if (texture.generation) |g| g +% 1 else 0;
+
+        try Engine.instance.renderer.createTexture(&temp_texture, image.data);
+        errdefer Engine.instance.renderer.destroyTexture(&temp_texture);
+
+        Engine.instance.renderer.destroyTexture(texture);
+        texture.* = temp_texture;
     }
 
     fn unloadTexture(self: *TextureSystem, handle: TextureHandle) void {

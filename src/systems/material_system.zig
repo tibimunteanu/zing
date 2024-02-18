@@ -3,6 +3,7 @@ const pool = @import("zpool");
 const math = @import("zmath");
 
 const Engine = @import("../engine.zig").Engine;
+const TextureSystem = @import("texture_system.zig").TextureSystem;
 
 const resources_material = @import("../resources/material.zig");
 const resources_texture = @import("../resources/texture.zig");
@@ -23,16 +24,46 @@ pub const MaterialHandle = MaterialPool.Handle;
 pub const MaterialSystem = struct {
     pub const default_material_name = "default";
 
-    pub const Config = struct {
-        // TODO: set handle and cycle bits instead and bring the pool and handle types inside
-        max_material_count: u32,
-    };
+    pub const Config = struct {};
 
     pub const MaterialConfig = struct {
-        name: MaterialName,
-        diffuse_color: math.Vec,
-        diffuse_map_name: TextureName,
+        parsed: ?std.json.Parsed(MaterialConfig) = null,
+
+        name: []const u8 = "New Material",
+        diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
+        diffuse_map_name: []const u8 = TextureSystem.default_texture_name,
         auto_release: bool = false,
+
+        pub fn initFromFile(allocator: Allocator, path: []const u8) !MaterialConfig {
+            const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
+            defer file.close();
+
+            const stat = try file.stat();
+
+            const content: [stat.size]u8 = undefined;
+            try file.readAll(&content);
+
+            const parsed = try std.json.parseFromSlice(
+                MaterialConfig,
+                allocator,
+                content,
+                .{
+                    .allocate = .alloc_always,
+                    .ignore_unknown_fields = true,
+                },
+            );
+            errdefer parsed.deinit();
+
+            parsed.value.parsed = parsed;
+
+            return parsed.value;
+        }
+
+        pub fn deinit(self: *MaterialConfig) void {
+            if (self.parsed) |parsed| {
+                parsed.deinit();
+            }
+        }
     };
 
     allocator: Allocator,
@@ -53,7 +84,7 @@ pub const MaterialSystem = struct {
 
         try self.lookup.ensureTotalCapacity(@truncate(self.materials.capacity()));
 
-        try self.createDefaultMaterials();
+        try self.createDefaultMaterial();
     }
 
     pub fn deinit(self: *MaterialSystem) void {
@@ -90,7 +121,8 @@ pub const MaterialSystem = struct {
             const config_path = try std.fmt.allocPrintZ(self.allocator, path_format, .{name});
             defer self.allocator.free(config_path);
 
-            const config = try self.loadConfigFile(config_path);
+            const config = try MaterialConfig.initFromFile(config_path);
+            defer config.deinit();
 
             return self.acquireMaterialByConfig(config);
         }
@@ -156,64 +188,7 @@ pub const MaterialSystem = struct {
     }
 
     // utils
-    fn loadConfigFile(self: MaterialSystem, path: []const u8) !MaterialConfig {
-        const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
-        defer file.close();
-
-        const stat = try file.stat();
-        const content = try file.readToEndAlloc(self.allocator, stat.size);
-        defer self.allocator.free(content);
-
-        const parsed = try std.json.parseFromSlice(
-            struct {
-                name: []const u8,
-                diffuse_color: math.Vec,
-                diffuse_map_name: []const u8,
-                auto_release: bool = false,
-            },
-            self.allocator,
-            content,
-            .{
-                .allocate = .alloc_always,
-                .ignore_unknown_fields = true,
-            },
-        );
-        defer parsed.deinit();
-
-        return MaterialConfig{
-            .name = try MaterialName.fromSlice(parsed.value.name),
-            .diffuse_color = parsed.value.diffuse_color,
-            .diffuse_map_name = try TextureName.fromSlice(parsed.value.diffuse_map_name),
-            .auto_release = parsed.value.auto_release,
-        };
-    }
-
-    fn loadMaterial(self: *MaterialSystem, config: MaterialConfig, material: *Material) !void {
-        _ = self;
-        var temp_material = Material.init();
-        temp_material.name = config.name;
-        temp_material.diffuse_color = config.diffuse_color;
-
-        if (config.diffuse_map_name.len > 0) {
-            temp_material.diffuse_map = TextureMap{
-                .use = .map_diffuse,
-                .texture = Engine.instance.texture_system.acquireTextureByName(
-                    config.diffuse_map_name.slice(),
-                    true,
-                ) catch Engine.instance.texture_system.getDefaultTexture(),
-            };
-        }
-
-        temp_material.generation = if (material.generation) |g| g +% 1 else 0;
-
-        try Engine.instance.renderer.createMaterial(&temp_material);
-        errdefer Engine.instance.renderer.destroyMaterial(&temp_material);
-
-        Engine.instance.renderer.destroyMaterial(material);
-        material.* = temp_material;
-    }
-
-    fn createDefaultMaterials(self: *MaterialSystem) !void {
+    fn createDefaultMaterial(self: *MaterialSystem) !void {
         var material = Material.init();
         material.name = try MaterialName.fromSlice(default_material_name);
         material.diffuse_color = math.Vec{ 1, 1, 1, 1 };
@@ -233,6 +208,31 @@ pub const MaterialSystem = struct {
         });
 
         try self.lookup.put(default_material_name, self.default_material);
+    }
+
+    fn loadMaterial(self: *MaterialSystem, config: MaterialConfig, material: *Material) !void {
+        _ = self;
+        var temp_material = Material.init();
+        temp_material.name = try MaterialName.fromSlice(config.name);
+        temp_material.diffuse_color = config.diffuse_color;
+
+        if (config.diffuse_map_name.len > 0) {
+            temp_material.diffuse_map = TextureMap{
+                .use = .map_diffuse,
+                .texture = Engine.instance.texture_system.acquireTextureByName(
+                    config.diffuse_map_name,
+                    .{ .auto_release = true },
+                ) catch Engine.instance.texture_system.getDefaultTexture(),
+            };
+        }
+
+        temp_material.generation = if (material.generation) |g| g +% 1 else 0;
+
+        try Engine.instance.renderer.createMaterial(&temp_material);
+        errdefer Engine.instance.renderer.destroyMaterial(&temp_material);
+
+        Engine.instance.renderer.destroyMaterial(material);
+        material.* = temp_material;
     }
 
     fn unloadMaterial(self: *MaterialSystem, handle: MaterialHandle) void {

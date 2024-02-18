@@ -6,15 +6,16 @@ const Engine = @import("../../engine.zig").Engine;
 const Buffer = @import("buffer.zig").Buffer;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const TextureHandle = @import("../../systems/texture_system.zig").TextureHandle;
+const MaterialHandle = @import("../../systems/material_system.zig").MaterialHandle;
 
-const renderer_types = @import("../types.zig");
 const renderer_context = @import("context.zig");
+const renderer_types = @import("../renderer_types.zig");
 const vulkan_types = @import("vulkan_types.zig");
 const resources_material = @import("../../resources/material.zig");
 const resources_texture = @import("../../resources/texture.zig");
 
 const Context = renderer_context.Context;
-const Vertex = renderer_context.Vertex;
+const Vertex = renderer_types.Vertex;
 const GlobalUniformData = renderer_types.GlobalUniformData;
 const MaterialUniformData = renderer_types.MaterialUniformData;
 const GeometryRenderData = renderer_types.GeometryRenderData;
@@ -24,9 +25,9 @@ const TextureUse = resources_texture.TextureUse;
 const Material = resources_material.Material;
 const Allocator = std.mem.Allocator;
 
+const material_shader_instance_max_count = vulkan_types.material_shader_instance_max_count;
 const material_shader_descriptor_count = vulkan_types.material_shader_descriptor_count;
 const material_shader_sampler_count = vulkan_types.material_shader_sampler_count;
-const max_material_count = vulkan_types.max_material_count;
 
 const shader_path_format = "assets/shaders/{s}.{s}.spv";
 const material_shader_name = "material_shader";
@@ -53,7 +54,7 @@ pub const MaterialShader = struct {
     material_uniform_buffer: Buffer,
     material_uniform_buffer_index: ?u32,
 
-    instance_states: [max_material_count]MaterialShaderInstanceState,
+    instance_states: [material_shader_instance_max_count]MaterialShaderInstanceState,
 
     sampler_uses: [material_shader_sampler_count]TextureUse,
 
@@ -168,11 +169,11 @@ pub const MaterialShader = struct {
         const material_ubo_pool_sizes = [_]vk.DescriptorPoolSize{
             vk.DescriptorPoolSize{
                 .type = .uniform_buffer,
-                .descriptor_count = @intCast(max_material_count),
+                .descriptor_count = @intCast(material_shader_instance_max_count),
             },
             vk.DescriptorPoolSize{
                 .type = .combined_image_sampler,
-                .descriptor_count = material_shader_sampler_count * @as(u32, @intCast(max_material_count)),
+                .descriptor_count = material_shader_sampler_count * @as(u32, @intCast(material_shader_instance_max_count)),
             },
         };
 
@@ -182,7 +183,7 @@ pub const MaterialShader = struct {
                 .flags = .{ .free_descriptor_set_bit = true },
                 .pool_size_count = material_ubo_pool_sizes.len,
                 .p_pool_sizes = &material_ubo_pool_sizes,
-                .max_sets = @intCast(max_material_count),
+                .max_sets = @intCast(material_shader_instance_max_count),
             },
             null,
         );
@@ -196,12 +197,39 @@ pub const MaterialShader = struct {
             .p_scissors = undefined,
         };
 
+        const binding_description = vk.VertexInputBindingDescription{
+            .binding = 0,
+            .stride = @sizeOf(Vertex),
+            .input_rate = .vertex,
+        };
+
+        const attribute_description = [_]vk.VertexInputAttributeDescription{
+            .{
+                .binding = 0,
+                .location = 0,
+                .format = .r32g32b32_sfloat,
+                .offset = @offsetOf(Vertex, "position"),
+            },
+            .{
+                .binding = 0,
+                .location = 1,
+                .format = .r32g32_sfloat,
+                .offset = @offsetOf(Vertex, "texcoord"),
+            },
+            .{
+                .binding = 0,
+                .location = 2,
+                .format = .r32g32b32_sfloat,
+                .offset = @offsetOf(Vertex, "color"),
+            },
+        };
+
         const vertex_input_state = vk.PipelineVertexInputStateCreateInfo{
             .flags = .{},
             .vertex_binding_description_count = 1,
-            .p_vertex_binding_descriptions = @ptrCast(&Vertex.binding_description),
-            .vertex_attribute_description_count = Vertex.attribute_description.len,
-            .p_vertex_attribute_descriptions = &Vertex.attribute_description,
+            .p_vertex_binding_descriptions = @ptrCast(&binding_description),
+            .vertex_attribute_description_count = attribute_description.len,
+            .p_vertex_attribute_descriptions = &attribute_description,
         };
 
         const input_assembly_state = vk.PipelineInputAssemblyStateCreateInfo{
@@ -358,7 +386,7 @@ pub const MaterialShader = struct {
 
         self.material_uniform_buffer = try Buffer.init(
             context,
-            @sizeOf(MaterialUniformData) * max_material_count,
+            @sizeOf(MaterialUniformData) * material_shader_instance_max_count,
             .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
             .{
                 .device_local_bit = self.context.physical_device.supports_local_host_visible,
@@ -442,8 +470,7 @@ pub const MaterialShader = struct {
         );
     }
 
-    pub fn updateMaterialUniformData(self: *MaterialShader, data: GeometryRenderData) !void {
-        const image_index = self.context.swapchain.image_index;
+    pub fn setModel(self: *MaterialShader, model: math.Mat) void {
         const command_buffer = self.context.getCurrentCommandBuffer();
 
         self.context.device_api.cmdPushConstants(
@@ -452,20 +479,24 @@ pub const MaterialShader = struct {
             .{ .vertex_bit = true },
             0,
             @sizeOf(math.Mat),
-            @ptrCast(&data.model),
+            @ptrCast(&model),
         );
+    }
 
-        // obtain material data
+    pub fn applyMaterial(self: *MaterialShader, material: MaterialHandle) !void {
+        const image_index = self.context.swapchain.image_index;
+        const command_buffer = self.context.getCurrentCommandBuffer();
+
         // if the material hasn't been loaded yet, use the default
-        var materialHandle = data.material;
-        if (!Engine.instance.material_system.materials.isLiveHandle(data.material)) {
+        var materialHandle = material;
+        if (!Engine.instance.material_system.materials.isLiveHandle(material)) {
             materialHandle = Engine.instance.material_system.getDefaultMaterial();
         }
 
-        const material = Engine.instance.material_system.materials.getColumnPtrAssumeLive(materialHandle, .material);
+        const p_material = Engine.instance.material_system.materials.getColumnPtrAssumeLive(materialHandle, .material);
 
-        const material_state = &self.instance_states[material.internal_id.?];
-        const material_descriptor_set = material_state.descriptor_sets[image_index];
+        const p_material_state = &self.instance_states[p_material.internal_id.?];
+        const material_descriptor_set = p_material_state.descriptor_sets[image_index];
 
         var descriptor_writes: [material_shader_descriptor_count]vk.WriteDescriptorSet = undefined;
         var write_count: u32 = 0;
@@ -473,17 +504,17 @@ pub const MaterialShader = struct {
 
         // descriptor 0 - uniform buffer
         const range: u32 = @sizeOf(MaterialUniformData);
-        const offset: vk.DeviceSize = @sizeOf(MaterialUniformData) * material.internal_id.?;
+        const offset: vk.DeviceSize = @sizeOf(MaterialUniformData) * p_material.internal_id.?;
 
         const material_uniform_data = MaterialUniformData{
-            .diffuse_color = material.diffuse_color,
+            .diffuse_color = p_material.diffuse_color,
         };
 
         try self.material_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(material_uniform_data));
 
         // only do this if the descriptor has not yet been updated
-        const descriptor_material_generation = &material_state.descriptor_states[dst_binding].generations[image_index];
-        if (descriptor_material_generation.* == null or descriptor_material_generation.* != material.generation) {
+        const descriptor_material_generation = &p_material_state.descriptor_states[dst_binding].generations[image_index];
+        if (descriptor_material_generation.* == null or descriptor_material_generation.* != p_material.generation) {
             descriptor_writes[write_count] = vk.WriteDescriptorSet{
                 .dst_set = material_descriptor_set,
                 .dst_binding = dst_binding,
@@ -500,22 +531,20 @@ pub const MaterialShader = struct {
             };
             write_count += 1;
 
-            descriptor_material_generation.* = material.generation;
+            descriptor_material_generation.* = p_material.generation;
         }
         dst_binding += 1;
 
         const sampler_count: u32 = 1;
 
         for (0..sampler_count) |sampler_index| {
-            const descriptor_texture_handle = &material_state.descriptor_states[dst_binding].handles[image_index];
-            const descriptor_texture_generation = &material_state.descriptor_states[dst_binding].generations[image_index];
+            const descriptor_texture_handle = &p_material_state.descriptor_states[dst_binding].handles[image_index];
+            const descriptor_texture_generation = &p_material_state.descriptor_states[dst_binding].generations[image_index];
 
-            const sampler_use = self.sampler_uses[sampler_index];
-            var texture_handle = TextureHandle.nil;
-            switch (sampler_use) {
-                .map_diffuse => texture_handle = material.diffuse_map.texture,
+            var texture_handle = switch (self.sampler_uses[sampler_index]) {
+                .map_diffuse => p_material.diffuse_map.texture,
                 else => return error.UnableToBindSamplerToUnknownUse,
-            }
+            };
 
             // if the texture hasn't been loaded yet, use the default
             if (!Engine.instance.texture_system.textures.isLiveHandle(texture_handle)) {
@@ -613,6 +642,10 @@ pub const MaterialShader = struct {
 
     pub fn releaseResources(self: *MaterialShader, material: *Material) void {
         const instance_state = &self.instance_states[material.internal_id.?];
+
+        self.context.device_api.deviceWaitIdle(self.context.device) catch {
+            std.log.err("Could not free descriptor set for material: {s}", .{material.name.slice()});
+        };
 
         self.context.device_api.freeDescriptorSets(
             self.context.device,

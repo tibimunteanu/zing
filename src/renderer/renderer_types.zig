@@ -1,7 +1,7 @@
 const std = @import("std");
 const math = @import("zmath");
 
-const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
+const GeometryHandle = @import("../systems/geometry_system.zig").GeometryHandle;
 
 pub const BeginFrameResult = enum {
     render,
@@ -22,7 +22,18 @@ pub const MaterialUniformData = struct {
     _reserved_2: math.Vec = undefined,
 };
 
+pub const Vertex = struct {
+    position: [3]f32,
+    texcoord: [2]f32,
+    color: [4]f32,
+};
+
 pub const GeometryRenderData = struct {
     model: math.Mat,
-    material: MaterialHandle,
+    geometry: GeometryHandle,
+};
+
+pub const RenderPacket = struct {
+    delta_time: f32,
+    geometries: []const GeometryRenderData,
 };

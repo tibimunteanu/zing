@@ -4,8 +4,16 @@ const glfw = @import("glfw");
 const Renderer = @import("renderer/renderer.zig").Renderer;
 const TextureSystem = @import("systems/texture_system.zig").TextureSystem;
 const MaterialSystem = @import("systems/material_system.zig").MaterialSystem;
+const GeometrySystem = @import("systems/geometry_system.zig").GeometrySystem;
+const GeometryHandle = @import("systems/geometry_system.zig").GeometryHandle;
 const math = @import("zmath");
 const utils = @import("utils.zig");
+
+const renderer_types = @import("renderer/renderer_types.zig");
+
+const RenderPacket = renderer_types.RenderPacket;
+const GeometryRenderData = renderer_types.GeometryRenderData;
+
 const Allocator = std.mem.Allocator;
 
 fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
@@ -17,11 +25,22 @@ pub const Engine = struct {
 
     const target_frame_seconds: f64 = 1.0 / 60.0;
 
+    // TODO: temporary
+    var choice: usize = 2;
+    const names = [_][]const u8{
+        "cobblestone",
+        "paving",
+        "paving2",
+    };
+    test_geometry: GeometryHandle,
+    // TODO: end temporary
+
     allocator: Allocator,
     window: glfw.Window,
     renderer: *Renderer,
     texture_system: *TextureSystem,
     material_system: *MaterialSystem,
+    geometry_system: *GeometrySystem,
     last_time: f64,
     frame_count: f64,
 
@@ -60,17 +79,29 @@ pub const Engine = struct {
         instance.texture_system = try allocator.create(TextureSystem);
         errdefer allocator.destroy(instance.texture_system);
 
-        try instance.texture_system.init(allocator, .{ .max_texture_count = 1 });
+        try instance.texture_system.init(allocator, .{});
         errdefer instance.texture_system.deinit();
 
         instance.material_system = try allocator.create(MaterialSystem);
         errdefer allocator.destroy(instance.material_system);
 
-        try instance.material_system.init(allocator, .{ .max_material_count = 1 });
+        try instance.material_system.init(allocator, .{});
         errdefer instance.material_system.deinit();
+
+        instance.geometry_system = try allocator.create(GeometrySystem);
+        errdefer allocator.destroy(instance.geometry_system);
+
+        try instance.geometry_system.init(allocator, .{});
+        errdefer instance.geometry_system.deinit();
+
+        // TODO: temporary
+        instance.test_geometry = instance.geometry_system.getDefaultGeometry();
+        // TODO: end temporary
     }
 
     pub fn deinit() void {
+        instance.geometry_system.deinit();
+        instance.allocator.destroy(instance.geometry_system);
         instance.material_system.deinit();
         instance.allocator.destroy(instance.material_system);
         instance.texture_system.deinit();
@@ -137,11 +168,33 @@ pub const Engine = struct {
 
                 const pressN = instance.window.getKey(.n);
                 if (pressN == .press and prevPressN == .release) {
-                    try instance.renderer.changeTexture();
+                    choice += 1;
+                    choice %= names.len;
+
+                    if (instance.geometry_system.geometries.getColumnPtrIfLive(instance.test_geometry, .geometry)) |geometry| {
+                        const material = instance.material_system.materials.getColumnPtrAssumeLive(geometry.material, .material);
+
+                        const prev_texture = material.diffuse_map.texture;
+                        material.diffuse_map.texture = try instance.texture_system.acquireTextureByName(
+                            names[choice],
+                            .{ .auto_release = true },
+                        );
+                        instance.texture_system.releaseTextureByHandle(prev_texture);
+                    }
                 }
                 prevPressN = pressN;
 
-                try instance.renderer.drawFrame(delta_time);
+                const packet = RenderPacket{
+                    .delta_time = delta_time,
+                    .geometries = &[_]GeometryRenderData{
+                        GeometryRenderData{
+                            .model = math.mul(math.translation(-5.0, 0.0, 0.0), math.rotationY(0.0)),
+                            .geometry = instance.test_geometry,
+                        },
+                    },
+                };
+
+                try instance.renderer.drawFrame(packet);
 
                 // const frame_end_time = glfw.getTime();
                 // const frame_elapsed_time = frame_end_time - frame_start_time;
