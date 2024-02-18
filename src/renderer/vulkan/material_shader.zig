@@ -358,7 +358,7 @@ pub const MaterialShader = struct {
 
         self.material_uniform_buffer = try Buffer.init(
             context,
-            @sizeOf(MaterialUniformData) * max_material_count * 3, // TODO: the * 3 may not be needed. think about it
+            @sizeOf(MaterialUniformData) * max_material_count,
             .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
             .{
                 .device_local_bit = self.context.physical_device.supports_local_host_visible,
