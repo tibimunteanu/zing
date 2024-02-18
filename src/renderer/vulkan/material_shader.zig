@@ -619,7 +619,9 @@ pub const MaterialShader = struct {
             self.material_descriptor_pool,
             3,
             &instance_state.descriptor_sets,
-        ) catch unreachable;
+        ) catch {
+            std.log.err("Could not free descriptor set for material: {s}", .{material.name.slice()});
+        };
 
         for (&instance_state.descriptor_states) |*descriptor_state| {
             for (0..3) |i| {
