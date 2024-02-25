@@ -98,9 +98,9 @@ pub const Engine = struct {
         // instance.test_geometry = instance.geometry_system.getDefaultGeometry();
         var plane_config = try GeometrySystem.GeometryConfig.initPlane(
             allocator,
-            "plane",
-            "diffuse",
             .{
+                .name = "plane",
+                .material_name = "diffuse",
                 .width = 20,
                 .height = 20,
                 .segment_count_x = 4,

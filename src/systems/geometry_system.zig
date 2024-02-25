@@ -39,9 +39,9 @@ pub const GeometrySystem = struct {
 
         pub fn initPlane(
             allocator: Allocator,
-            name: []const u8,
-            material_name: []const u8,
             options: struct {
+                name: []const u8,
+                material_name: []const u8,
                 width: f32,
                 height: f32,
                 segment_count_x: u32,
@@ -62,7 +62,7 @@ pub const GeometrySystem = struct {
                 return error.InvalidTiling;
             }
 
-            if (name.len == 0) {
+            if (options.name.len == 0) {
                 return error.NameCannotBeEmpty;
             }
 
@@ -139,9 +139,10 @@ pub const GeometrySystem = struct {
                 }
             }
 
-            self.name = try allocator.dupe(u8, name);
+            self.name = try allocator.dupe(u8, options.name);
 
-            self.material_name = try allocator.dupe(u8, if (material_name.len > 0) material_name else "default");
+            self.material_name = try allocator.dupe(u8, //
+                if (options.material_name.len > 0) options.material_name else "default");
 
             return self;
         }
