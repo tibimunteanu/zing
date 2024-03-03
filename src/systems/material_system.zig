@@ -5,11 +5,13 @@ const math = @import("zmath");
 const Engine = @import("../engine.zig").Engine;
 const TextureSystem = @import("texture_system.zig").TextureSystem;
 
-const resources_material = @import("../resources/material.zig");
-const resources_texture = @import("../resources/texture.zig");
+const resources_texture = @import("../resources/image_resource.zig");
+const resources_material = @import("../resources/material_resource.zig");
 
 const Material = resources_material.Material;
 const MaterialName = resources_material.MaterialName;
+const MaterialConfig = resources_material.MaterialConfig;
+const MaterialResource = resources_material.MaterialResource;
 const TextureName = resources_texture.TextureName;
 const TextureMap = resources_texture.TextureMap;
 const Allocator = std.mem.Allocator;
@@ -25,32 +27,6 @@ pub const MaterialSystem = struct {
     pub const default_material_name = "default";
 
     pub const Config = struct {};
-
-    pub const MaterialConfig = struct {
-        name: []const u8 = "New Material",
-        diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
-        diffuse_map_name: []const u8 = TextureSystem.default_texture_name,
-        auto_release: bool = false,
-
-        pub fn initFromFile(allocator: Allocator, path: []const u8) !std.json.Parsed(MaterialConfig) {
-            const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
-            defer file.close();
-
-            const stat = try file.stat();
-            const content = try file.readToEndAlloc(allocator, stat.size);
-            defer allocator.free(content);
-
-            return try std.json.parseFromSlice(
-                MaterialConfig,
-                allocator,
-                content,
-                .{
-                    .allocate = .alloc_always,
-                    .ignore_unknown_fields = true,
-                },
-            );
-        }
-    };
 
     allocator: Allocator,
     config: Config,
@@ -102,15 +78,10 @@ pub const MaterialSystem = struct {
         if (self.lookup.get(name)) |handle| {
             return self.acquireMaterialByHandle(handle);
         } else {
-            const path_format = "assets/materials/{s}.mat.json";
+            var material_resource = try MaterialResource.init(self.allocator, name);
+            defer material_resource.deinit();
 
-            const config_path = try std.fmt.allocPrintZ(self.allocator, path_format, .{name});
-            defer self.allocator.free(config_path);
-
-            var parsed_config = try MaterialConfig.initFromFile(self.allocator, config_path);
-            defer parsed_config.deinit();
-
-            return self.acquireMaterialByConfig(parsed_config.value);
+            return self.acquireMaterialByConfig(material_resource.config.value);
         }
     }
 

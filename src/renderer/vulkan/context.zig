@@ -15,12 +15,12 @@ const Image = @import("image.zig").Image;
 
 const renderer_types = @import("../renderer_types.zig");
 const vulkan_types = @import("vulkan_types.zig");
-const resources_texture = @import("../../resources/texture.zig");
-const resources_material = @import("../../resources/material.zig");
-const resources_geomerty = @import("../../resources/geometry.zig");
+const resources_image = @import("../../resources/image_resource.zig");
+const resources_material = @import("../../resources/material_resource.zig");
+const resources_geomerty = @import("../../resources/geometry_resource.zig");
 
-const Texture = resources_texture.Texture;
-const TextureName = resources_texture.TextureName;
+const Texture = resources_image.Texture;
+const TextureName = resources_image.TextureName;
 const Material = resources_material.Material;
 const Geometry = resources_geomerty.Geometry;
 

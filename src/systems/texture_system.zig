@@ -1,14 +1,14 @@
 const std = @import("std");
-const stbi = @import("zstbi");
 const pool = @import("zpool");
 
 const Engine = @import("../engine.zig").Engine;
 const Renderer = @import("../renderer/renderer.zig").Renderer;
 
-const resources_texture = @import("../resources/texture.zig");
+const resources_image = @import("../resources/image_resource.zig");
 
-const Texture = resources_texture.Texture;
-const TextureName = resources_texture.TextureName;
+const Texture = resources_image.Texture;
+const TextureName = resources_image.TextureName;
+const ImageResource = resources_image.ImageResource;
 const Allocator = std.mem.Allocator;
 
 pub const TexturePool = pool.Pool(16, 16, Texture, struct {
@@ -174,24 +174,14 @@ pub const TextureSystem = struct {
     }
 
     fn loadTexture(self: *TextureSystem, name: []const u8, texture: *Texture) !void {
-        stbi.init(self.allocator);
-        defer stbi.deinit();
-
-        const path_format = "assets/textures/{s}.{s}";
-
-        const texture_path = try std.fmt.allocPrintZ(self.allocator, path_format, .{ name, "png" });
-        defer self.allocator.free(texture_path);
-
-        stbi.setFlipVerticallyOnLoad(true);
-
-        var image = try stbi.Image.loadFromFile(texture_path, 4);
-        defer image.deinit();
+        var resource = try ImageResource.init(self.allocator, name);
+        defer resource.deinit();
 
         var has_transparency = false;
         var i: u32 = 0;
-        const total_size: usize = image.width * image.height * image.num_components;
-        while (i < total_size) : (i += image.num_components) {
-            const a: u8 = image.data[i + 3];
+        const total_size: usize = resource.image.width * resource.image.height * resource.image.num_components;
+        while (i < total_size) : (i += resource.image.num_components) {
+            const a: u8 = resource.image.data[i + 3];
             if (a < 255) {
                 has_transparency = true;
                 break;
@@ -200,13 +190,13 @@ pub const TextureSystem = struct {
 
         var temp_texture = Texture.init();
         temp_texture.name = try TextureName.fromSlice(name);
-        temp_texture.width = image.width;
-        temp_texture.height = image.height;
-        temp_texture.channel_count = @truncate(image.num_components);
+        temp_texture.width = resource.image.width;
+        temp_texture.height = resource.image.height;
+        temp_texture.channel_count = resource.image.num_components;
         temp_texture.has_transparency = has_transparency;
         temp_texture.generation = if (texture.generation) |g| g +% 1 else 0;
 
-        try Engine.instance.renderer.createTexture(&temp_texture, image.data);
+        try Engine.instance.renderer.createTexture(&temp_texture, resource.image.data);
         errdefer Engine.instance.renderer.destroyTexture(&temp_texture);
 
         Engine.instance.renderer.destroyTexture(texture);

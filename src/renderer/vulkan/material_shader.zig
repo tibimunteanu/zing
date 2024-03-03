@@ -11,8 +11,9 @@ const MaterialHandle = @import("../../systems/material_system.zig").MaterialHand
 const renderer_context = @import("context.zig");
 const renderer_types = @import("../renderer_types.zig");
 const vulkan_types = @import("vulkan_types.zig");
-const resources_material = @import("../../resources/material.zig");
-const resources_texture = @import("../../resources/texture.zig");
+const resources_material = @import("../../resources/material_resource.zig");
+const resources_image = @import("../../resources/image_resource.zig");
+const BinaryResource = @import("../../resources/binary_resource.zig").BinaryResource;
 
 const Context = renderer_context.Context;
 const Vertex = renderer_types.Vertex;
@@ -21,7 +22,7 @@ const MaterialUniformData = renderer_types.MaterialUniformData;
 const GeometryRenderData = renderer_types.GeometryRenderData;
 const MaterialShaderInstanceState = vulkan_types.MaterialShaderInstanceState;
 const TextureData = vulkan_types.TextureData;
-const TextureUse = resources_texture.TextureUse;
+const TextureUse = resources_image.TextureUse;
 const Material = resources_material.Material;
 const Allocator = std.mem.Allocator;
 
@@ -29,7 +30,7 @@ const material_shader_instance_max_count = vulkan_types.material_shader_instance
 const material_shader_descriptor_count = vulkan_types.material_shader_descriptor_count;
 const material_shader_sampler_count = vulkan_types.material_shader_sampler_count;
 
-const shader_path_format = "assets/shaders/{s}.{s}.spv";
+const shader_path_format = "shaders/{s}.{s}.spv";
 const material_shader_name = "material_shader";
 
 pub const MaterialShader = struct {
@@ -668,19 +669,15 @@ pub const MaterialShader = struct {
 
     // utils
     fn createShaderModule(self: MaterialShader, path: []const u8) !vk.ShaderModule {
-        const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
-        defer file.close();
-
-        const stat = try file.stat();
-        const content = try file.readToEndAlloc(self.allocator, stat.size);
-        defer self.allocator.free(content);
+        var binary_resource = try BinaryResource.init(self.allocator, path);
+        defer binary_resource.deinit();
 
         const module = try self.context.device_api.createShaderModule(
             self.context.device,
             &vk.ShaderModuleCreateInfo{
                 .flags = .{},
-                .code_size = content.len,
-                .p_code = @ptrCast(@alignCast(content.ptr)),
+                .code_size = binary_resource.bytes.len,
+                .p_code = @ptrCast(@alignCast(binary_resource.bytes.ptr)),
             },
             null,
         );

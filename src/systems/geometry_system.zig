@@ -5,9 +5,8 @@ const math = @import("zmath");
 const Engine = @import("../engine.zig").Engine;
 
 const renderer_types = @import("../renderer/renderer_types.zig");
-const resources_geometry = @import("../resources/geometry.zig");
-const resources_material = @import("../resources/material.zig");
-const resources_texture = @import("../resources/texture.zig");
+const resources_material = @import("../resources/material_resource.zig");
+const resources_geometry = @import("../resources/geometry_resource.zig");
 
 const Vertex = renderer_types.Vertex;
 
