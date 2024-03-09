@@ -13,6 +13,8 @@ const renderer_types = @import("renderer/renderer_types.zig");
 
 const RenderPacket = renderer_types.RenderPacket;
 const GeometryRenderData = renderer_types.GeometryRenderData;
+const Vertex3D = renderer_types.Vertex3D;
+const Vertex2D = renderer_types.Vertex2D;
 
 const Allocator = std.mem.Allocator;
 
@@ -33,6 +35,7 @@ pub const Engine = struct {
         "paving2",
     };
     test_geometry: GeometryHandle,
+    test_ui_geometry: GeometryHandle,
     // TODO: end temporary
 
     allocator: Allocator,
@@ -96,7 +99,7 @@ pub const Engine = struct {
 
         // TODO: temporary
         // instance.test_geometry = instance.geometry_system.getDefaultGeometry();
-        var plane_config = try GeometrySystem.GeometryConfig.initPlane(
+        var test_plane_config = try GeometrySystem.GeometryConfig(Vertex3D).initPlane(
             allocator,
             .{
                 .name = "plane",
@@ -109,9 +112,34 @@ pub const Engine = struct {
                 .tile_y = 2,
             },
         );
-        defer plane_config.deinit();
+        defer test_plane_config.deinit();
 
-        instance.test_geometry = try instance.geometry_system.acquireGeometryByConfig(plane_config, .{ .auto_release = true });
+        instance.test_geometry = try instance.geometry_system.acquireGeometryByConfig(
+            Vertex3D,
+            test_plane_config,
+            .{ .auto_release = true },
+        );
+
+        var test_ui_plane_config = try GeometrySystem.GeometryConfig(Vertex2D).initPlane(
+            allocator,
+            .{
+                .name = "ui_plane",
+                .material_name = "ui",
+                .width = 512,
+                .height = 512,
+                .segment_count_x = 1,
+                .segment_count_y = 1,
+                .tile_x = 1,
+                .tile_y = 1,
+            },
+        );
+        defer test_ui_plane_config.deinit();
+
+        instance.test_ui_geometry = try instance.geometry_system.acquireGeometryByConfig(
+            Vertex2D,
+            test_ui_plane_config,
+            .{ .auto_release = true },
+        );
         // TODO: end temporary
     }
 
@@ -206,6 +234,12 @@ pub const Engine = struct {
                         GeometryRenderData{
                             .model = math.mul(math.translation(-5.0, 0.0, 0.0), math.rotationY(0.0)),
                             .geometry = instance.test_geometry,
+                        },
+                    },
+                    .ui_geometries = &[_]GeometryRenderData{
+                        GeometryRenderData{
+                            .model = math.translation(256.0, 256.0, 0.0),
+                            .geometry = instance.test_ui_geometry,
                         },
                     },
                 };

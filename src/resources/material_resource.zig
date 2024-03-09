@@ -9,6 +9,7 @@ const Allocator = std.mem.Allocator;
 
 pub const MaterialConfig = struct {
     name: []const u8 = "New Material",
+    material_type: []const u8 = "world",
     diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
     diffuse_map_name: []const u8 = TextureSystem.default_texture_name,
     auto_release: bool = false,
@@ -62,8 +63,14 @@ pub const MaterialResource = struct {
 
 pub const MaterialName = std.BoundedArray(u8, 256);
 
+pub const MaterialTypes = enum {
+    world,
+    ui,
+};
+
 pub const Material = struct {
     name: MaterialName = .{},
+    material_type: MaterialTypes = .world,
     diffuse_color: math.Vec = math.Vec{ 0, 0, 0, 0 },
     diffuse_map: TextureMap = .{},
     generation: ?u32 = null,

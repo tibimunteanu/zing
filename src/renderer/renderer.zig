@@ -11,7 +11,7 @@ const resources_image = @import("../resources/image_resource.zig");
 const resources_material = @import("../resources/material_resource.zig");
 const resources_geomerty = @import("../resources/geometry_resource.zig");
 
-const Vertex = renderer_types.Vertex;
+const Vertex3D = renderer_types.Vertex3D;
 const RenderPacket = renderer_types.RenderPacket;
 const BeginFrameResult = renderer_types.BeginFrameResult;
 const GeometryRenderData = renderer_types.GeometryRenderData;
@@ -34,6 +34,8 @@ pub const Renderer = struct {
 
     projection: math.Mat,
     view: math.Mat,
+    ui_projection: math.Mat,
+    ui_view: math.Mat,
     fov: f32,
     near_clip: f32,
     far_clip: f32,
@@ -71,6 +73,17 @@ pub const Renderer = struct {
         );
 
         self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
+
+        self.ui_projection = math.orthographicOffCenterLh(
+            0,
+            @as(f32, @floatFromInt(fb_size.width)),
+            @as(f32, @floatFromInt(fb_size.height)),
+            0,
+            -1.0,
+            1.0,
+        );
+
+        self.ui_view = math.inverse(math.identity());
     }
 
     pub fn deinit(self: *Renderer) void {
@@ -78,27 +91,29 @@ pub const Renderer = struct {
         self.allocator.destroy(self.context);
     }
 
-    pub fn beginFrame(self: *Renderer, delta_time: f32) !BeginFrameResult {
-        return try self.context.beginFrame(delta_time);
-    }
-
-    pub fn endFrame(self: *Renderer) !void {
-        try self.context.endFrame();
-    }
-
     pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
-        switch (try self.beginFrame(packet.delta_time)) {
+        switch (try self.context.beginFrame(packet.delta_time)) {
             .resize => {
                 // NOTE: Skip rendering this frame.
             },
             .render => {
-                try self.context.updateGlobalState(self.projection, self.view);
-
+                try self.context.beginRenderPass(.world);
+                try self.context.updateGlobalWorldState(self.projection, self.view);
                 for (packet.geometries) |geometry| {
                     try self.context.drawGeometry(geometry);
                 }
+                try self.context.endRenderPass(.world);
 
-                try self.endFrame();
+                try self.context.beginRenderPass(.ui);
+                try self.context.updateGlobalUIState(self.ui_projection, self.ui_view);
+                for (packet.ui_geometries) |ui_geometry| {
+                    try self.context.drawGeometry(ui_geometry);
+                }
+                try self.context.endRenderPass(.ui);
+
+                try self.context.endFrame();
+
+                // TODO: self.context.frame_number++;
             },
         }
     }
@@ -110,6 +125,16 @@ pub const Renderer = struct {
             self.near_clip,
             self.far_clip,
         );
+
+        self.ui_projection = math.orthographicOffCenterLh(
+            0,
+            @as(f32, @floatFromInt(new_desired_extent.width)),
+            @as(f32, @floatFromInt(new_desired_extent.height)),
+            0,
+            -1.0,
+            1.0,
+        );
+
         self.context.onResized(new_desired_extent);
     }
 
@@ -133,8 +158,8 @@ pub const Renderer = struct {
         self.context.destroyMaterial(material);
     }
 
-    pub fn createGeometry(self: *Renderer, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
-        try self.context.createGeometry(geometry, vertices, indices);
+    pub fn createGeometry(self: *Renderer, comptime Vertex: type, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
+        try self.context.createGeometry(Vertex, geometry, vertices, indices);
     }
 
     pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {

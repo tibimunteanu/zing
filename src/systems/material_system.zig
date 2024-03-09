@@ -171,6 +171,7 @@ pub const MaterialSystem = struct {
         _ = self;
         var temp_material = Material.init();
         temp_material.name = try MaterialName.fromSlice(config.name);
+        temp_material.material_type = if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world;
         temp_material.diffuse_color = config.diffuse_color;
 
         if (config.diffuse_map_name.len > 0) {

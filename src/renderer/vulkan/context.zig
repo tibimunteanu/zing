@@ -10,6 +10,7 @@ const RenderPass = @import("renderpass.zig").RenderPass;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const MaterialShader = @import("material_shader.zig").MaterialShader;
+const UIShader = @import("ui_shader.zig").UIShader;
 const Buffer = @import("buffer.zig").Buffer;
 const Image = @import("image.zig").Image;
 
@@ -24,9 +25,10 @@ const TextureName = resources_image.TextureName;
 const Material = resources_material.Material;
 const Geometry = resources_geomerty.Geometry;
 
-const Vertex = renderer_types.Vertex;
+const Vertex3D = renderer_types.Vertex3D;
 const BeginFrameResult = renderer_types.BeginFrameResult;
 const GeometryRenderData = renderer_types.GeometryRenderData;
+const RenderPassTypes = renderer_types.RenderPassTypes;
 
 const TextureData = vulkan_types.TextureData;
 const GeometryData = vulkan_types.GeometryData;
@@ -169,13 +171,16 @@ pub const Context = struct {
 
     swapchain: Swapchain,
     framebuffers: std.ArrayList(Framebuffer),
+    world_framebuffers: std.ArrayList(Framebuffer),
 
-    main_render_pass: RenderPass,
+    world_render_pass: RenderPass,
+    ui_render_pass: RenderPass,
 
     graphics_command_pool: vk.CommandPool,
     graphics_command_buffers: std.ArrayList(CommandBuffer),
 
     material_shader: MaterialShader,
+    ui_shader: UIShader,
 
     vertex_buffer: Buffer,
     vertex_offset: usize,
@@ -231,19 +236,33 @@ pub const Context = struct {
         self.swapchain = try Swapchain.init(self.allocator, self, .{});
         errdefer self.swapchain.deinit(.{});
 
-        self.main_render_pass = try RenderPass.init(
+        self.world_render_pass = try RenderPass.init(
             self,
-            .{
-                .offset = .{ .x = 0, .y = 0 },
-                .extent = self.swapchain.extent,
-            },
+            .swapchain_area,
             .{
                 .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
                 .depth = 1.0,
                 .stencil = 0,
             },
+            .{ .color = true, .depth = true, .stencil = true },
+            false,
+            true,
         );
-        errdefer self.main_render_pass.deinit();
+        errdefer self.world_render_pass.deinit();
+
+        self.ui_render_pass = try RenderPass.init(
+            self,
+            .swapchain_area,
+            .{
+                .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
+                .depth = 1.0,
+                .stencil = 0,
+            },
+            .{},
+            true,
+            false,
+        );
+        errdefer self.ui_render_pass.deinit();
 
         // framebuffers
         self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(self.allocator, self.swapchain.images.len);
@@ -253,7 +272,14 @@ pub const Context = struct {
             framebuffer.handle = .null_handle;
         }
 
-        try self.recreateFramebuffers(&self.main_render_pass);
+        self.world_framebuffers = try std.ArrayList(Framebuffer).initCapacity(self.allocator, self.swapchain.images.len);
+        self.world_framebuffers.items.len = self.swapchain.images.len;
+
+        for (self.world_framebuffers.items) |*framebuffer| {
+            framebuffer.handle = .null_handle;
+        }
+
+        try self.recreateFramebuffers();
         errdefer {
             for (self.framebuffers.items) |*framebuffer| {
                 if (framebuffer.handle != .null_handle) {
@@ -261,6 +287,13 @@ pub const Context = struct {
                 }
             }
             self.framebuffers.deinit();
+
+            for (self.world_framebuffers.items) |*framebuffer| {
+                if (framebuffer.handle != .null_handle) {
+                    framebuffer.deinit();
+                }
+            }
+            self.world_framebuffers.deinit();
         }
 
         // create command pool
@@ -277,10 +310,13 @@ pub const Context = struct {
         self.material_shader = try MaterialShader.init(self.allocator, self);
         errdefer self.material_shader.deinit();
 
+        self.ui_shader = try UIShader.init(self.allocator, self);
+        errdefer self.ui_shader.deinit();
+
         // create buffers
         self.vertex_buffer = try Buffer.init(
             self,
-            @sizeOf(Vertex) * 1024 * 1024,
+            @sizeOf(Vertex3D) * 1024 * 1024,
             .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             .{ .device_local_bit = true },
             .{ .bind_on_create = true },
@@ -309,14 +345,23 @@ pub const Context = struct {
 
         self.vertex_buffer.deinit();
         self.index_buffer.deinit();
+        self.ui_shader.deinit();
         self.material_shader.deinit();
         self.deinitCommandbuffers(.{ .deallocate = true });
         self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
+
+        for (self.world_framebuffers.items) |*framebuffer| {
+            framebuffer.deinit();
+        }
+        self.world_framebuffers.deinit();
+
         for (self.framebuffers.items) |*framebuffer| {
             framebuffer.deinit();
         }
         self.framebuffers.deinit();
-        self.main_render_pass.deinit();
+
+        self.ui_render_pass.deinit();
+        self.world_render_pass.deinit();
         self.swapchain.deinit(.{});
         self.device_api.destroyDevice(self.device, null);
         self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
@@ -360,14 +405,13 @@ pub const Context = struct {
 
         const current_image = self.swapchain.getCurrentImage();
         var command_buffer = self.getCurrentCommandBuffer();
-        const current_framebuffer = self.getCurrentFramebuffer();
 
         // make sure the current frame has finished rendering.
         // NOTE: the fences start signaled so the first frame can get past them.
         try current_image.waitForFrameFence(.{ .reset = true });
 
         command_buffer.state = .initial;
-        self.main_render_pass.state = .initial;
+        self.world_render_pass.state = .initial;
 
         try command_buffer.begin(.{});
 
@@ -388,10 +432,6 @@ pub const Context = struct {
         self.device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
         self.device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
 
-        // TODO: maybe we should decouple rendering from the swapchain and instead render into a texture
-        // which would then be copied to the swapchain framebuffers if it's not out of date
-        self.main_render_pass.begin(command_buffer, current_framebuffer.handle);
-
         return .render;
     }
 
@@ -399,8 +439,7 @@ pub const Context = struct {
         const current_image = self.swapchain.getCurrentImage();
         var command_buffer = self.getCurrentCommandBuffer();
 
-        // end the render pass and the command buffer
-        self.main_render_pass.end(command_buffer);
+        // end the command buffer
         try command_buffer.end();
 
         // submit the command buffer
@@ -415,7 +454,6 @@ pub const Context = struct {
         }}, current_image.frame_fence);
 
         command_buffer.state = .pending;
-        self.main_render_pass.state = .pending;
 
         const state = self.swapchain.present() catch |err| switch (err) {
             error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -431,6 +469,36 @@ pub const Context = struct {
         }
     }
 
+    pub fn beginRenderPass(self: *Context, render_pass_type: RenderPassTypes) !void {
+        const command_buffer = self.getCurrentCommandBuffer();
+
+        switch (render_pass_type) {
+            .world => {
+                self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer().handle);
+                self.material_shader.bind(command_buffer);
+            },
+            .ui => {
+                self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer().handle);
+                self.ui_shader.bind(command_buffer);
+            },
+        }
+    }
+
+    pub fn endRenderPass(self: *Context, render_pass_type: RenderPassTypes) !void {
+        const command_buffer = self.getCurrentCommandBuffer();
+
+        switch (render_pass_type) {
+            .world => {
+                self.world_render_pass.end(command_buffer);
+                self.world_render_pass.state = .pending;
+            },
+            .ui => {
+                self.ui_render_pass.end(command_buffer);
+                self.ui_render_pass.state = .pending;
+            },
+        }
+    }
+
     pub fn getCurrentCommandBuffer(self: Context) *CommandBuffer {
         return &self.graphics_command_buffers.items[self.swapchain.image_index];
     }
@@ -439,7 +507,11 @@ pub const Context = struct {
         return &self.framebuffers.items[self.swapchain.image_index];
     }
 
-    pub fn updateGlobalState(self: *Context, projection: math.Mat, view: math.Mat) !void {
+    pub fn getCurrentWorldFramebuffer(self: Context) *Framebuffer {
+        return &self.world_framebuffers.items[self.swapchain.image_index];
+    }
+
+    pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {
         const command_buffer = self.getCurrentCommandBuffer();
         self.material_shader.bind(command_buffer);
 
@@ -447,6 +519,16 @@ pub const Context = struct {
         self.material_shader.global_uniform_data.view = view;
 
         try self.material_shader.updateGlobalUniformData();
+    }
+
+    pub fn updateGlobalUIState(self: *Context, projection: math.Mat, view: math.Mat) !void {
+        const command_buffer = self.getCurrentCommandBuffer();
+        self.ui_shader.bind(command_buffer);
+
+        self.ui_shader.global_uniform_data.projection = projection;
+        self.ui_shader.global_uniform_data.view = view;
+
+        try self.ui_shader.updateGlobalUniformData();
     }
 
     pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !void {
@@ -537,16 +619,22 @@ pub const Context = struct {
     }
 
     pub fn createMaterial(self: *Context, material: *Material) !void {
-        try self.material_shader.acquireResources(material);
+        switch (material.material_type) {
+            .world => try self.material_shader.acquireResources(material),
+            .ui => try self.ui_shader.acquireResources(material),
+        }
     }
 
     pub fn destroyMaterial(self: *Context, material: *Material) void {
         if (material.internal_id != null) {
-            self.material_shader.releaseResources(material);
+            switch (material.material_type) {
+                .world => self.material_shader.releaseResources(material),
+                .ui => self.ui_shader.releaseResources(material),
+            }
         }
     }
 
-    pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
+    pub fn createGeometry(self: *Context, comptime Vertex: type, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
         if (vertices.len == 0) {
             return error.VerticesCannotBeEmpty;
         }
@@ -654,18 +742,27 @@ pub const Context = struct {
     }
 
     pub fn drawGeometry(self: *Context, data: GeometryRenderData) !void {
-        const geometry: *Geometry = try Engine.instance.geometry_system.geometries.getColumnPtr(data.geometry, .geometry);
-
         const command_buffer = self.getCurrentCommandBuffer();
 
-        self.material_shader.bind(command_buffer);
+        const geometry: *Geometry = try Engine.instance.geometry_system.geometries.getColumnPtr(data.geometry, .geometry);
 
-        self.material_shader.setModel(data.model);
+        const material_handle = if (Engine.instance.material_system.materials.isLiveHandle(geometry.material)) //
+            geometry.material
+        else
+            Engine.instance.material_system.getDefaultMaterial();
 
-        const material = if (Engine.instance.material_system.materials.isLiveHandle(geometry.material)) geometry.material //
-        else Engine.instance.material_system.getDefaultMaterial();
+        const material: *Material = try Engine.instance.material_system.materials.getColumnPtr(material_handle, .material);
 
-        try self.material_shader.applyMaterial(material);
+        switch (material.material_type) {
+            .world => {
+                self.material_shader.setModel(data.model);
+                try self.material_shader.applyMaterial(material_handle);
+            },
+            .ui => {
+                self.ui_shader.setModel(data.model);
+                try self.ui_shader.applyMaterial(material_handle);
+            },
+        }
 
         const buffer_data = self.geometries[geometry.internal_id.?];
 
@@ -899,11 +996,15 @@ pub const Context = struct {
             .old_handle = old_handle,
         });
 
-        self.main_render_pass.render_area.extent = self.swapchain.extent;
-
-        try self.recreateFramebuffers(&self.main_render_pass);
+        try self.recreateFramebuffers();
         errdefer {
             for (self.framebuffers.items) |*framebuffer| {
+                if (framebuffer.handle != .null_handle) {
+                    framebuffer.deinit();
+                }
+            }
+
+            for (self.world_framebuffers.items) |*framebuffer| {
                 if (framebuffer.handle != .null_handle) {
                     framebuffer.deinit();
                 }
@@ -916,8 +1017,8 @@ pub const Context = struct {
         self.swapchain.extent_generation = self.desired_extent_generation;
     }
 
-    fn recreateFramebuffers(self: *Context, render_pass: *const RenderPass) !void {
-        for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
+    fn recreateFramebuffers(self: *Context) !void {
+        for (self.swapchain.images, self.world_framebuffers.items) |image, *framebuffer| {
             if (framebuffer.handle != .null_handle) {
                 framebuffer.deinit();
             }
@@ -930,7 +1031,26 @@ pub const Context = struct {
             framebuffer.* = try Framebuffer.init(
                 self,
                 self.allocator,
-                render_pass,
+                &self.world_render_pass,
+                self.swapchain.extent.width,
+                self.swapchain.extent.height,
+                &attachments,
+            );
+        }
+
+        for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
+            if (framebuffer.handle != .null_handle) {
+                framebuffer.deinit();
+            }
+
+            const attachments = [_]vk.ImageView{
+                image.view,
+            };
+
+            framebuffer.* = try Framebuffer.init(
+                self,
+                self.allocator,
+                &self.ui_render_pass,
                 self.swapchain.extent.width,
                 self.swapchain.extent.height,
                 &attachments,

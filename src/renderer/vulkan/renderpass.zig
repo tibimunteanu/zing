@@ -13,6 +13,17 @@ pub const RenderPass = struct {
         pending,
     };
 
+    const RenderArea = union(enum) {
+        fixed_area: vk.Rect2D,
+        swapchain_area: void,
+    };
+
+    pub const ClearFlags = packed struct(u3) {
+        color: bool = false,
+        depth: bool = false,
+        stencil: bool = false,
+    };
+
     pub const ClearValues = struct {
         color: [4]f32,
         depth: f32,
@@ -22,11 +33,21 @@ pub const RenderPass = struct {
     context: *const Context,
     handle: vk.RenderPass,
     state: State,
-    render_area: vk.Rect2D,
+    render_area: RenderArea,
     clear_values: ClearValues,
+    clear_flags: ClearFlags,
+    has_prev: bool,
+    has_next: bool,
 
     // public
-    pub fn init(context: *const Context, render_area: vk.Rect2D, clear_values: ClearValues) !RenderPass {
+    pub fn init(
+        context: *const Context,
+        render_area: RenderArea,
+        clear_values: ClearValues,
+        clear_flags: ClearFlags,
+        has_prev: bool,
+        has_next: bool,
+    ) !RenderPass {
         var self: RenderPass = undefined;
         self.context = context;
 
@@ -34,22 +55,25 @@ pub const RenderPass = struct {
 
         self.render_area = render_area;
         self.clear_values = clear_values;
+        self.clear_flags = clear_flags;
+        self.has_prev = has_prev;
+        self.has_next = has_next;
 
         const attachment_descriptions = [_]vk.AttachmentDescription{
             .{
                 .format = context.swapchain.surface_format.format,
                 .samples = .{ .@"1_bit" = true },
-                .load_op = .clear,
+                .load_op = if (clear_flags.color) .clear else .load,
                 .store_op = .store,
                 .stencil_load_op = .dont_care,
                 .stencil_store_op = .dont_care,
-                .initial_layout = .undefined,
-                .final_layout = .present_src_khr,
+                .initial_layout = if (has_prev) .attachment_optimal else .undefined,
+                .final_layout = if (has_next) .attachment_optimal else .present_src_khr,
             },
             .{
                 .format = context.physical_device.depth_format,
                 .samples = .{ .@"1_bit" = true },
-                .load_op = .clear,
+                .load_op = if (clear_flags.depth) .clear else .load,
                 .store_op = .dont_care,
                 .stencil_load_op = .dont_care,
                 .stencil_store_op = .dont_care,
@@ -67,10 +91,10 @@ pub const RenderPass = struct {
                     .layout = .color_attachment_optimal,
                 },
             },
-            .p_depth_stencil_attachment = &.{
+            .p_depth_stencil_attachment = if (clear_flags.depth) &.{
                 .attachment = 1,
                 .layout = .depth_stencil_attachment_optimal,
-            },
+            } else null,
             .input_attachment_count = 0,
             .p_input_attachments = null,
             .preserve_attachment_count = 0,
@@ -98,20 +122,20 @@ pub const RenderPass = struct {
             .{
                 .src_subpass = vk.SUBPASS_EXTERNAL,
                 .dst_subpass = 0,
-                .src_stage_mask = .{ .late_fragment_tests_bit = true }, // store op is always performed in late tests, after subpass access
-                .src_access_mask = .{ .depth_stencil_attachment_write_bit = true },
-                .dst_stage_mask = .{ .early_fragment_tests_bit = true }, // load op is always performed in early tests, before subpass access
-                .dst_access_mask = .{ .depth_stencil_attachment_write_bit = true, .depth_stencil_attachment_read_bit = true },
+                .src_stage_mask = .{ .late_fragment_tests_bit = true }, // store op is always performed in late tests
+                .src_access_mask = .{ .depth_stencil_attachment_write_bit = true }, // after subpass access
+                .dst_stage_mask = .{ .early_fragment_tests_bit = true }, // load op is always performed in early tests
+                .dst_access_mask = .{ .depth_stencil_attachment_write_bit = true, .depth_stencil_attachment_read_bit = true }, // before subpass access
                 .dependency_flags = .{},
             },
         };
 
         self.handle = try context.device_api.createRenderPass(context.device, &vk.RenderPassCreateInfo{
-            .attachment_count = attachment_descriptions.len,
+            .attachment_count = if (clear_flags.depth) attachment_descriptions.len else 1,
             .p_attachments = &attachment_descriptions,
             .subpass_count = subpasses.len,
             .p_subpasses = &subpasses,
-            .dependency_count = dependencies.len,
+            .dependency_count = if (clear_flags.depth) dependencies.len else 1,
             .p_dependencies = &dependencies,
         }, null);
         errdefer context.device_api.destroyRenderPass(context.device, self.handle, null);
@@ -130,22 +154,38 @@ pub const RenderPass = struct {
     }
 
     pub fn begin(self: *RenderPass, command_buffer: *CommandBuffer, framebuffer: vk.Framebuffer) void {
+        var clear_value_count: u32 = 0;
+        var clear_values: [2]vk.ClearValue = undefined;
+
+        if (self.clear_flags.color) {
+            clear_values[clear_value_count] = vk.ClearValue{
+                .color = .{ .float_32 = self.clear_values.color },
+            };
+            clear_value_count += 1;
+        }
+
+        if (self.clear_flags.depth) {
+            clear_values[clear_value_count] = vk.ClearValue{
+                .depth_stencil = .{
+                    .depth = self.clear_values.depth,
+                    .stencil = self.clear_values.stencil,
+                },
+            };
+            clear_value_count += 1;
+        }
+
         self.context.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
             .render_pass = self.handle,
             .framebuffer = framebuffer,
-            .render_area = self.render_area,
-            .clear_value_count = 2,
-            .p_clear_values = &[_]vk.ClearValue{
-                .{
-                    .color = .{ .float_32 = self.clear_values.color },
-                },
-                .{
-                    .depth_stencil = .{
-                        .depth = self.clear_values.depth,
-                        .stencil = self.clear_values.stencil,
-                    },
+            .render_area = switch (self.render_area) {
+                .fixed_area => |area| area,
+                .swapchain_area => .{
+                    .offset = .{ .x = 0, .y = 0 },
+                    .extent = self.context.swapchain.extent,
                 },
             },
+            .clear_value_count = clear_value_count,
+            .p_clear_values = &clear_values,
         }, .@"inline");
 
         command_buffer.state = .recording_in_render_pass;

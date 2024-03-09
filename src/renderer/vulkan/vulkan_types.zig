@@ -1,5 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
+const math = @import("zmath");
 
 const Image = @import("image.zig").Image;
 const TextureHandle = @import("../../systems/texture_system.zig").TextureHandle;
@@ -8,7 +9,39 @@ pub const material_shader_instance_max_count = 1024;
 pub const material_shader_descriptor_count = 2;
 pub const material_shader_sampler_count = 1;
 
+pub const ui_shader_instance_max_count = 1024;
+pub const ui_shader_descriptor_count = 2;
+pub const ui_shader_sampler_count = 1;
+
 pub const geometry_max_count = 4096;
+
+pub const WorldGlobalUniformData = struct {
+    projection: math.Mat,
+    view: math.Mat,
+    _reserved_1: math.Mat = undefined,
+    _reserved_2: math.Mat = undefined,
+};
+
+pub const WorldInstanceUniformData = struct {
+    diffuse_color: math.Vec,
+    _reserved_0: math.Vec = undefined,
+    _reserved_1: math.Vec = undefined,
+    _reserved_2: math.Vec = undefined,
+};
+
+pub const UIGlobalUniformData = struct {
+    projection: math.Mat,
+    view: math.Mat,
+    _reserved_1: math.Mat = undefined,
+    _reserved_2: math.Mat = undefined,
+};
+
+pub const UIInstanceUniformData = struct {
+    diffuse_color: math.Vec,
+    _reserved_0: math.Vec = undefined,
+    _reserved_1: math.Vec = undefined,
+    _reserved_2: math.Vec = undefined,
+};
 
 pub const TextureData = struct {
     image: Image,
@@ -23,6 +56,11 @@ pub const DescriptorState = struct {
 pub const MaterialShaderInstanceState = struct {
     descriptor_sets: [3]vk.DescriptorSet,
     descriptor_states: [material_shader_descriptor_count]DescriptorState,
+};
+
+pub const UIShaderInstanceState = struct {
+    descriptor_sets: [3]vk.DescriptorSet,
+    descriptor_states: [ui_shader_descriptor_count]DescriptorState,
 };
 
 pub const GeometryData = struct {

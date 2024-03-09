@@ -16,24 +16,24 @@ const resources_image = @import("../../resources/image_resource.zig");
 const BinaryResource = @import("../../resources/binary_resource.zig").BinaryResource;
 
 const Context = renderer_context.Context;
-const Vertex3D = renderer_types.Vertex3D;
+const Vertex2D = renderer_types.Vertex2D;
 const GeometryRenderData = renderer_types.GeometryRenderData;
-const WorldGlobalUniformData = vulkan_types.WorldGlobalUniformData;
-const WorldInstanceUniformData = vulkan_types.WorldInstanceUniformData;
-const MaterialShaderInstanceState = vulkan_types.MaterialShaderInstanceState;
+const UIGlobalUniformData = vulkan_types.UIGlobalUniformData;
+const UIInstanceUniformData = vulkan_types.UIInstanceUniformData;
+const UIShaderInstanceState = vulkan_types.UIShaderInstanceState;
 const TextureData = vulkan_types.TextureData;
 const TextureUse = resources_image.TextureUse;
 const Material = resources_material.Material;
 const Allocator = std.mem.Allocator;
 
-const material_shader_instance_max_count = vulkan_types.material_shader_instance_max_count;
-const material_shader_descriptor_count = vulkan_types.material_shader_descriptor_count;
-const material_shader_sampler_count = vulkan_types.material_shader_sampler_count;
+const ui_shader_instance_max_count = vulkan_types.ui_shader_instance_max_count;
+const ui_shader_descriptor_count = vulkan_types.ui_shader_descriptor_count;
+const ui_shader_sampler_count = vulkan_types.ui_shader_sampler_count;
 
 const shader_path_format = "shaders/{s}.{s}.spv";
-const material_shader_name = "material_shader";
+const ui_shader_name = "ui_shader";
 
-pub const MaterialShader = struct {
+pub const UIShader = struct {
     context: *const Context,
     allocator: Allocator, // TODO: replace this with a scratch arena
 
@@ -44,7 +44,7 @@ pub const MaterialShader = struct {
     pipeline_layout: vk.PipelineLayout,
     bind_point: vk.PipelineBindPoint,
 
-    global_uniform_data: WorldGlobalUniformData,
+    global_uniform_data: UIGlobalUniformData,
     global_descriptor_pool: vk.DescriptorPool,
     global_descriptor_set_layout: vk.DescriptorSetLayout,
     global_descriptor_sets: [3]vk.DescriptorSet,
@@ -55,27 +55,27 @@ pub const MaterialShader = struct {
     material_uniform_buffer: Buffer,
     material_uniform_buffer_index: ?u32,
 
-    instance_states: [material_shader_instance_max_count]MaterialShaderInstanceState,
+    instance_states: [ui_shader_instance_max_count]UIShaderInstanceState,
 
-    sampler_uses: [material_shader_sampler_count]TextureUse,
+    sampler_uses: [ui_shader_sampler_count]TextureUse,
 
     // public
     pub fn init(
         allocator: Allocator,
         context: *const Context,
-    ) !MaterialShader {
-        var self: MaterialShader = undefined;
+    ) !UIShader {
+        var self: UIShader = undefined;
         self.context = context;
         self.allocator = allocator;
         self.bind_point = .graphics;
 
-        const vert_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ material_shader_name, "vert" });
+        const vert_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ ui_shader_name, "vert" });
         defer allocator.free(vert_path);
 
         self.vertex_shader_module = try createShaderModule(self, vert_path);
         errdefer context.device_api.destroyShaderModule(context.device, self.vertex_shader_module, null);
 
-        const frag_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ material_shader_name, "frag" });
+        const frag_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ ui_shader_name, "frag" });
         defer allocator.free(frag_path);
 
         self.fragment_shader_module = try createShaderModule(self, frag_path);
@@ -141,7 +141,7 @@ pub const MaterialShader = struct {
         self.sampler_uses[0] = .map_diffuse;
 
         // local / material descriptors
-        const descriptor_types = [material_shader_descriptor_count]vk.DescriptorType{
+        const descriptor_types = [ui_shader_descriptor_count]vk.DescriptorType{
             .uniform_buffer,
             .combined_image_sampler,
         };
@@ -170,11 +170,11 @@ pub const MaterialShader = struct {
         const material_ubo_pool_sizes = [_]vk.DescriptorPoolSize{
             vk.DescriptorPoolSize{
                 .type = .uniform_buffer,
-                .descriptor_count = @intCast(material_shader_instance_max_count),
+                .descriptor_count = @intCast(ui_shader_instance_max_count),
             },
             vk.DescriptorPoolSize{
                 .type = .combined_image_sampler,
-                .descriptor_count = material_shader_sampler_count * @as(u32, @intCast(material_shader_instance_max_count)),
+                .descriptor_count = ui_shader_sampler_count * @as(u32, @intCast(ui_shader_instance_max_count)),
             },
         };
 
@@ -184,7 +184,7 @@ pub const MaterialShader = struct {
                 .flags = .{ .free_descriptor_set_bit = true },
                 .pool_size_count = material_ubo_pool_sizes.len,
                 .p_pool_sizes = &material_ubo_pool_sizes,
-                .max_sets = @intCast(material_shader_instance_max_count),
+                .max_sets = @intCast(ui_shader_instance_max_count),
             },
             null,
         );
@@ -200,7 +200,7 @@ pub const MaterialShader = struct {
 
         const binding_description = vk.VertexInputBindingDescription{
             .binding = 0,
-            .stride = @sizeOf(Vertex3D),
+            .stride = @sizeOf(Vertex2D),
             .input_rate = .vertex,
         };
 
@@ -208,20 +208,20 @@ pub const MaterialShader = struct {
             .{
                 .binding = 0,
                 .location = 0,
-                .format = .r32g32b32_sfloat,
-                .offset = @offsetOf(Vertex3D, "position"),
+                .format = .r32g32_sfloat,
+                .offset = @offsetOf(Vertex2D, "position"),
             },
             .{
                 .binding = 0,
                 .location = 1,
                 .format = .r32g32_sfloat,
-                .offset = @offsetOf(Vertex3D, "texcoord"),
+                .offset = @offsetOf(Vertex2D, "texcoord"),
             },
             .{
                 .binding = 0,
                 .location = 2,
                 .format = .r32g32b32_sfloat,
-                .offset = @offsetOf(Vertex3D, "color"),
+                .offset = @offsetOf(Vertex2D, "color"),
             },
         };
 
@@ -261,19 +261,6 @@ pub const MaterialShader = struct {
             .p_sample_mask = null,
             .alpha_to_coverage_enable = vk.FALSE,
             .alpha_to_one_enable = vk.FALSE,
-        };
-
-        const depth_stencil_state = vk.PipelineDepthStencilStateCreateInfo{
-            .flags = .{},
-            .depth_test_enable = vk.TRUE,
-            .depth_write_enable = vk.TRUE,
-            .depth_compare_op = .less,
-            .depth_bounds_test_enable = vk.FALSE,
-            .stencil_test_enable = vk.FALSE,
-            .front = undefined,
-            .back = undefined,
-            .min_depth_bounds = 0,
-            .max_depth_bounds = 0,
         };
 
         const color_blend_attachment_state = vk.PipelineColorBlendAttachmentState{
@@ -334,11 +321,11 @@ pub const MaterialShader = struct {
             .p_tessellation_state = null,
             .p_rasterization_state = &rasterization_state,
             .p_multisample_state = &multisample_state,
-            .p_depth_stencil_state = &depth_stencil_state,
+            .p_depth_stencil_state = null,
             .p_color_blend_state = &color_blend_state,
             .p_dynamic_state = &dynamic_state,
             .layout = self.pipeline_layout,
-            .render_pass = context.world_render_pass.handle,
+            .render_pass = context.ui_render_pass.handle,
             .subpass = 0,
             .base_pipeline_handle = .null_handle,
             .base_pipeline_index = -1,
@@ -356,7 +343,7 @@ pub const MaterialShader = struct {
 
         self.global_uniform_buffer = try Buffer.init(
             context,
-            @sizeOf(WorldGlobalUniformData) * 3,
+            @sizeOf(UIGlobalUniformData) * 3,
             .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
             .{
                 .device_local_bit = self.context.physical_device.supports_local_host_visible,
@@ -387,7 +374,7 @@ pub const MaterialShader = struct {
 
         self.material_uniform_buffer = try Buffer.init(
             context,
-            @sizeOf(WorldInstanceUniformData) * material_shader_instance_max_count,
+            @sizeOf(UIInstanceUniformData) * ui_shader_instance_max_count,
             .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
             .{
                 .device_local_bit = self.context.physical_device.supports_local_host_visible,
@@ -403,7 +390,7 @@ pub const MaterialShader = struct {
         return self;
     }
 
-    pub fn deinit(self: *MaterialShader) void {
+    pub fn deinit(self: *UIShader) void {
         self.material_uniform_buffer.deinit();
         self.global_uniform_buffer.deinit();
 
@@ -420,17 +407,17 @@ pub const MaterialShader = struct {
         self.context.device_api.destroyShaderModule(self.context.device, self.vertex_shader_module, null);
     }
 
-    pub fn bind(self: MaterialShader, command_buffer: *const CommandBuffer) void {
+    pub fn bind(self: UIShader, command_buffer: *const CommandBuffer) void {
         self.context.device_api.cmdBindPipeline(command_buffer.handle, self.bind_point, self.pipeline);
     }
 
-    pub fn updateGlobalUniformData(self: *MaterialShader) !void {
+    pub fn updateGlobalUniformData(self: *UIShader) !void {
         const image_index = self.context.swapchain.image_index;
         const command_buffer = self.context.getCurrentCommandBuffer();
         const global_descriptor_set = self.global_descriptor_sets[image_index];
 
-        const range: u32 = @sizeOf(WorldGlobalUniformData);
-        const offset: vk.DeviceSize = @sizeOf(WorldGlobalUniformData) * image_index;
+        const range: u32 = @sizeOf(UIGlobalUniformData);
+        const offset: vk.DeviceSize = @sizeOf(UIGlobalUniformData) * image_index;
 
         try self.global_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(self.global_uniform_data));
 
@@ -471,7 +458,7 @@ pub const MaterialShader = struct {
         );
     }
 
-    pub fn setModel(self: *MaterialShader, model: math.Mat) void {
+    pub fn setModel(self: *UIShader, model: math.Mat) void {
         const command_buffer = self.context.getCurrentCommandBuffer();
 
         self.context.device_api.cmdPushConstants(
@@ -484,7 +471,7 @@ pub const MaterialShader = struct {
         );
     }
 
-    pub fn applyMaterial(self: *MaterialShader, material: MaterialHandle) !void {
+    pub fn applyMaterial(self: *UIShader, material: MaterialHandle) !void {
         const image_index = self.context.swapchain.image_index;
         const command_buffer = self.context.getCurrentCommandBuffer();
 
@@ -499,15 +486,15 @@ pub const MaterialShader = struct {
         const p_material_state = &self.instance_states[p_material.internal_id.?];
         const material_descriptor_set = p_material_state.descriptor_sets[image_index];
 
-        var descriptor_writes: [material_shader_descriptor_count]vk.WriteDescriptorSet = undefined;
+        var descriptor_writes: [ui_shader_descriptor_count]vk.WriteDescriptorSet = undefined;
         var write_count: u32 = 0;
         var dst_binding: u32 = 0;
 
         // descriptor 0 - uniform buffer
-        const range: u32 = @sizeOf(WorldInstanceUniformData);
-        const offset: vk.DeviceSize = @sizeOf(WorldInstanceUniformData) * p_material.internal_id.?;
+        const range: u32 = @sizeOf(UIInstanceUniformData);
+        const offset: vk.DeviceSize = @sizeOf(UIInstanceUniformData) * p_material.internal_id.?;
 
-        const instance_uniform_data = WorldInstanceUniformData{
+        const instance_uniform_data = UIInstanceUniformData{
             .diffuse_color = p_material.diffuse_color,
         };
 
@@ -608,7 +595,7 @@ pub const MaterialShader = struct {
         );
     }
 
-    pub fn acquireResources(self: *MaterialShader, material: *Material) !void {
+    pub fn acquireResources(self: *UIShader, material: *Material) !void {
         material.internal_id = self.material_uniform_buffer_index;
         self.material_uniform_buffer_index = if (self.material_uniform_buffer_index) |g| g +% 1 else 0;
 
@@ -641,7 +628,7 @@ pub const MaterialShader = struct {
         );
     }
 
-    pub fn releaseResources(self: *MaterialShader, material: *Material) void {
+    pub fn releaseResources(self: *UIShader, material: *Material) void {
         const instance_state = &self.instance_states[material.internal_id.?];
 
         self.context.device_api.deviceWaitIdle(self.context.device) catch {
@@ -668,11 +655,11 @@ pub const MaterialShader = struct {
     }
 
     // utils
-    fn createShaderModule(self: MaterialShader, path: []const u8) !vk.ShaderModule {
+    fn createShaderModule(self: UIShader, path: []const u8) !vk.ShaderModule {
         var binary_resource = try BinaryResource.init(self.allocator, path);
         defer binary_resource.deinit();
 
-        const module = try self.context.device_api.createShaderModule(
+        return try self.context.device_api.createShaderModule(
             self.context.device,
             &vk.ShaderModuleCreateInfo{
                 .flags = .{},
@@ -681,7 +668,5 @@ pub const MaterialShader = struct {
             },
             null,
         );
-
-        return module;
     }
 };

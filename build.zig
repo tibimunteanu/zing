@@ -33,26 +33,28 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    const compile_vert_shader = b.addSystemCommand(&.{
-        "glslc",
-        "assets/shaders/material_shader.vert",
-        "--target-env=vulkan1.3",
-        "-o",
-        "assets/shaders/material_shader.vert.spv",
-    });
-
-    const compile_frag_shader = b.addSystemCommand(&.{
-        "glslc",
-        "assets/shaders/material_shader.frag",
-        "--target-env=vulkan1.3",
-        "-o",
-        "assets/shaders/material_shader.frag.spv",
-    });
-
     const copy_assets = b.addSystemCommand(&.{ "xcopy", "assets", "zig-out\\bin\\assets\\", "/E/D/Y" });
 
-    copy_assets.step.dependOn(&compile_vert_shader.step);
-    copy_assets.step.dependOn(&compile_frag_shader.step);
+    const shaders = [_][]const u8{
+        "material_shader",
+        "ui_shader",
+    };
+    inline for ([_][]const u8{ "vert", "frag" }) |shader_type| {
+        inline for (shaders) |shader| {
+            const shader_path = "assets/shaders/" ++ shader ++ "." ++ shader_type;
+            const out_shader_path = shader_path ++ ".spv";
+
+            const compile_shader = b.addSystemCommand(&.{
+                "glslc",
+                shader_path,
+                "--target-env=vulkan1.3",
+                "-o",
+                out_shader_path,
+            });
+
+            copy_assets.step.dependOn(&compile_shader.step);
+        }
+    }
 
     exe.step.dependOn(&copy_assets.step);
 
