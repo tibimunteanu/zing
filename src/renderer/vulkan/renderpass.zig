@@ -56,8 +56,8 @@ pub const RenderPass = struct {
                 .store_op = .store,
                 .stencil_load_op = .dont_care,
                 .stencil_store_op = .dont_care,
-                .initial_layout = if (has_prev) .attachment_optimal else .undefined,
-                .final_layout = if (has_next) .attachment_optimal else .present_src_khr,
+                .initial_layout = if (has_prev) .color_attachment_optimal else .undefined,
+                .final_layout = if (has_next) .color_attachment_optimal else .present_src_khr,
             },
             .{
                 .format = context.physical_device.depth_format,
