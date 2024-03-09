@@ -5,14 +5,6 @@ const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
 const Allocator = std.mem.Allocator;
 
 pub const RenderPass = struct {
-    pub const State = enum {
-        invalid,
-        initial,
-        recording,
-        executable,
-        pending,
-    };
-
     const RenderArea = union(enum) {
         fixed_area: vk.Rect2D,
         swapchain_area: void,
@@ -32,7 +24,6 @@ pub const RenderPass = struct {
 
     context: *const Context,
     handle: vk.RenderPass,
-    state: State,
     render_area: RenderArea,
     clear_values: ClearValues,
     clear_flags: ClearFlags,
@@ -50,8 +41,6 @@ pub const RenderPass = struct {
     ) !RenderPass {
         var self: RenderPass = undefined;
         self.context = context;
-
-        self.state = .invalid;
 
         self.render_area = render_area;
         self.clear_values = clear_values;
@@ -140,8 +129,6 @@ pub const RenderPass = struct {
         }, null);
         errdefer context.device_api.destroyRenderPass(context.device, self.handle, null);
 
-        self.state = .initial;
-
         return self;
     }
 
@@ -150,7 +137,6 @@ pub const RenderPass = struct {
             self.context.device_api.destroyRenderPass(self.context.device, self.handle, null);
         }
         self.handle = .null_handle;
-        self.state = .invalid;
     }
 
     pub fn begin(self: *RenderPass, command_buffer: *CommandBuffer, framebuffer: vk.Framebuffer) void {
@@ -187,14 +173,9 @@ pub const RenderPass = struct {
             .clear_value_count = clear_value_count,
             .p_clear_values = &clear_values,
         }, .@"inline");
-
-        command_buffer.state = .recording_in_render_pass;
-        self.state = .recording;
     }
 
     pub fn end(self: *RenderPass, command_buffer: *CommandBuffer) void {
         self.context.device_api.cmdEndRenderPass(command_buffer.handle);
-        command_buffer.state = .recording;
-        self.state = .executable;
     }
 };

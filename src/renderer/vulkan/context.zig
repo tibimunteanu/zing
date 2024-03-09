@@ -410,9 +410,6 @@ pub const Context = struct {
         // NOTE: the fences start signaled so the first frame can get past them.
         try current_image.waitForFrameFence(.{ .reset = true });
 
-        command_buffer.state = .initial;
-        self.world_render_pass.state = .initial;
-
         try command_buffer.begin(.{});
 
         const viewport: vk.Viewport = .{
@@ -453,8 +450,6 @@ pub const Context = struct {
             .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
         }}, current_image.frame_fence);
 
-        command_buffer.state = .pending;
-
         const state = self.swapchain.present() catch |err| switch (err) {
             error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
             else => |narrow| return narrow,
@@ -488,14 +483,8 @@ pub const Context = struct {
         const command_buffer = self.getCurrentCommandBuffer();
 
         switch (render_pass_type) {
-            .world => {
-                self.world_render_pass.end(command_buffer);
-                self.world_render_pass.state = .pending;
-            },
-            .ui => {
-                self.ui_render_pass.end(command_buffer);
-                self.ui_render_pass.state = .pending;
-            },
+            .world => self.world_render_pass.end(command_buffer),
+            .ui => self.ui_render_pass.end(command_buffer),
         }
     }
 
@@ -512,8 +501,8 @@ pub const Context = struct {
     }
 
     pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {
-        const command_buffer = self.getCurrentCommandBuffer();
-        self.material_shader.bind(command_buffer);
+        // const command_buffer = self.getCurrentCommandBuffer();
+        // self.material_shader.bind(command_buffer);
 
         self.material_shader.global_uniform_data.projection = projection;
         self.material_shader.global_uniform_data.view = view;
@@ -522,8 +511,8 @@ pub const Context = struct {
     }
 
     pub fn updateGlobalUIState(self: *Context, projection: math.Mat, view: math.Mat) !void {
-        const command_buffer = self.getCurrentCommandBuffer();
-        self.ui_shader.bind(command_buffer);
+        // const command_buffer = self.getCurrentCommandBuffer();
+        // self.ui_shader.bind(command_buffer);
 
         self.ui_shader.global_uniform_data.projection = projection;
         self.ui_shader.global_uniform_data.view = view;
@@ -958,7 +947,6 @@ pub const Context = struct {
 
             for (self.graphics_command_buffers.items) |*buffer| {
                 buffer.handle = .null_handle;
-                buffer.state = .invalid;
             }
         }
         errdefer if (options.allocate) self.graphics_command_buffers.deinit();
