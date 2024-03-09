@@ -99,7 +99,7 @@ pub const Engine = struct {
 
         // TODO: temporary
         // instance.test_geometry = instance.geometry_system.getDefaultGeometry();
-        var test_plane_config = try GeometrySystem.GeometryConfig(Vertex3D).initPlane(
+        var test_plane_config = try GeometrySystem.GeometryConfig(Vertex3D, u32).initPlane(
             allocator,
             .{
                 .name = "plane",
@@ -116,11 +116,12 @@ pub const Engine = struct {
 
         instance.test_geometry = try instance.geometry_system.acquireGeometryByConfig(
             Vertex3D,
+            u32,
             test_plane_config,
             .{ .auto_release = true },
         );
 
-        var test_ui_plane_config = try GeometrySystem.GeometryConfig(Vertex2D).initPlane(
+        var test_ui_plane_config = try GeometrySystem.GeometryConfig(Vertex2D, u32).initPlane(
             allocator,
             .{
                 .name = "ui_plane",
@@ -137,6 +138,7 @@ pub const Engine = struct {
 
         instance.test_ui_geometry = try instance.geometry_system.acquireGeometryByConfig(
             Vertex2D,
+            u32,
             test_ui_plane_config,
             .{ .auto_release = true },
         );

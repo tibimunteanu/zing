@@ -634,7 +634,14 @@ pub const Context = struct {
         }
     }
 
-    pub fn createGeometry(self: *Context, comptime Vertex: type, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
+    pub fn createGeometry(
+        self: *Context,
+        comptime Vertex: type,
+        comptime Index: type,
+        geometry: *Geometry,
+        vertices: []const Vertex,
+        indices: []const u32,
+    ) !void {
         if (vertices.len == 0) {
             return error.VerticesCannotBeEmpty;
         }
@@ -679,7 +686,7 @@ pub const Context = struct {
             if (indices.len > 0) {
                 data.index_buffer_offset = @truncate(self.index_offset);
                 data.index_count = @truncate(indices.len);
-                data.index_size = @truncate(@sizeOf(u32) * indices.len);
+                data.index_size = @truncate(@sizeOf(Index) * indices.len);
 
                 try self.uploadDataRegion(
                     &self.index_buffer,

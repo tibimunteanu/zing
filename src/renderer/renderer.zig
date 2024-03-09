@@ -158,8 +158,15 @@ pub const Renderer = struct {
         self.context.destroyMaterial(material);
     }
 
-    pub fn createGeometry(self: *Renderer, comptime Vertex: type, geometry: *Geometry, vertices: []const Vertex, indices: []const u32) !void {
-        try self.context.createGeometry(Vertex, geometry, vertices, indices);
+    pub fn createGeometry(
+        self: *Renderer,
+        comptime Vertex: type,
+        comptime Index: type,
+        geometry: *Geometry,
+        vertices: []const Vertex,
+        indices: []const Index,
+    ) !void {
+        try self.context.createGeometry(Vertex, Index, geometry, vertices, indices);
     }
 
     pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {

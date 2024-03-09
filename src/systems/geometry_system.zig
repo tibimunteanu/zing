@@ -30,13 +30,13 @@ pub const GeometrySystem = struct {
 
     pub const Config = struct {};
 
-    pub fn GeometryConfig(comptime Vertex: type) type {
+    pub fn GeometryConfig(comptime Vertex: type, comptime Index: type) type {
         return struct {
             allocator: Allocator,
 
             name: []const u8,
             vertices: []const Vertex,
-            indices: []const u32,
+            indices: []const Index,
             material_name: []const u8,
 
             pub fn initPlane(
@@ -51,7 +51,7 @@ pub const GeometrySystem = struct {
                     tile_x: u32,
                     tile_y: u32,
                 },
-            ) !GeometryConfig(Vertex) {
+            ) !GeometryConfig(Vertex, Index) {
                 if (options.width <= 0 or options.height <= 0) {
                     return error.InvalidDimensions;
                 }
@@ -68,7 +68,7 @@ pub const GeometrySystem = struct {
                     return error.NameCannotBeEmpty;
                 }
 
-                var self: GeometryConfig(Vertex) = undefined;
+                var self: GeometryConfig(Vertex, Index) = undefined;
                 self.allocator = allocator;
 
                 const vertex_count = options.segment_count_x * options.segment_count_y * 4;
@@ -79,7 +79,7 @@ pub const GeometrySystem = struct {
                 errdefer allocator.free(vertices);
 
                 const index_count = options.segment_count_x * options.segment_count_y * 6;
-                const indices = try allocator.alloc(u32, index_count);
+                const indices = try allocator.alloc(Index, index_count);
                 errdefer allocator.free(indices);
 
                 const seg_count_x_f32 = @as(f32, @floatFromInt(options.segment_count_x));
@@ -156,7 +156,7 @@ pub const GeometrySystem = struct {
                 return self;
             }
 
-            pub fn deinit(self: *GeometryConfig(Vertex)) void {
+            pub fn deinit(self: *GeometryConfig(Vertex, Index)) void {
                 self.allocator.free(self.material_name);
                 self.allocator.free(self.name);
                 self.allocator.free(self.indices);
@@ -189,13 +189,14 @@ pub const GeometrySystem = struct {
     pub fn acquireGeometryByConfig(
         self: *GeometrySystem,
         comptime Vertex: type,
-        config: GeometryConfig(Vertex),
+        comptime Index: type,
+        config: GeometryConfig(Vertex, Index),
         options: struct {
             auto_release: bool,
         },
     ) !GeometryHandle {
         var geometry = Geometry.init();
-        try self.loadGeometry(Vertex, config, &geometry);
+        try self.loadGeometry(Vertex, Index, config, &geometry);
 
         const handle = try self.geometries.add(.{
             .geometry = geometry,
@@ -280,7 +281,7 @@ pub const GeometrySystem = struct {
         geometry_3d.material = Engine.instance.material_system.getDefaultMaterial();
         geometry_3d.generation = null; // NOTE: default geometry always has null generation
 
-        try Engine.instance.renderer.createGeometry(Vertex3D, &geometry_3d, &vertices_3d, &indices_3d);
+        try Engine.instance.renderer.createGeometry(Vertex3D, u32, &geometry_3d, &vertices_3d, &indices_3d);
         errdefer Engine.instance.renderer.destroyGeometry(&geometry_3d);
 
         self.default_geometry = try self.geometries.add(.{
@@ -303,7 +304,7 @@ pub const GeometrySystem = struct {
         geometry_2d.material = Engine.instance.material_system.getDefaultMaterial();
         geometry_2d.generation = null; // NOTE: default geometry always has null generation
 
-        try Engine.instance.renderer.createGeometry(Vertex2D, &geometry_2d, &vertices_2d, &indices_2d);
+        try Engine.instance.renderer.createGeometry(Vertex2D, u32, &geometry_2d, &vertices_2d, &indices_2d);
         errdefer Engine.instance.renderer.destroyGeometry(&geometry_2d);
 
         self.default_geometry_2d = try self.geometries.add(.{
@@ -313,7 +314,13 @@ pub const GeometrySystem = struct {
         });
     }
 
-    fn loadGeometry(self: *GeometrySystem, comptime Vertex: type, config: GeometryConfig(Vertex), geometry: *Geometry) !void {
+    fn loadGeometry(
+        self: *GeometrySystem,
+        comptime Vertex: type,
+        comptime Index: type,
+        config: GeometryConfig(Vertex, Index),
+        geometry: *Geometry,
+    ) !void {
         _ = self;
         var temp_geometry = Geometry.init();
         temp_geometry.name = try GeometryName.fromSlice(config.name);
@@ -324,7 +331,7 @@ pub const GeometrySystem = struct {
             catch Engine.instance.material_system.getDefaultMaterial();
         }
 
-        try Engine.instance.renderer.createGeometry(Vertex, &temp_geometry, config.vertices, config.indices);
+        try Engine.instance.renderer.createGeometry(Vertex, Index, &temp_geometry, config.vertices, config.indices);
         errdefer Engine.instance.renderer.destroyGeometry(&temp_geometry);
 
         Engine.instance.renderer.destroyGeometry(geometry);
