@@ -57,16 +57,15 @@ pub const Renderer = struct {
             self.context.transfer_queue.family_index,
         });
 
-        window.setFramebufferSizeCallback(framebufferSizeCallback);
+        self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
+        self.ui_view = math.inverse(math.identity());
 
         self.fov = deg2rad(f32, 45.0);
         self.near_clip = 0.1;
         self.far_clip = 1000.0;
 
+        window.setFramebufferSizeCallback(framebufferSizeCallback);
         self.setProjection(window.getFramebufferSize());
-
-        self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
-        self.ui_view = math.inverse(math.identity());
     }
 
     pub fn deinit(self: *Renderer) void {
@@ -96,7 +95,7 @@ pub const Renderer = struct {
 
                 try self.context.endFrame();
 
-                // TODO: self.context.frame_number++;
+                self.context.frame_index += 1;
             },
         }
     }

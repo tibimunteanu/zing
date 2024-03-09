@@ -193,6 +193,7 @@ pub const Context = struct {
     desired_extent: glfw.Window.Size,
     desired_extent_generation: u32,
 
+    frame_index: u64,
     delta_time: f32,
 
     // public
@@ -338,6 +339,9 @@ pub const Context = struct {
             geometry.*.id = null;
             geometry.*.generation = null;
         }
+
+        self.frame_index = 0;
+        self.delta_time = 0;
     }
 
     pub fn deinit(self: *Context) void {
@@ -971,12 +975,12 @@ pub const Context = struct {
     }
 
     fn recreateSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
-        try self.device_api.deviceWaitIdle(self.device);
-
         if (self.desired_extent.width == 0 or self.desired_extent.height == 0) {
             // NOTE: don't bother recreating resources if width or height are 0
             return;
         }
+
+        try self.device_api.deviceWaitIdle(self.device);
 
         const old_allocator = self.swapchain.allocator;
         const old_handle = self.swapchain.handle;
