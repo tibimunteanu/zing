@@ -63,26 +63,9 @@ pub const Renderer = struct {
         self.near_clip = 0.1;
         self.far_clip = 1000.0;
 
-        const fb_size = window.getFramebufferSize();
-
-        self.projection = math.perspectiveFovLh(
-            self.fov,
-            @as(f32, @floatFromInt(fb_size.width)) / @as(f32, @floatFromInt(fb_size.height)),
-            self.near_clip,
-            self.far_clip,
-        );
+        self.setProjection(window.getFramebufferSize());
 
         self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
-
-        self.ui_projection = math.orthographicOffCenterLh(
-            0,
-            @as(f32, @floatFromInt(fb_size.width)),
-            @as(f32, @floatFromInt(fb_size.height)),
-            0,
-            -1.0,
-            1.0,
-        );
-
         self.ui_view = math.inverse(math.identity());
     }
 
@@ -119,21 +102,7 @@ pub const Renderer = struct {
     }
 
     pub fn onResized(self: *Renderer, new_desired_extent: glfw.Window.Size) void {
-        self.projection = math.perspectiveFovLh(
-            self.fov,
-            @as(f32, @floatFromInt(new_desired_extent.width)) / @as(f32, @floatFromInt(new_desired_extent.height)),
-            self.near_clip,
-            self.far_clip,
-        );
-
-        self.ui_projection = math.orthographicOffCenterLh(
-            0,
-            @as(f32, @floatFromInt(new_desired_extent.width)),
-            @as(f32, @floatFromInt(new_desired_extent.height)),
-            0,
-            -1.0,
-            1.0,
-        );
+        self.setProjection(new_desired_extent);
 
         self.context.onResized(new_desired_extent);
     }
@@ -173,5 +142,14 @@ pub const Renderer = struct {
         if (geometry.internal_id != null) {
             self.context.destroyGeometry(geometry);
         }
+    }
+
+    // utils
+    fn setProjection(self: *Renderer, size: glfw.Window.Size) void {
+        const width = @as(f32, @floatFromInt(size.width));
+        const height = @as(f32, @floatFromInt(size.height));
+
+        self.projection = math.perspectiveFovLh(self.fov, width / height, self.near_clip, self.far_clip);
+        self.ui_projection = math.orthographicOffCenterLh(0, width, height, 0, -1.0, 1.0);
     }
 };
