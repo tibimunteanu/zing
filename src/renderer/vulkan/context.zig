@@ -238,29 +238,33 @@ pub const Context = struct {
 
         self.world_render_pass = try RenderPass.init(
             self,
-            .swapchain_area,
             .{
-                .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
-                .depth = 1.0,
-                .stencil = 0,
+                .render_area = .swapchain,
+                .clear_values = .{
+                    .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
+                    .depth = 1.0,
+                    .stencil = 0,
+                },
+                .clear_flags = .{ .color = true, .depth = true, .stencil = true },
+                .has_prev = false,
+                .has_next = true,
             },
-            .{ .color = true, .depth = true, .stencil = true },
-            false,
-            true,
         );
         errdefer self.world_render_pass.deinit();
 
         self.ui_render_pass = try RenderPass.init(
             self,
-            .swapchain_area,
             .{
-                .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
-                .depth = 1.0,
-                .stencil = 0,
+                .render_area = .swapchain,
+                .clear_values = .{
+                    .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
+                    .depth = 1.0,
+                    .stencil = 0,
+                },
+                .clear_flags = .{},
+                .has_prev = true,
+                .has_next = false,
             },
-            .{},
-            true,
-            false,
         );
         errdefer self.ui_render_pass.deinit();
 

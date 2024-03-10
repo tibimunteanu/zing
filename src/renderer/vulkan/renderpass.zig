@@ -6,8 +6,8 @@ const Allocator = std.mem.Allocator;
 
 pub const RenderPass = struct {
     const RenderArea = union(enum) {
-        fixed_area: vk.Rect2D,
-        swapchain_area: void,
+        fixed: vk.Rect2D,
+        swapchain: void,
     };
 
     pub const ClearFlags = packed struct(u3) {
@@ -33,36 +33,38 @@ pub const RenderPass = struct {
     // public
     pub fn init(
         context: *const Context,
-        render_area: RenderArea,
-        clear_values: ClearValues,
-        clear_flags: ClearFlags,
-        has_prev: bool,
-        has_next: bool,
+        options: struct {
+            render_area: RenderArea,
+            clear_values: ClearValues,
+            clear_flags: ClearFlags,
+            has_prev: bool,
+            has_next: bool,
+        },
     ) !RenderPass {
         var self: RenderPass = undefined;
         self.context = context;
 
-        self.render_area = render_area;
-        self.clear_values = clear_values;
-        self.clear_flags = clear_flags;
-        self.has_prev = has_prev;
-        self.has_next = has_next;
+        self.render_area = options.render_area;
+        self.clear_values = options.clear_values;
+        self.clear_flags = options.clear_flags;
+        self.has_prev = options.has_prev;
+        self.has_next = options.has_next;
 
         const attachment_descriptions = [_]vk.AttachmentDescription{
             .{
                 .format = context.swapchain.surface_format.format,
                 .samples = .{ .@"1_bit" = true },
-                .load_op = if (clear_flags.color) .clear else .load,
+                .load_op = if (options.clear_flags.color) .clear else .load,
                 .store_op = .store,
                 .stencil_load_op = .dont_care,
                 .stencil_store_op = .dont_care,
-                .initial_layout = if (has_prev) .color_attachment_optimal else .undefined,
-                .final_layout = if (has_next) .color_attachment_optimal else .present_src_khr,
+                .initial_layout = if (options.has_prev) .color_attachment_optimal else .undefined,
+                .final_layout = if (options.has_next) .color_attachment_optimal else .present_src_khr,
             },
             .{
                 .format = context.physical_device.depth_format,
                 .samples = .{ .@"1_bit" = true },
-                .load_op = if (clear_flags.depth) .clear else .load,
+                .load_op = if (options.clear_flags.depth) .clear else .load,
                 .store_op = .dont_care,
                 .stencil_load_op = .dont_care,
                 .stencil_store_op = .dont_care,
@@ -80,7 +82,7 @@ pub const RenderPass = struct {
                     .layout = .color_attachment_optimal,
                 },
             },
-            .p_depth_stencil_attachment = if (clear_flags.depth) &.{
+            .p_depth_stencil_attachment = if (options.clear_flags.depth) &.{
                 .attachment = 1,
                 .layout = .depth_stencil_attachment_optimal,
             } else null,
@@ -120,11 +122,11 @@ pub const RenderPass = struct {
         };
 
         self.handle = try context.device_api.createRenderPass(context.device, &vk.RenderPassCreateInfo{
-            .attachment_count = if (clear_flags.depth) attachment_descriptions.len else 1,
+            .attachment_count = if (options.clear_flags.depth) attachment_descriptions.len else 1,
             .p_attachments = &attachment_descriptions,
             .subpass_count = subpasses.len,
             .p_subpasses = &subpasses,
-            .dependency_count = if (clear_flags.depth) dependencies.len else 1,
+            .dependency_count = if (options.clear_flags.depth) dependencies.len else 1,
             .p_dependencies = &dependencies,
         }, null);
         errdefer context.device_api.destroyRenderPass(context.device, self.handle, null);
@@ -164,8 +166,8 @@ pub const RenderPass = struct {
             .render_pass = self.handle,
             .framebuffer = framebuffer,
             .render_area = switch (self.render_area) {
-                .fixed_area => |area| area,
-                .swapchain_area => .{
+                .fixed => |area| area,
+                .swapchain => .{
                     .offset = .{ .x = 0, .y = 0 },
                     .extent = self.context.swapchain.extent,
                 },
