@@ -4,6 +4,7 @@ const Engine = @import("engine.zig");
 const Allocator = std.mem.Allocator;
 
 // pub const std_options = struct {
+//     pub const log_level: std.log.Level = .info;
 //     pub const log_scope_levels: []const std.log.ScopeLevel = &[_]std.log.ScopeLevel{
 //         .{ .scope = .some_scope, .level = .err },
 //     };

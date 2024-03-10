@@ -44,12 +44,12 @@ pub const InstanceUniformData = struct {
 };
 
 pub const DescriptorState = struct {
-    generations: [3]?u32,
-    handles: [3]TextureHandle,
+    generations: std.BoundedArray(?u32, cnt.max_swapchain_image_count),
+    handles: std.BoundedArray(TextureHandle, cnt.max_swapchain_image_count),
 };
 
 pub const InstanceState = struct {
-    descriptor_sets: [3]vk.DescriptorSet,
+    descriptor_sets: std.BoundedArray(vk.DescriptorSet, cnt.max_swapchain_image_count),
     descriptor_states: [descriptor_count]DescriptorState,
 };
 
@@ -66,7 +66,7 @@ bind_point: vk.PipelineBindPoint,
 global_uniform_data: GlobalUniformData,
 global_descriptor_pool: vk.DescriptorPool,
 global_descriptor_set_layout: vk.DescriptorSetLayout,
-global_descriptor_sets: [3]vk.DescriptorSet,
+global_descriptor_sets: std.BoundedArray(vk.DescriptorSet, cnt.max_swapchain_image_count),
 global_uniform_buffer: Buffer,
 
 material_descriptor_pool: vk.DescriptorPool,
@@ -362,10 +362,10 @@ pub fn init(
 
     self.global_uniform_buffer = try Buffer.init(
         context,
-        @sizeOf(GlobalUniformData) * 3,
+        @as(usize, @sizeOf(GlobalUniformData)) * context.swapchain.images.len,
         .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
         .{
-            .device_local_bit = self.context.physical_device.supports_local_host_visible,
+            .device_local_bit = context.physical_device.supports_local_host_visible,
             .host_visible_bit = true,
             .host_coherent_bit = true,
         },
@@ -373,30 +373,41 @@ pub fn init(
     );
     errdefer self.global_uniform_buffer.deinit();
 
-    const global_ubo_layouts = [_]vk.DescriptorSetLayout{
-        self.global_descriptor_set_layout,
-        self.global_descriptor_set_layout,
-        self.global_descriptor_set_layout,
-    };
+    var global_ubo_layouts: [cnt.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
+    for (0..context.swapchain.images.len) |i| {
+        global_ubo_layouts[i] = self.global_descriptor_set_layout;
+    }
 
     const global_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = self.global_descriptor_pool,
-        .descriptor_set_count = 3,
+        .descriptor_set_count = context.swapchain.images.len,
         .p_set_layouts = &global_ubo_layouts,
     };
 
+    self.global_descriptor_sets.len = context.swapchain.images.len;
     try context.device_api.allocateDescriptorSets(
         context.device,
         &global_ubo_descriptor_set_alloc_info,
-        &self.global_descriptor_sets,
+        self.global_descriptor_sets.slice().ptr,
     );
+    errdefer {
+        context.device_api.freeDescriptorSets(
+            context.device,
+            self.material_descriptor_pool,
+            context.swapchain.images.len,
+            self.global_descriptor_sets.slice().ptr,
+        ) catch {
+            std.log.err("Could not free global descriptor set for material: {s}", .{shader_name});
+        };
+        self.global_descriptor_sets.len = 0;
+    }
 
     self.material_uniform_buffer = try Buffer.init(
         context,
         @sizeOf(InstanceUniformData) * instance_max_count,
         .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
         .{
-            .device_local_bit = self.context.physical_device.supports_local_host_visible,
+            .device_local_bit = context.physical_device.supports_local_host_visible,
             .host_visible_bit = true,
             .host_coherent_bit = true,
         },
@@ -433,7 +444,7 @@ pub fn bind(self: UIShader, command_buffer: *const CommandBuffer) void {
 pub fn updateGlobalUniformData(self: *UIShader) !void {
     const image_index = self.context.swapchain.image_index;
     const command_buffer = self.context.getCurrentCommandBuffer();
-    const global_descriptor_set = self.global_descriptor_sets[image_index];
+    const global_descriptor_set = self.global_descriptor_sets.slice()[image_index];
 
     const range: u32 = @sizeOf(GlobalUniformData);
     const offset: vk.DeviceSize = @sizeOf(GlobalUniformData) * image_index;
@@ -503,7 +514,7 @@ pub fn applyMaterial(self: *UIShader, material: MaterialHandle) !void {
     const p_material = Engine.instance.material_system.materials.getColumnPtrAssumeLive(material_handle, .material);
 
     const p_material_state = &self.instance_states[p_material.internal_id.?];
-    const material_descriptor_set = p_material_state.descriptor_sets[image_index];
+    const material_descriptor_set = p_material_state.descriptor_sets.slice()[image_index];
 
     var descriptor_writes: [descriptor_count]vk.WriteDescriptorSet = undefined;
     var write_count: u32 = 0;
@@ -520,7 +531,7 @@ pub fn applyMaterial(self: *UIShader, material: MaterialHandle) !void {
     try self.material_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(instance_uniform_data));
 
     // only do this if the descriptor has not yet been updated
-    const descriptor_material_generation = &p_material_state.descriptor_states[dst_binding].generations[image_index];
+    const descriptor_material_generation = &p_material_state.descriptor_states[dst_binding].generations.slice()[image_index];
     if (descriptor_material_generation.* == null or descriptor_material_generation.* != p_material.generation) {
         descriptor_writes[write_count] = vk.WriteDescriptorSet{
             .dst_set = material_descriptor_set,
@@ -543,8 +554,8 @@ pub fn applyMaterial(self: *UIShader, material: MaterialHandle) !void {
     dst_binding += 1;
 
     for (0..sampler_count) |sampler_index| {
-        const descriptor_texture_handle = &p_material_state.descriptor_states[dst_binding].handles[image_index];
-        const descriptor_texture_generation = &p_material_state.descriptor_states[dst_binding].generations[image_index];
+        const descriptor_texture_handle = &p_material_state.descriptor_states[dst_binding].handles.slice()[image_index];
+        const descriptor_texture_generation = &p_material_state.descriptor_states[dst_binding].generations.slice()[image_index];
 
         var texture_handle = switch (self.sampler_uses[sampler_index]) {
             .map_diffuse => p_material.diffuse_map.texture,
@@ -619,29 +630,32 @@ pub fn acquireResources(self: *UIShader, material: *Material) !void {
     var instance_state = &self.instance_states[material.internal_id.?];
 
     for (&instance_state.descriptor_states) |*descriptor_state| {
-        for (0..3) |i| {
-            descriptor_state.generations[i] = null;
-            descriptor_state.handles[i] = TextureHandle.nil;
+        descriptor_state.generations.len = 0;
+        descriptor_state.handles.len = 0;
+
+        for (0..self.context.swapchain.images.len) |_| {
+            descriptor_state.generations.appendAssumeCapacity(null);
+            descriptor_state.handles.appendAssumeCapacity(TextureHandle.nil);
         }
     }
 
     // allocate descriptor sets
-    const material_ubo_layouts = [_]vk.DescriptorSetLayout{
-        self.material_descriptor_set_layout,
-        self.material_descriptor_set_layout,
-        self.material_descriptor_set_layout,
-    };
+    var material_ubo_layouts: [cnt.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
+    for (0..self.context.swapchain.images.len) |i| {
+        material_ubo_layouts[i] = self.material_descriptor_set_layout;
+    }
 
     const material_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = self.material_descriptor_pool,
-        .descriptor_set_count = 3,
+        .descriptor_set_count = self.context.swapchain.images.len,
         .p_set_layouts = &material_ubo_layouts,
     };
 
+    instance_state.descriptor_sets.len = self.context.swapchain.images.len;
     try self.context.device_api.allocateDescriptorSets(
         self.context.device,
         &material_ubo_descriptor_set_alloc_info,
-        &instance_state.descriptor_sets,
+        instance_state.descriptor_sets.slice().ptr,
     );
 }
 
@@ -655,16 +669,20 @@ pub fn releaseResources(self: *UIShader, material: *Material) void {
     self.context.device_api.freeDescriptorSets(
         self.context.device,
         self.material_descriptor_pool,
-        3,
-        &instance_state.descriptor_sets,
+        self.context.swapchain.images.len,
+        instance_state.descriptor_sets.slice().ptr,
     ) catch {
         std.log.err("Could not free descriptor set for material: {s}", .{material.name.slice()});
     };
+    instance_state.descriptor_sets.len = 0;
 
     for (&instance_state.descriptor_states) |*descriptor_state| {
-        for (0..3) |i| {
-            descriptor_state.generations[i] = null;
-            descriptor_state.handles[i] = TextureHandle.nil;
+        descriptor_state.generations.len = 0;
+        descriptor_state.handles.len = 0;
+
+        for (0..self.context.swapchain.images.len) |_| {
+            descriptor_state.generations.appendAssumeCapacity(null);
+            descriptor_state.handles.appendAssumeCapacity(TextureHandle.nil);
         }
     }
 

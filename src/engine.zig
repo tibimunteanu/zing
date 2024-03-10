@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const math = @import("zmath");
 const glfw = @import("glfw");
 
+const cnt = @import("cnt.zig");
 const utils = @import("utils.zig");
 const Renderer = @import("renderer/renderer.zig");
 const TextureSystem = @import("systems/texture_system.zig");
@@ -162,67 +163,7 @@ pub fn run() !void {
             const precise_delta_time = frame_start_time - instance.last_time;
             const delta_time: f32 = @as(f32, @floatCast(precise_delta_time));
 
-            // test camera
-            if (instance.window.getKey(.d) == .press) {
-                cameraYaw(1.0 * delta_time);
-            }
-            if (instance.window.getKey(.a) == .press) {
-                cameraYaw(-1.0 * delta_time);
-            }
-            if (instance.window.getKey(.j) == .press) {
-                cameraPitch(1.0 * delta_time);
-            }
-            if (instance.window.getKey(.k) == .press) {
-                cameraPitch(-1.0 * delta_time);
-            }
-
-            var velocity: math.Vec = math.splat(math.Vec, 0.0);
-
-            if (instance.window.getKey(.s) == .press) {
-                const forward = utils.getForwardVec(camera_view);
-                velocity += forward;
-            }
-            if (instance.window.getKey(.w) == .press) {
-                const backward = utils.getBackwardVec(camera_view);
-                velocity += backward;
-            }
-            if (instance.window.getKey(.h) == .press) {
-                const left = utils.getLeftVec(camera_view);
-                velocity += left;
-            }
-            if (instance.window.getKey(.l) == .press) {
-                const right = utils.getRightVec(camera_view);
-                velocity += right;
-            }
-
-            if (!math.all(math.isNearEqual(velocity, math.splat(math.Vec, 0.0), math.splat(math.Vec, 0.0001)), 3)) {
-                velocity = math.normalize3(velocity);
-
-                const move_speed = math.splat(math.Vec, 5.0 * delta_time);
-                camera_position += velocity * move_speed;
-                camera_view_dirty = true;
-            }
-
-            recomputeCameraView();
-            instance.renderer.view = camera_view;
-
-            const pressN = instance.window.getKey(.n);
-            if (pressN == .press and prevPressN == .release) {
-                choice += 1;
-                choice %= names.len;
-
-                if (instance.geometry_system.geometries.getColumnPtrIfLive(instance.test_geometry, .geometry)) |geometry| {
-                    const material = instance.material_system.materials.getColumnPtrAssumeLive(geometry.material, .material);
-
-                    const prev_texture = material.diffuse_map.texture;
-                    material.diffuse_map.texture = try instance.texture_system.acquireTextureByName(
-                        names[choice],
-                        .{ .auto_release = true },
-                    );
-                    instance.texture_system.releaseTextureByHandle(prev_texture);
-                }
-            }
-            prevPressN = pressN;
+            try instance.updateCamera(delta_time);
 
             const packet = RenderPacket{
                 .delta_time = delta_time,
@@ -244,11 +185,8 @@ pub fn run() !void {
 
             // const frame_end_time = glfw.getTime();
             // const frame_elapsed_time = frame_end_time - frame_start_time;
-            // var frame_stall_time = cnt.target_frame_seconds - frame_elapsed_time;
-
-            // if (frame_stall_time > 0) {
-            //     std.time.sleep(@as(u64, @intFromFloat(frame_stall_time)) * std.time.ns_per_s);
-            // }
+            // const fps = 1.0 / frame_elapsed_time;
+            // std.log.info("{d:.0}", .{fps});
 
             instance.last_time = frame_start_time;
         }
@@ -259,6 +197,69 @@ pub fn run() !void {
 }
 
 // utils
+fn updateCamera(self: Engine, delta_time: f32) !void {
+    if (self.window.getKey(.d) == .press) {
+        cameraYaw(1.0 * delta_time);
+    }
+    if (self.window.getKey(.a) == .press) {
+        cameraYaw(-1.0 * delta_time);
+    }
+    if (self.window.getKey(.j) == .press) {
+        cameraPitch(1.0 * delta_time);
+    }
+    if (self.window.getKey(.k) == .press) {
+        cameraPitch(-1.0 * delta_time);
+    }
+
+    var velocity: math.Vec = math.splat(math.Vec, 0.0);
+
+    if (self.window.getKey(.s) == .press) {
+        const forward = utils.getForwardVec(camera_view);
+        velocity += forward;
+    }
+    if (self.window.getKey(.w) == .press) {
+        const backward = utils.getBackwardVec(camera_view);
+        velocity += backward;
+    }
+    if (self.window.getKey(.h) == .press) {
+        const left = utils.getLeftVec(camera_view);
+        velocity += left;
+    }
+    if (self.window.getKey(.l) == .press) {
+        const right = utils.getRightVec(camera_view);
+        velocity += right;
+    }
+
+    if (!math.all(math.isNearEqual(velocity, math.splat(math.Vec, 0.0), math.splat(math.Vec, 0.0001)), 3)) {
+        velocity = math.normalize3(velocity);
+
+        const move_speed = math.splat(math.Vec, 5.0 * delta_time);
+        camera_position += velocity * move_speed;
+        camera_view_dirty = true;
+    }
+
+    recomputeCameraView();
+    self.renderer.view = camera_view;
+
+    const pressN = self.window.getKey(.n);
+    if (pressN == .press and prevPressN == .release) {
+        choice += 1;
+        choice %= names.len;
+
+        if (self.geometry_system.geometries.getColumnPtrIfLive(self.test_geometry, .geometry)) |geometry| {
+            const material = self.material_system.materials.getColumnPtrAssumeLive(geometry.material, .material);
+
+            const prev_texture = material.diffuse_map.texture;
+            material.diffuse_map.texture = try self.texture_system.acquireTextureByName(
+                names[choice],
+                .{ .auto_release = true },
+            );
+            self.texture_system.releaseTextureByHandle(prev_texture);
+        }
+    }
+    prevPressN = pressN;
+}
+
 fn recomputeCameraView() void {
     if (camera_view_dirty) {
         const rotation = math.matFromRollPitchYawV(camera_euler);

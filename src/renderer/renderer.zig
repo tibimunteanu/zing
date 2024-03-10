@@ -8,6 +8,7 @@ const Texture = @import("texture.zig");
 const Material = @import("material.zig");
 const Geometry = @import("geometry.zig");
 const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
+const GeometryHandle = @import("../systems/geometry_system.zig").GeometryHandle;
 
 const Allocator = std.mem.Allocator;
 
@@ -19,8 +20,6 @@ pub const BeginFrameResult = enum {
     render,
     resize,
 };
-
-const GeometryHandle = @import("../systems/geometry_system.zig").GeometryHandle;
 
 pub const Vertex3D = struct {
     position: [3]f32,
@@ -156,9 +155,7 @@ pub fn createGeometry(
 }
 
 pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {
-    if (geometry.internal_id != null) {
-        self.context.destroyGeometry(geometry);
-    }
+    self.context.destroyGeometry(geometry);
 }
 
 // utils

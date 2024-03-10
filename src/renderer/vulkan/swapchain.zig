@@ -1,6 +1,7 @@
 const std = @import("std");
 const glfw = @import("glfw");
 const vk = @import("vk.zig");
+const cnt = @import("../../cnt.zig");
 const Context = @import("context.zig");
 const Image = @import("image.zig");
 
@@ -25,7 +26,7 @@ surface_format: vk.SurfaceFormatKHR,
 present_mode: vk.PresentModeKHR,
 
 handle: vk.SwapchainKHR,
-images: std.BoundedArray(SwapchainImage, 3),
+images: std.BoundedArray(SwapchainImage, cnt.max_swapchain_image_count),
 depth_image: Image,
 image_index: u32,
 next_image_acquired_semaphore: vk.Semaphore,
@@ -40,6 +41,7 @@ pub fn init(
             .color_space = .srgb_nonlinear_khr,
         },
         desired_present_modes: []const vk.PresentModeKHR = &[_]vk.PresentModeKHR{
+            .mailbox_khr,
             .fifo_relaxed_khr,
             .fifo_khr,
             .immediate_khr,
@@ -66,7 +68,7 @@ pub fn init(
     self.handle = try device_api.createSwapchainKHR(device, &.{
         .flags = .{},
         .surface = context.surface,
-        .min_image_count = 3,
+        .min_image_count = 3, // at least triple buffering
         .image_format = self.surface_format.format,
         .image_color_space = self.surface_format.color_space,
         .image_extent = self.extent,
@@ -251,14 +253,15 @@ fn initImages(self: *Swapchain) !void {
     const device_api = self.context.device_api;
 
     // get the image handles
-    // NOTE: count is always max 3 so we don't need to call twice
     var count: u32 = undefined;
-    var imageHandles: [3]vk.Image = undefined;
-    _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, &imageHandles);
+    _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, null);
 
-    if (count != 3) {
-        return error.SwapchainIsNotTripleBuffering;
+    if (count > cnt.max_swapchain_image_count) {
+        return error.MaxSwapchainImageCountExceeded;
     }
+
+    var imageHandles: [cnt.max_swapchain_image_count]vk.Image = undefined;
+    _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, &imageHandles);
 
     // init swapchain images
     self.images.len = 0;
