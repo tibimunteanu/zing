@@ -18,7 +18,6 @@ pub const CommandBuffer = struct {
             .command_buffer_count = 1,
             .level = if (is_primary) .primary else .secondary,
         }, @ptrCast(&self.handle));
-        errdefer context.device_api.freeCommandBuffers(context.device, pool, 1, @ptrCast(&self.handle));
 
         return self;
     }

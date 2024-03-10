@@ -103,14 +103,22 @@ pub const Swapchain = struct {
         return self;
     }
 
-    pub fn deinit(self: *Swapchain, options: struct { recycle_handle: bool = false }) void {
+    pub fn deinit(self: *Swapchain) void {
         self.deinitImages();
-
         self.context.device_api.destroySemaphore(self.context.device, self.next_image_acquired_semaphore, null);
+        self.context.device_api.destroySwapchainKHR(self.context.device, self.handle, null);
+    }
 
-        if (!options.recycle_handle) {
-            self.context.device_api.destroySwapchainKHR(self.context.device, self.handle, null);
-        }
+    pub fn reinit(self: *Swapchain) !void {
+        var old = self.*;
+        old.deinitImages();
+        self.context.device_api.destroySemaphore(self.context.device, old.next_image_acquired_semaphore, null);
+
+        self.* = try init(old.allocator, old.context, .{
+            .desired_surface_format = old.surface_format,
+            .desired_present_modes = &[1]vk.PresentModeKHR{old.present_mode},
+            .old_handle = old.handle,
+        });
     }
 
     pub fn getCurrentImage(self: Swapchain) *const SwapchainImage {

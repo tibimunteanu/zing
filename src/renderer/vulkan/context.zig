@@ -234,7 +234,7 @@ pub const Context = struct {
         self.transfer_queue = Queue.init(self, self.physical_device.transfer_family_index);
 
         self.swapchain = try Swapchain.init(allocator, self, .{});
-        errdefer self.swapchain.deinit(.{});
+        errdefer self.swapchain.deinit();
 
         self.world_render_pass = try RenderPass.init(
             self,
@@ -300,7 +300,7 @@ pub const Context = struct {
         // create buffers
         self.vertex_buffer = try Buffer.init(
             self,
-            @sizeOf(Vertex3D) * 1024 * 1024,
+            100 * 1024 * 1024,
             .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             .{ .device_local_bit = true },
             .{ .bind_on_create = true },
@@ -310,7 +310,7 @@ pub const Context = struct {
 
         self.index_buffer = try Buffer.init(
             self,
-            @sizeOf(u32) * 1024 * 1024,
+            10 * 1024 * 1024,
             .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
             .{ .device_local_bit = true },
             .{ .bind_on_create = true },
@@ -348,7 +348,7 @@ pub const Context = struct {
         self.ui_render_pass.deinit();
         self.world_render_pass.deinit();
 
-        self.swapchain.deinit(.{});
+        self.swapchain.deinit();
 
         self.device_api.destroyDevice(self.device, null);
         self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
@@ -386,7 +386,7 @@ pub const Context = struct {
         if (self.desired_extent_generation != self.swapchain.extent_generation) {
             // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
             // which is handled by endFrame() by recreating resources, but this way we avoid a best practices warning
-            try self.recreateSwapchainFramebuffersAndCmdBuffers();
+            try self.reinitSwapchainFramebuffersAndCmdBuffers();
             return .resize;
         }
 
@@ -447,7 +447,7 @@ pub const Context = struct {
         // this should be configurable, so that you can choose if you only want to recreate on error.
         if (state == .suboptimal) {
             std.log.info("endFrame() Present was suboptimal. Recreating resources.", .{});
-            try self.recreateSwapchainFramebuffersAndCmdBuffers();
+            try self.reinitSwapchainFramebuffersAndCmdBuffers();
         }
     }
 
@@ -998,7 +998,7 @@ pub const Context = struct {
         self.world_framebuffers.clearRetainingCapacity();
     }
 
-    fn recreateSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
+    fn reinitSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
         if (self.desired_extent.width == 0 or self.desired_extent.height == 0) {
             // NOTE: don't bother recreating resources if width or height are 0
             return;
@@ -1006,18 +1006,8 @@ pub const Context = struct {
 
         try self.device_api.deviceWaitIdle(self.device);
 
-        const old_allocator = self.swapchain.allocator;
-        const old_handle = self.swapchain.handle;
-        const old_surface_format = self.swapchain.surface_format;
-        const old_present_mode = self.swapchain.present_mode;
-
-        self.swapchain.deinit(.{ .recycle_handle = true });
-
-        self.swapchain = try Swapchain.init(old_allocator, self, .{
-            .desired_surface_format = old_surface_format,
-            .desired_present_modes = &[1]vk.PresentModeKHR{old_present_mode},
-            .old_handle = old_handle,
-        });
+        try self.swapchain.reinit();
+        errdefer self.swapchain.deinit();
 
         self.deinitFramebuffers();
         try self.initFramebuffers();
