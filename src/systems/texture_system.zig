@@ -3,12 +3,9 @@ const pool = @import("zpool");
 
 const Engine = @import("../engine.zig");
 const Renderer = @import("../renderer/renderer.zig");
+const Texture = @import("../renderer/texture.zig");
+const ImageResource = @import("../resources/image_resource.zig");
 
-const resources_image = @import("../resources/image_resource.zig");
-
-const Texture = resources_image.Texture;
-const TextureName = resources_image.TextureName;
-const ImageResource = resources_image.ImageResource;
 const Allocator = std.mem.Allocator;
 
 const TextureSystem = @This();
@@ -151,7 +148,7 @@ fn createDefaultTextures(self: *TextureSystem) !void {
     }
 
     var texture = Texture.init();
-    texture.name = try TextureName.fromSlice(default_texture_name);
+    texture.name = try Texture.Name.fromSlice(default_texture_name);
     texture.width = tex_dimension;
     texture.height = tex_dimension;
     texture.channel_count = 4;
@@ -186,7 +183,7 @@ fn loadTexture(self: *TextureSystem, name: []const u8, texture: *Texture) !void 
     }
 
     var temp_texture = Texture.init();
-    temp_texture.name = try TextureName.fromSlice(name);
+    temp_texture.name = try Texture.Name.fromSlice(name);
     temp_texture.width = resource.image.width;
     temp_texture.height = resource.image.height;
     temp_texture.channel_count = resource.image.num_components;

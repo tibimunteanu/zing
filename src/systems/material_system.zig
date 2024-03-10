@@ -4,16 +4,10 @@ const math = @import("zmath");
 
 const Engine = @import("../engine.zig");
 const TextureSystem = @import("texture_system.zig");
+const Material = @import("../renderer/material.zig");
+const Texture = @import("../renderer/texture.zig");
+const MaterialResource = @import("../resources/material_resource.zig");
 
-const resources_texture = @import("../resources/image_resource.zig");
-const resources_material = @import("../resources/material_resource.zig");
-
-const Material = resources_material.Material;
-const MaterialName = resources_material.MaterialName;
-const MaterialConfig = resources_material.MaterialConfig;
-const MaterialResource = resources_material.MaterialResource;
-const TextureName = resources_texture.TextureName;
-const TextureMap = resources_texture.TextureMap;
 const Allocator = std.mem.Allocator;
 
 const MaterialSystem = @This();
@@ -52,7 +46,7 @@ pub fn deinit(self: *MaterialSystem) void {
     self.materials.deinit();
 }
 
-pub fn acquireMaterialByConfig(self: *MaterialSystem, config: MaterialConfig) !MaterialHandle {
+pub fn acquireMaterialByConfig(self: *MaterialSystem, config: Material.Config) !MaterialHandle {
     var material = Material.init();
     try self.loadMaterial(config, &material);
 
@@ -144,7 +138,7 @@ pub fn getDefaultMaterial(self: MaterialSystem) MaterialHandle {
 // utils
 fn createDefaultMaterial(self: *MaterialSystem) !void {
     var material = Material.init();
-    material.name = try MaterialName.fromSlice(default_material_name);
+    material.name = try Material.Name.fromSlice(default_material_name);
     material.diffuse_color = math.Vec{ 1, 1, 1, 1 };
     material.diffuse_map = .{
         .use = .map_diffuse,
@@ -164,15 +158,15 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     try self.lookup.put(default_material_name, self.default_material);
 }
 
-fn loadMaterial(self: *MaterialSystem, config: MaterialConfig, material: *Material) !void {
+fn loadMaterial(self: *MaterialSystem, config: Material.Config, material: *Material) !void {
     _ = self;
     var temp_material = Material.init();
-    temp_material.name = try MaterialName.fromSlice(config.name);
+    temp_material.name = try Material.Name.fromSlice(config.name);
     temp_material.material_type = if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world;
     temp_material.diffuse_color = config.diffuse_color;
 
     if (config.diffuse_map_name.len > 0) {
-        temp_material.diffuse_map = TextureMap{
+        temp_material.diffuse_map = Texture.Map{
             .use = .map_diffuse,
             .texture = Engine.instance.texture_system.acquireTextureByName(
                 config.diffuse_map_name,

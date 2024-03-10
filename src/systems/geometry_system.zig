@@ -3,17 +3,13 @@ const pool = @import("zpool");
 const math = @import("zmath");
 
 const Engine = @import("../engine.zig");
+const Material = @import("../renderer/material.zig");
+const Geometry = @import("../renderer/geometry.zig");
 
 const renderer_types = @import("../renderer/renderer_types.zig");
-const resources_material = @import("../resources/material_resource.zig");
-const resources_geometry = @import("../resources/geometry_resource.zig");
 
 const Vertex3D = renderer_types.Vertex3D;
 const Vertex2D = renderer_types.Vertex2D;
-
-const Geometry = resources_geometry.Geometry;
-const GeometryName = resources_geometry.GeometryName;
-const MaterialName = resources_material.MaterialName;
 
 const Allocator = std.mem.Allocator;
 
@@ -274,7 +270,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     const indices_3d = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
     var geometry_3d = Geometry.init();
-    geometry_3d.name = try GeometryName.fromSlice(default_geometry_name);
+    geometry_3d.name = try Geometry.Name.fromSlice(default_geometry_name);
     geometry_3d.material = Engine.instance.material_system.getDefaultMaterial();
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
 
@@ -297,7 +293,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     const indices_2d = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
     var geometry_2d = Geometry.init();
-    geometry_2d.name = try GeometryName.fromSlice(default_geometry_2d_name);
+    geometry_2d.name = try Geometry.Name.fromSlice(default_geometry_2d_name);
     geometry_2d.material = Engine.instance.material_system.getDefaultMaterial();
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
 
@@ -320,7 +316,7 @@ fn loadGeometry(
 ) !void {
     _ = self;
     var temp_geometry = Geometry.init();
-    temp_geometry.name = try GeometryName.fromSlice(config.name);
+    temp_geometry.name = try Geometry.Name.fromSlice(config.name);
     temp_geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
 
     if (config.material_name.len > 0) {

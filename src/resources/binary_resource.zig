@@ -1,37 +1,36 @@
 const std = @import("std");
-const stbi = @import("zstbi");
 const cnt = @import("../cnt.zig");
 
 const Allocator = std.mem.Allocator;
 
-pub const BinaryResource = struct {
-    allocator: Allocator,
-    full_path: []const u8,
-    bytes: []u8,
+const BinaryResource = @This();
 
-    pub fn init(allocator: Allocator, path: []const u8) !BinaryResource {
-        const path_format = "assets/{s}";
+allocator: Allocator,
+full_path: []const u8,
+bytes: []u8,
 
-        var file_path_buf: [cnt.max_path_length]u8 = undefined;
-        const file_path = try std.fmt.bufPrintZ(&file_path_buf, path_format, .{path});
+pub fn init(allocator: Allocator, path: []const u8) !BinaryResource {
+    const path_format = "assets/{s}";
 
-        const file = try std.fs.cwd().openFile(file_path, .{ .mode = .read_only });
-        defer file.close();
+    var file_path_buf: [cnt.max_path_length]u8 = undefined;
+    const file_path = try std.fmt.bufPrintZ(&file_path_buf, path_format, .{path});
 
-        const stat = try file.stat();
-        const bytes = try file.readToEndAlloc(allocator, stat.size);
-        errdefer allocator.free(bytes);
+    const file = try std.fs.cwd().openFile(file_path, .{ .mode = .read_only });
+    defer file.close();
 
-        return .{
-            .allocator = allocator,
-            .full_path = try allocator.dupe(u8, file_path),
-            .bytes = bytes,
-        };
-    }
+    const stat = try file.stat();
+    const bytes = try file.readToEndAlloc(allocator, stat.size);
+    errdefer allocator.free(bytes);
 
-    pub fn deinit(self: *BinaryResource) void {
-        self.allocator.free(self.full_path);
-        self.allocator.free(self.bytes);
-        self.* = undefined;
-    }
-};
+    return .{
+        .allocator = allocator,
+        .full_path = try allocator.dupe(u8, file_path),
+        .bytes = bytes,
+    };
+}
+
+pub fn deinit(self: *BinaryResource) void {
+    self.allocator.free(self.full_path);
+    self.allocator.free(self.bytes);
+    self.* = undefined;
+}

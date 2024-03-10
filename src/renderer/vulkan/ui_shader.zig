@@ -7,14 +7,14 @@ const Engine = @import("../../engine.zig");
 const Context = @import("context.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
+const Texture = @import("../texture.zig");
+const Material = @import("../material.zig");
+const BinaryResource = @import("../../resources/binary_resource.zig");
 const TextureHandle = @import("../../systems/texture_system.zig").TextureHandle;
 const MaterialHandle = @import("../../systems/material_system.zig").MaterialHandle;
-const BinaryResource = @import("../../resources/binary_resource.zig").BinaryResource;
 
 const renderer_types = @import("../renderer_types.zig");
 const vulkan_types = @import("vulkan_types.zig");
-const resources_material = @import("../../resources/material_resource.zig");
-const resources_image = @import("../../resources/image_resource.zig");
 
 const Vertex2D = renderer_types.Vertex2D;
 const GeometryRenderData = renderer_types.GeometryRenderData;
@@ -22,8 +22,6 @@ const UIGlobalUniformData = vulkan_types.UIGlobalUniformData;
 const UIInstanceUniformData = vulkan_types.UIInstanceUniformData;
 const UIShaderInstanceState = vulkan_types.UIShaderInstanceState;
 const TextureData = vulkan_types.TextureData;
-const TextureUse = resources_image.TextureUse;
-const Material = resources_material.Material;
 const Allocator = std.mem.Allocator;
 
 const UIShader = @This();
@@ -54,7 +52,7 @@ material_uniform_buffer_index: ?u32,
 
 instance_states: [vulkan_types.ui_shader_instance_max_count]UIShaderInstanceState,
 
-sampler_uses: [vulkan_types.ui_shader_sampler_count]TextureUse,
+sampler_uses: [vulkan_types.ui_shader_sampler_count]Texture.Use,
 
 // public
 pub fn init(

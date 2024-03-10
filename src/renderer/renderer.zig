@@ -4,21 +4,17 @@ const math = @import("zmath");
 
 const Engine = @import("../engine.zig");
 const Context = @import("vulkan/context.zig");
+const Texture = @import("texture.zig");
+const Material = @import("material.zig");
+const Geometry = @import("geometry.zig");
 const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
 
 const renderer_types = @import("renderer_types.zig");
-const resources_image = @import("../resources/image_resource.zig");
-const resources_material = @import("../resources/material_resource.zig");
-const resources_geomerty = @import("../resources/geometry_resource.zig");
 
 const Vertex3D = renderer_types.Vertex3D;
 const RenderPacket = renderer_types.RenderPacket;
 const BeginFrameResult = renderer_types.BeginFrameResult;
 const GeometryRenderData = renderer_types.GeometryRenderData;
-
-const Texture = resources_image.Texture;
-const Material = resources_material.Material;
-const Geometry = resources_geomerty.Geometry;
 
 const Allocator = std.mem.Allocator;
 

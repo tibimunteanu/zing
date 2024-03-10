@@ -12,17 +12,14 @@ const MaterialShader = @import("material_shader.zig");
 const UIShader = @import("ui_shader.zig");
 const Buffer = @import("buffer.zig");
 const Image = @import("image.zig");
+const Texture = @import("../texture.zig");
+const Material = @import("../material.zig");
+const Geometry = @import("../geometry.zig");
 
 const renderer_types = @import("../renderer_types.zig");
 const vulkan_types = @import("vulkan_types.zig");
 const resources_image = @import("../../resources/image_resource.zig");
 const resources_material = @import("../../resources/material_resource.zig");
-const resources_geomerty = @import("../../resources/geometry_resource.zig");
-
-const Texture = resources_image.Texture;
-const TextureName = resources_image.TextureName;
-const Material = resources_material.Material;
-const Geometry = resources_geomerty.Geometry;
 
 const Vertex3D = renderer_types.Vertex3D;
 const BeginFrameResult = renderer_types.BeginFrameResult;
@@ -39,7 +36,6 @@ const Context = @This();
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
 };
-
 const optional_device_extensions = [_][*:0]const u8{
     // nothing here yet
 };
