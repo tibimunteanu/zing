@@ -151,7 +151,15 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d24_unorm_s8_uint,
 };
 
+// TODO: replace ArrayList(XXX) with BoundedArray(XXX, 3)
 pub const Context = struct {
+    // NOTE: used to:
+    // - dynamic arrays for framebuffers and cmd buffers
+    // - prep instance and device extensions
+    // - enumerate physical devices
+    // - passed to the swapchain to interogate surface formats and presentation modes
+    // - passed to shaders to load shader resources
+    // - allocate internal data on createTexture calls
     allocator: Allocator,
 
     base_api: BaseAPI,

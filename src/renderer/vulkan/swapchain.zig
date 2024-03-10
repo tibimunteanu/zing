@@ -29,7 +29,7 @@ pub const Swapchain = struct {
 
     // public
     pub fn init(
-        allocator: Allocator,
+        allocator: Allocator, // only needed for interogating surface formats and presentation modes
         context: *const Context,
         options: struct {
             desired_surface_format: vk.SurfaceFormatKHR = .{

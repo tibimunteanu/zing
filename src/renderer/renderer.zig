@@ -29,7 +29,7 @@ fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
 }
 
 pub const Renderer = struct {
-    allocator: Allocator,
+    allocator: Allocator, // only to be passed to context
     context: *Context,
 
     projection: math.Mat,

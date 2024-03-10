@@ -35,7 +35,7 @@ const material_shader_name = "material_shader";
 
 pub const MaterialShader = struct {
     context: *const Context,
-    allocator: Allocator, // TODO: replace this with a scratch arena
+    allocator: Allocator, // only needed for resource loading
 
     vertex_shader_module: vk.ShaderModule,
     fragment_shader_module: vk.ShaderModule,
@@ -69,14 +69,14 @@ pub const MaterialShader = struct {
         self.allocator = allocator;
         self.bind_point = .graphics;
 
-        const vert_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ material_shader_name, "vert" });
-        defer allocator.free(vert_path);
+        var vert_path_buf: [1024]u8 = undefined;
+        const vert_path = try std.fmt.bufPrint(&vert_path_buf, shader_path_format, .{ material_shader_name, "vert" });
 
         self.vertex_shader_module = try createShaderModule(self, vert_path);
         errdefer context.device_api.destroyShaderModule(context.device, self.vertex_shader_module, null);
 
-        const frag_path = try std.fmt.allocPrint(allocator, shader_path_format, .{ material_shader_name, "frag" });
-        defer allocator.free(frag_path);
+        var frag_path_buf: [1024]u8 = undefined;
+        const frag_path = try std.fmt.bufPrint(&frag_path_buf, shader_path_format, .{ material_shader_name, "frag" });
 
         self.fragment_shader_module = try createShaderModule(self, frag_path);
         errdefer context.device_api.destroyShaderModule(context.device, self.fragment_shader_module, null);
