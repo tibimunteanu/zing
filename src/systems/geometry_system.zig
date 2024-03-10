@@ -3,13 +3,12 @@ const pool = @import("zpool");
 const math = @import("zmath");
 
 const Engine = @import("../engine.zig");
+const Renderer = @import("../renderer/renderer.zig");
 const Material = @import("../renderer/material.zig");
 const Geometry = @import("../renderer/geometry.zig");
 
-const renderer_types = @import("../renderer/renderer_types.zig");
-
-const Vertex3D = renderer_types.Vertex3D;
-const Vertex2D = renderer_types.Vertex2D;
+const Vertex3D = Renderer.Vertex3D;
+const Vertex2D = Renderer.Vertex2D;
 
 const Allocator = std.mem.Allocator;
 

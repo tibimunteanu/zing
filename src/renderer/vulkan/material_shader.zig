@@ -4,6 +4,7 @@ const math = @import("zmath");
 
 const cnt = @import("../../cnt.zig");
 const Engine = @import("../../engine.zig");
+const Renderer = @import("../renderer.zig");
 const Context = @import("context.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
@@ -13,21 +14,44 @@ const BinaryResource = @import("../../resources/binary_resource.zig");
 const TextureHandle = @import("../../systems/texture_system.zig").TextureHandle;
 const MaterialHandle = @import("../../systems/material_system.zig").MaterialHandle;
 
-const renderer_types = @import("../renderer_types.zig");
-const vulkan_types = @import("vulkan_types.zig");
+const Vertex3D = Renderer.Vertex3D;
+const TextureData = Context.TextureData;
+const GeometryRenderData = Renderer.GeometryRenderData;
 
-const Vertex3D = renderer_types.Vertex3D;
-const GeometryRenderData = renderer_types.GeometryRenderData;
-const WorldGlobalUniformData = vulkan_types.WorldGlobalUniformData;
-const WorldInstanceUniformData = vulkan_types.WorldInstanceUniformData;
-const MaterialShaderInstanceState = vulkan_types.MaterialShaderInstanceState;
-const TextureData = vulkan_types.TextureData;
 const Allocator = std.mem.Allocator;
+
+const shader_path_format = "shaders/{s}.{s}.spv";
+const shader_name = "material_shader";
+
+pub const instance_max_count: u32 = 1024;
+pub const descriptor_count: u32 = 2;
+pub const sampler_count: u32 = 1;
 
 const MaterialShader = @This();
 
-const shader_path_format = "shaders/{s}.{s}.spv";
-const material_shader_name = "material_shader";
+pub const GlobalUniformData = struct {
+    projection: math.Mat,
+    view: math.Mat,
+    _reserved_1: math.Mat = undefined,
+    _reserved_2: math.Mat = undefined,
+};
+
+pub const InstanceUniformData = struct {
+    diffuse_color: math.Vec,
+    _reserved_0: math.Vec = undefined,
+    _reserved_1: math.Vec = undefined,
+    _reserved_2: math.Vec = undefined,
+};
+
+pub const DescriptorState = struct {
+    generations: [3]?u32,
+    handles: [3]TextureHandle,
+};
+
+pub const InstanceState = struct {
+    descriptor_sets: [3]vk.DescriptorSet,
+    descriptor_states: [descriptor_count]DescriptorState,
+};
 
 context: *const Context,
 allocator: Allocator, // only needed for resource loading
@@ -39,7 +63,7 @@ pipeline: vk.Pipeline,
 pipeline_layout: vk.PipelineLayout,
 bind_point: vk.PipelineBindPoint,
 
-global_uniform_data: WorldGlobalUniformData,
+global_uniform_data: GlobalUniformData,
 global_descriptor_pool: vk.DescriptorPool,
 global_descriptor_set_layout: vk.DescriptorSetLayout,
 global_descriptor_sets: [3]vk.DescriptorSet,
@@ -50,9 +74,9 @@ material_descriptor_set_layout: vk.DescriptorSetLayout,
 material_uniform_buffer: Buffer,
 material_uniform_buffer_index: ?u32,
 
-instance_states: [vulkan_types.material_shader_instance_max_count]MaterialShaderInstanceState,
+instance_states: [instance_max_count]InstanceState,
 
-sampler_uses: [vulkan_types.material_shader_sampler_count]Texture.Use,
+sampler_uses: [sampler_count]Texture.Use,
 
 // public
 pub fn init(
@@ -65,13 +89,13 @@ pub fn init(
     self.bind_point = .graphics;
 
     var vert_path_buf: [cnt.max_path_length]u8 = undefined;
-    const vert_path = try std.fmt.bufPrint(&vert_path_buf, shader_path_format, .{ material_shader_name, "vert" });
+    const vert_path = try std.fmt.bufPrint(&vert_path_buf, shader_path_format, .{ shader_name, "vert" });
 
     self.vertex_shader_module = try createShaderModule(self, vert_path);
     errdefer context.device_api.destroyShaderModule(context.device, self.vertex_shader_module, null);
 
     var frag_path_buf: [cnt.max_path_length]u8 = undefined;
-    const frag_path = try std.fmt.bufPrint(&frag_path_buf, shader_path_format, .{ material_shader_name, "frag" });
+    const frag_path = try std.fmt.bufPrint(&frag_path_buf, shader_path_format, .{ shader_name, "frag" });
 
     self.fragment_shader_module = try createShaderModule(self, frag_path);
     errdefer context.device_api.destroyShaderModule(context.device, self.fragment_shader_module, null);
@@ -136,7 +160,7 @@ pub fn init(
     self.sampler_uses[0] = .map_diffuse;
 
     // local / material descriptors
-    const descriptor_types = [vulkan_types.material_shader_descriptor_count]vk.DescriptorType{
+    const descriptor_types = [descriptor_count]vk.DescriptorType{
         .uniform_buffer,
         .combined_image_sampler,
     };
@@ -165,11 +189,11 @@ pub fn init(
     const material_ubo_pool_sizes = [_]vk.DescriptorPoolSize{
         vk.DescriptorPoolSize{
             .type = .uniform_buffer,
-            .descriptor_count = vulkan_types.material_shader_instance_max_count,
+            .descriptor_count = instance_max_count,
         },
         vk.DescriptorPoolSize{
             .type = .combined_image_sampler,
-            .descriptor_count = vulkan_types.material_shader_sampler_count * vulkan_types.material_shader_instance_max_count,
+            .descriptor_count = sampler_count * instance_max_count,
         },
     };
 
@@ -179,7 +203,7 @@ pub fn init(
             .flags = .{ .free_descriptor_set_bit = true },
             .pool_size_count = material_ubo_pool_sizes.len,
             .p_pool_sizes = &material_ubo_pool_sizes,
-            .max_sets = vulkan_types.material_shader_instance_max_count,
+            .max_sets = instance_max_count,
         },
         null,
     );
@@ -351,7 +375,7 @@ pub fn init(
 
     self.global_uniform_buffer = try Buffer.init(
         context,
-        @sizeOf(WorldGlobalUniformData) * 3,
+        @sizeOf(GlobalUniformData) * 3,
         .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
         .{
             .device_local_bit = self.context.physical_device.supports_local_host_visible,
@@ -382,7 +406,7 @@ pub fn init(
 
     self.material_uniform_buffer = try Buffer.init(
         context,
-        @sizeOf(WorldInstanceUniformData) * vulkan_types.material_shader_instance_max_count,
+        @sizeOf(InstanceUniformData) * instance_max_count,
         .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
         .{
             .device_local_bit = self.context.physical_device.supports_local_host_visible,
@@ -424,8 +448,8 @@ pub fn updateGlobalUniformData(self: *MaterialShader) !void {
     const command_buffer = self.context.getCurrentCommandBuffer();
     const global_descriptor_set = self.global_descriptor_sets[image_index];
 
-    const range: u32 = @sizeOf(WorldGlobalUniformData);
-    const offset: vk.DeviceSize = @sizeOf(WorldGlobalUniformData) * image_index;
+    const range: u32 = @sizeOf(GlobalUniformData);
+    const offset: vk.DeviceSize = @sizeOf(GlobalUniformData) * image_index;
 
     try self.global_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(self.global_uniform_data));
 
@@ -494,15 +518,15 @@ pub fn applyMaterial(self: *MaterialShader, material: MaterialHandle) !void {
     const p_material_state = &self.instance_states[p_material.internal_id.?];
     const material_descriptor_set = p_material_state.descriptor_sets[image_index];
 
-    var descriptor_writes: [vulkan_types.material_shader_descriptor_count]vk.WriteDescriptorSet = undefined;
+    var descriptor_writes: [descriptor_count]vk.WriteDescriptorSet = undefined;
     var write_count: u32 = 0;
     var dst_binding: u32 = 0;
 
     // descriptor 0 - uniform buffer
-    const range: u32 = @sizeOf(WorldInstanceUniformData);
-    const offset: vk.DeviceSize = @sizeOf(WorldInstanceUniformData) * p_material.internal_id.?;
+    const range: u32 = @sizeOf(InstanceUniformData);
+    const offset: vk.DeviceSize = @sizeOf(InstanceUniformData) * p_material.internal_id.?;
 
-    const instance_uniform_data = WorldInstanceUniformData{
+    const instance_uniform_data = InstanceUniformData{
         .diffuse_color = p_material.diffuse_color,
     };
 
@@ -530,8 +554,6 @@ pub fn applyMaterial(self: *MaterialShader, material: MaterialHandle) !void {
         descriptor_material_generation.* = p_material.generation;
     }
     dst_binding += 1;
-
-    const sampler_count: u32 = 1;
 
     for (0..sampler_count) |sampler_index| {
         const descriptor_texture_handle = &p_material_state.descriptor_states[dst_binding].handles[image_index];

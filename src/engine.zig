@@ -9,13 +9,11 @@ const TextureSystem = @import("systems/texture_system.zig");
 const MaterialSystem = @import("systems/material_system.zig");
 const GeometrySystem = @import("systems/geometry_system.zig");
 
-const renderer_types = @import("renderer/renderer_types.zig");
-
 const GeometryHandle = GeometrySystem.GeometryHandle;
-const RenderPacket = renderer_types.RenderPacket;
-const GeometryRenderData = renderer_types.GeometryRenderData;
-const Vertex3D = renderer_types.Vertex3D;
-const Vertex2D = renderer_types.Vertex2D;
+const RenderPacket = Renderer.RenderPacket;
+const GeometryRenderData = Renderer.GeometryRenderData;
+const Vertex3D = Renderer.Vertex3D;
+const Vertex2D = Renderer.Vertex2D;
 
 const Allocator = std.mem.Allocator;
 

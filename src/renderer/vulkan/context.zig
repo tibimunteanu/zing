@@ -5,6 +5,7 @@ const vk = @import("vk.zig");
 const math = @import("zmath");
 
 const Engine = @import("../../engine.zig");
+const Renderer = @import("../renderer.zig");
 const Swapchain = @import("swapchain.zig");
 const RenderPass = @import("renderpass.zig");
 const CommandBuffer = @import("command_buffer.zig");
@@ -16,18 +17,11 @@ const Texture = @import("../texture.zig");
 const Material = @import("../material.zig");
 const Geometry = @import("../geometry.zig");
 
-const renderer_types = @import("../renderer_types.zig");
-const vulkan_types = @import("vulkan_types.zig");
 const resources_image = @import("../../resources/image_resource.zig");
 const resources_material = @import("../../resources/material_resource.zig");
 
-const Vertex3D = renderer_types.Vertex3D;
-const BeginFrameResult = renderer_types.BeginFrameResult;
-const GeometryRenderData = renderer_types.GeometryRenderData;
-const RenderPassTypes = renderer_types.RenderPassTypes;
-
-const TextureData = vulkan_types.TextureData;
-const GeometryData = vulkan_types.GeometryData;
+const Vertex3D = Renderer.Vertex3D;
+const GeometryRenderData = Renderer.GeometryRenderData;
 
 const Allocator = std.mem.Allocator;
 
@@ -36,6 +30,7 @@ const Context = @This();
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
 };
+
 const optional_device_extensions = [_][*:0]const u8{
     // nothing here yet
 };
@@ -147,6 +142,24 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d24_unorm_s8_uint,
 };
 
+pub const TextureData = struct {
+    image: Image,
+    sampler: vk.Sampler,
+};
+
+pub const geometry_max_count: u32 = 4096;
+
+pub const GeometryData = struct {
+    id: ?u32,
+    generation: ?u32,
+    vertex_count: u32,
+    vertex_size: u32,
+    vertex_buffer_offset: u32,
+    index_count: u32,
+    index_size: u32,
+    index_buffer_offset: u32,
+};
+
 // TODO: replace ArrayList(XXX) with BoundedArray(XXX, 3)
 // NOTE: used to:
 // - dynamic arrays for framebuffers and cmd buffers
@@ -190,7 +203,7 @@ vertex_offset: usize,
 index_buffer: Buffer,
 index_offset: usize,
 
-geometries: [vulkan_types.geometry_max_count]GeometryData,
+geometries: [geometry_max_count]GeometryData,
 
 desired_extent: glfw.Window.Size,
 desired_extent_generation: u32,
@@ -387,7 +400,7 @@ pub fn allocate(self: Context, requirements: vk.MemoryRequirements, flags: vk.Me
     }, null);
 }
 
-pub fn beginFrame(self: *Context, delta_time: f32) !BeginFrameResult {
+pub fn beginFrame(self: *Context, delta_time: f32) !Renderer.BeginFrameResult {
     self.delta_time = delta_time;
 
     if (self.desired_extent_generation != self.swapchain.extent_generation) {
@@ -458,7 +471,7 @@ pub fn endFrame(self: *Context) !void {
     }
 }
 
-pub fn beginRenderPass(self: *Context, render_pass_type: RenderPassTypes) !void {
+pub fn beginRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
     const command_buffer = self.getCurrentCommandBuffer();
 
     switch (render_pass_type) {
@@ -473,7 +486,7 @@ pub fn beginRenderPass(self: *Context, render_pass_type: RenderPassTypes) !void 
     }
 }
 
-pub fn endRenderPass(self: *Context, render_pass_type: RenderPassTypes) !void {
+pub fn endRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
     const command_buffer = self.getCurrentCommandBuffer();
 
     switch (render_pass_type) {
@@ -1052,7 +1065,7 @@ fn freeDataRegion(self: *Context, buffer: *Buffer, offset: vk.DeviceSize, size: 
     _ = size; // autofix
 }
 
-pub const PhysicalDevice = struct {
+const PhysicalDevice = struct {
     handle: vk.PhysicalDevice,
     features: vk.PhysicalDeviceFeatures,
     properties: vk.PhysicalDeviceProperties,
@@ -1254,7 +1267,7 @@ pub const PhysicalDevice = struct {
     }
 };
 
-pub const Queue = struct {
+const Queue = struct {
     handle: vk.Queue,
     family_index: u32,
 

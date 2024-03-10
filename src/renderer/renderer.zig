@@ -9,18 +9,41 @@ const Material = @import("material.zig");
 const Geometry = @import("geometry.zig");
 const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
 
-const renderer_types = @import("renderer_types.zig");
-
-const Vertex3D = renderer_types.Vertex3D;
-const RenderPacket = renderer_types.RenderPacket;
-const BeginFrameResult = renderer_types.BeginFrameResult;
-const GeometryRenderData = renderer_types.GeometryRenderData;
-
 const Allocator = std.mem.Allocator;
 
 const deg2rad = std.math.degreesToRadians;
 
 const Renderer = @This();
+
+pub const BeginFrameResult = enum {
+    render,
+    resize,
+};
+
+const GeometryHandle = @import("../systems/geometry_system.zig").GeometryHandle;
+
+pub const Vertex3D = struct {
+    position: [3]f32,
+    texcoord: [2]f32,
+    color: [4]f32,
+};
+
+pub const Vertex2D = struct {
+    position: [2]f32,
+    texcoord: [2]f32,
+    color: [4]f32,
+};
+
+pub const GeometryRenderData = struct {
+    model: math.Mat,
+    geometry: GeometryHandle,
+};
+
+pub const RenderPacket = struct {
+    delta_time: f32,
+    geometries: []const GeometryRenderData,
+    ui_geometries: []const GeometryRenderData,
+};
 
 allocator: Allocator, // only to be passed to context
 context: *Context,
