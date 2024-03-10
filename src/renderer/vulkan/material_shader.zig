@@ -20,14 +20,14 @@ const GeometryRenderData = Renderer.GeometryRenderData;
 
 const Allocator = std.mem.Allocator;
 
+const Shader = @This();
+
 const shader_path_format = "shaders/{s}.{s}.spv";
 const shader_name = "material_shader";
 
 pub const instance_max_count: u32 = 1024;
 pub const descriptor_count: u32 = 2;
 pub const sampler_count: u32 = 1;
-
-const MaterialShader = @This();
 
 pub const GlobalUniformData = struct {
     projection: math.Mat,
@@ -79,11 +79,8 @@ instance_states: [instance_max_count]InstanceState,
 sampler_uses: [sampler_count]Texture.Use,
 
 // public
-pub fn init(
-    allocator: Allocator,
-    context: *const Context,
-) !MaterialShader {
-    var self: MaterialShader = undefined;
+pub fn init(allocator: Allocator, context: *const Context) !Shader {
+    var self: Shader = undefined;
     self.context = context;
     self.allocator = allocator;
     self.bind_point = .graphics;
@@ -433,7 +430,7 @@ pub fn init(
     return self;
 }
 
-pub fn deinit(self: *MaterialShader) void {
+pub fn deinit(self: *Shader) void {
     self.material_uniform_buffer.deinit();
     self.global_uniform_buffer.deinit();
 
@@ -450,11 +447,11 @@ pub fn deinit(self: *MaterialShader) void {
     self.context.device_api.destroyShaderModule(self.context.device, self.vertex_shader_module, null);
 }
 
-pub fn bind(self: MaterialShader, command_buffer: *const CommandBuffer) void {
+pub fn bind(self: Shader, command_buffer: *const CommandBuffer) void {
     self.context.device_api.cmdBindPipeline(command_buffer.handle, self.bind_point, self.pipeline);
 }
 
-pub fn updateGlobalUniformData(self: *MaterialShader) !void {
+pub fn updateGlobalUniformData(self: *Shader) !void {
     const image_index = self.context.swapchain.image_index;
     const command_buffer = self.context.getCurrentCommandBuffer();
     const global_descriptor_set = self.global_descriptor_sets.slice()[image_index];
@@ -501,7 +498,7 @@ pub fn updateGlobalUniformData(self: *MaterialShader) !void {
     );
 }
 
-pub fn setModel(self: *MaterialShader, model: math.Mat) void {
+pub fn setModel(self: *Shader, model: math.Mat) void {
     const command_buffer = self.context.getCurrentCommandBuffer();
 
     self.context.device_api.cmdPushConstants(
@@ -514,7 +511,7 @@ pub fn setModel(self: *MaterialShader, model: math.Mat) void {
     );
 }
 
-pub fn applyMaterial(self: *MaterialShader, material: MaterialHandle) !void {
+pub fn applyMaterial(self: *Shader, material: MaterialHandle) !void {
     const image_index = self.context.swapchain.image_index;
     const command_buffer = self.context.getCurrentCommandBuffer();
 
@@ -636,7 +633,7 @@ pub fn applyMaterial(self: *MaterialShader, material: MaterialHandle) !void {
     );
 }
 
-pub fn acquireResources(self: *MaterialShader, material: *Material) !void {
+pub fn acquireResources(self: *Shader, material: *Material) !void {
     material.internal_id = self.material_uniform_buffer_index;
     self.material_uniform_buffer_index = if (self.material_uniform_buffer_index) |g| g +% 1 else 0;
 
@@ -672,7 +669,7 @@ pub fn acquireResources(self: *MaterialShader, material: *Material) !void {
     );
 }
 
-pub fn releaseResources(self: *MaterialShader, material: *Material) void {
+pub fn releaseResources(self: *Shader, material: *Material) void {
     const instance_state = &self.instance_states[material.internal_id.?];
 
     self.context.device_api.deviceWaitIdle(self.context.device) catch {
@@ -703,7 +700,7 @@ pub fn releaseResources(self: *MaterialShader, material: *Material) void {
 }
 
 // utils
-fn createShaderModule(self: MaterialShader, path: []const u8) !vk.ShaderModule {
+fn createShaderModule(self: Shader, path: []const u8) !vk.ShaderModule {
     var binary_resource = try BinaryResource.init(self.allocator, path);
     defer binary_resource.deinit();
 
