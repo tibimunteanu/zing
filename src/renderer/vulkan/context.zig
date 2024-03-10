@@ -234,7 +234,7 @@ pub const Context = struct {
         self.compute_queue = Queue.init(self, self.physical_device.compute_family_index);
         self.transfer_queue = Queue.init(self, self.physical_device.transfer_family_index);
 
-        self.swapchain = try Swapchain.init(self.allocator, self, .{});
+        self.swapchain = try Swapchain.init(allocator, self, .{});
         errdefer self.swapchain.deinit(.{});
 
         self.world_render_pass = try RenderPass.init(
@@ -266,36 +266,18 @@ pub const Context = struct {
         errdefer self.ui_render_pass.deinit();
 
         // framebuffers
-        self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(self.allocator, self.swapchain.images.len);
+        self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        errdefer self.framebuffers.deinit();
+
         self.framebuffers.items.len = self.swapchain.images.len;
 
-        for (self.framebuffers.items) |*framebuffer| {
-            framebuffer.handle = .null_handle;
-        }
+        self.world_framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        errdefer self.world_framebuffers.deinit();
 
-        self.world_framebuffers = try std.ArrayList(Framebuffer).initCapacity(self.allocator, self.swapchain.images.len);
         self.world_framebuffers.items.len = self.swapchain.images.len;
 
-        for (self.world_framebuffers.items) |*framebuffer| {
-            framebuffer.handle = .null_handle;
-        }
-
-        try self.recreateFramebuffers();
-        errdefer {
-            for (self.framebuffers.items) |*framebuffer| {
-                if (framebuffer.handle != .null_handle) {
-                    framebuffer.deinit();
-                }
-            }
-            self.framebuffers.deinit();
-
-            for (self.world_framebuffers.items) |*framebuffer| {
-                if (framebuffer.handle != .null_handle) {
-                    framebuffer.deinit();
-                }
-            }
-            self.world_framebuffers.deinit();
-        }
+        try self.initFramebuffers();
+        errdefer self.deinitFramebuffers();
 
         // create command pool
         self.graphics_command_pool = try self.device_api.createCommandPool(self.device, &vk.CommandPoolCreateInfo{
@@ -305,13 +287,21 @@ pub const Context = struct {
         errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
         // create command buffers
-        try self.initCommandBuffers(.{ .allocate = true, .allocator = self.allocator });
-        errdefer self.deinitCommandbuffers(.{ .deallocate = true });
+        self.graphics_command_buffers = try std.ArrayList(CommandBuffer).initCapacity(
+            self.allocator,
+            self.swapchain.images.len,
+        );
+        errdefer self.graphics_command_buffers.deinit();
 
-        self.material_shader = try MaterialShader.init(self.allocator, self);
+        self.graphics_command_buffers.items.len = self.swapchain.images.len;
+
+        try self.initCommandBuffers();
+        errdefer self.deinitCommandBuffers();
+
+        self.material_shader = try MaterialShader.init(allocator, self);
         errdefer self.material_shader.deinit();
 
-        self.ui_shader = try UIShader.init(self.allocator, self);
+        self.ui_shader = try UIShader.init(allocator, self);
         errdefer self.ui_shader.deinit();
 
         // create buffers
@@ -349,24 +339,24 @@ pub const Context = struct {
 
         self.vertex_buffer.deinit();
         self.index_buffer.deinit();
+
         self.ui_shader.deinit();
         self.material_shader.deinit();
-        self.deinitCommandbuffers(.{ .deallocate = true });
+
+        self.deinitCommandBuffers();
+        self.graphics_command_buffers.deinit();
+
         self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
-        for (self.world_framebuffers.items) |*framebuffer| {
-            framebuffer.deinit();
-        }
+        self.deinitFramebuffers();
         self.world_framebuffers.deinit();
-
-        for (self.framebuffers.items) |*framebuffer| {
-            framebuffer.deinit();
-        }
         self.framebuffers.deinit();
 
         self.ui_render_pass.deinit();
         self.world_render_pass.deinit();
+
         self.swapchain.deinit(.{});
+
         self.device_api.destroyDevice(self.device, null);
         self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
         self.instance_api.destroyInstance(self.instance, null);
@@ -800,7 +790,7 @@ pub const Context = struct {
         // includes all required extensions and optional extensions that the driver supports
         var instance_extensions = try std.ArrayList([*:0]const u8).initCapacity(
             allocator,
-            required_instance_extensions.len + 1,
+            required_instance_extensions.len + optional_instance_extensions.len,
         );
         defer instance_extensions.deinit();
 
@@ -816,7 +806,8 @@ pub const Context = struct {
 
         for (optional_instance_extensions) |optional_inst_ext| {
             for (existing_instance_extensions) |existing_inst_ext| {
-                const len = std.mem.indexOfScalar(u8, &existing_inst_ext.extension_name, 0) orelse existing_inst_ext.extension_name.len;
+                const len = std.mem.indexOfScalar(u8, &existing_inst_ext.extension_name, 0) //
+                orelse existing_inst_ext.extension_name.len;
 
                 if (std.mem.eql(u8, existing_inst_ext.extension_name[0..len], std.mem.span(optional_inst_ext))) {
                     try instance_extensions.append(optional_inst_ext);
@@ -899,7 +890,10 @@ pub const Context = struct {
             }
         }
 
-        var device_extensions = try std.ArrayList([*:0]const u8).initCapacity(allocator, required_device_extensions.len);
+        var device_extensions = try std.ArrayList([*:0]const u8).initCapacity(
+            allocator,
+            required_device_extensions.len + optional_device_extensions.len,
+        );
         defer device_extensions.deinit();
 
         // list of extensions to be requested when creating the device
@@ -912,12 +906,7 @@ pub const Context = struct {
         const existing_extensions = try allocator.alloc(vk.ExtensionProperties, count);
         defer allocator.free(existing_extensions);
 
-        _ = try instance_api.enumerateDeviceExtensionProperties(
-            physical_device.handle,
-            null,
-            &count,
-            existing_extensions.ptr,
-        );
+        _ = try instance_api.enumerateDeviceExtensionProperties(physical_device.handle, null, &count, existing_extensions.ptr);
 
         for (optional_device_extensions) |optional_ext| {
             for (existing_extensions) |existing_ext| {
@@ -944,33 +933,64 @@ pub const Context = struct {
         return device;
     }
 
-    fn initCommandBuffers(self: *Context, options: struct { allocate: bool = false, allocator: ?Allocator = null }) !void {
-        if (options.allocate) {
-            self.graphics_command_buffers = try std.ArrayList(CommandBuffer).initCapacity(options.allocator.?, self.swapchain.images.len);
-            self.graphics_command_buffers.items.len = self.swapchain.images.len;
-
-            for (self.graphics_command_buffers.items) |*buffer| {
-                buffer.handle = .null_handle;
-            }
-        }
-        errdefer if (options.allocate) self.graphics_command_buffers.deinit();
-
+    fn initCommandBuffers(self: *Context) !void {
         for (self.graphics_command_buffers.items) |*buffer| {
-            if (buffer.handle != .null_handle) {
-                buffer.deinit();
-            }
-
             buffer.* = try CommandBuffer.init(self, self.graphics_command_pool, true);
         }
     }
 
-    fn deinitCommandbuffers(self: *Context, options: struct { deallocate: bool = false }) void {
+    fn deinitCommandBuffers(self: *Context) void {
         for (self.graphics_command_buffers.items) |*buffer| {
-            buffer.deinit();
+            if (buffer.handle != .null_handle) {
+                buffer.deinit();
+            }
+        }
+    }
+
+    fn initFramebuffers(self: *Context) !void {
+        for (self.swapchain.images, self.world_framebuffers.items) |image, *framebuffer| {
+            const attachments = [_]vk.ImageView{
+                image.view,
+                self.swapchain.depth_image.view,
+            };
+
+            framebuffer.* = try Framebuffer.init(
+                self,
+                self.allocator,
+                &self.world_render_pass,
+                self.swapchain.extent.width,
+                self.swapchain.extent.height,
+                &attachments,
+            );
         }
 
-        if (options.deallocate) {
-            self.graphics_command_buffers.deinit();
+        for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
+            const attachments = [_]vk.ImageView{
+                image.view,
+            };
+
+            framebuffer.* = try Framebuffer.init(
+                self,
+                self.allocator,
+                &self.ui_render_pass,
+                self.swapchain.extent.width,
+                self.swapchain.extent.height,
+                &attachments,
+            );
+        }
+    }
+
+    fn deinitFramebuffers(self: *Context) void {
+        for (self.framebuffers.items) |*framebuffer| {
+            if (framebuffer.handle != .null_handle) {
+                framebuffer.deinit();
+            }
+        }
+
+        for (self.world_framebuffers.items) |*framebuffer| {
+            if (framebuffer.handle != .null_handle) {
+                framebuffer.deinit();
+            }
         }
     }
 
@@ -995,66 +1015,14 @@ pub const Context = struct {
             .old_handle = old_handle,
         });
 
-        try self.recreateFramebuffers();
-        errdefer {
-            for (self.framebuffers.items) |*framebuffer| {
-                if (framebuffer.handle != .null_handle) {
-                    framebuffer.deinit();
-                }
-            }
+        self.deinitFramebuffers();
+        try self.initFramebuffers();
+        errdefer self.deinitFramebuffers();
 
-            for (self.world_framebuffers.items) |*framebuffer| {
-                if (framebuffer.handle != .null_handle) {
-                    framebuffer.deinit();
-                }
-            }
-        }
-
-        try self.initCommandBuffers(.{});
-        errdefer self.deinitCommandbuffers(.{});
+        self.deinitCommandBuffers();
+        try self.initCommandBuffers();
 
         self.swapchain.extent_generation = self.desired_extent_generation;
-    }
-
-    fn recreateFramebuffers(self: *Context) !void {
-        for (self.swapchain.images, self.world_framebuffers.items) |image, *framebuffer| {
-            if (framebuffer.handle != .null_handle) {
-                framebuffer.deinit();
-            }
-
-            const attachments = [_]vk.ImageView{
-                image.view,
-                self.swapchain.depth_image.view,
-            };
-
-            framebuffer.* = try Framebuffer.init(
-                self,
-                self.allocator,
-                &self.world_render_pass,
-                self.swapchain.extent.width,
-                self.swapchain.extent.height,
-                &attachments,
-            );
-        }
-
-        for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
-            if (framebuffer.handle != .null_handle) {
-                framebuffer.deinit();
-            }
-
-            const attachments = [_]vk.ImageView{
-                image.view,
-            };
-
-            framebuffer.* = try Framebuffer.init(
-                self,
-                self.allocator,
-                &self.ui_render_pass,
-                self.swapchain.extent.width,
-                self.swapchain.extent.height,
-                &attachments,
-            );
-        }
     }
 
     fn uploadDataRegion(self: *Context, buffer: *Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, data: []const u8) !void {

@@ -61,15 +61,15 @@ pub const Engine = struct {
 
         if (!glfw.init(.{})) {
             std.log.err("Failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
-            std.process.exit(1);
+            return error.GLFWInitFailed;
         }
         errdefer glfw.terminate();
 
         instance.window = glfw.Window.create(960, 540, "Zing", null, null, .{
             .client_api = .no_api,
-        }) orelse {
+        }) orelse return blk: {
             std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
-            std.process.exit(1);
+            break :blk error.CreateWindowFailed;
         };
         errdefer instance.window.destroy();
 

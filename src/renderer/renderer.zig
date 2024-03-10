@@ -49,7 +49,9 @@ pub const Renderer = struct {
         try self.context.init(allocator, "Zing app", window);
         errdefer self.context.deinit();
 
-        std.log.info("Graphics device: {?s}", .{self.context.physical_device.properties.device_name});
+        std.log.info("Graphics device: {?s}", .{
+            self.context.physical_device.properties.device_name,
+        });
         std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}", .{
             self.context.graphics_queue.family_index,
             self.context.present_queue.family_index,
