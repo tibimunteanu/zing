@@ -34,9 +34,9 @@ pub const RenderPass = struct {
     pub fn init(
         context: *const Context,
         options: struct {
-            render_area: RenderArea,
-            clear_values: ClearValues,
-            clear_flags: ClearFlags,
+            render_area: RenderArea = .swapchain,
+            clear_flags: ClearFlags = .{},
+            clear_values: ClearValues = undefined,
             has_prev: bool,
             has_next: bool,
         },
@@ -45,8 +45,8 @@ pub const RenderPass = struct {
         self.context = context;
 
         self.render_area = options.render_area;
-        self.clear_values = options.clear_values;
         self.clear_flags = options.clear_flags;
+        self.clear_values = options.clear_values;
         self.has_prev = options.has_prev;
         self.has_next = options.has_next;
 

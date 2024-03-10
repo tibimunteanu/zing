@@ -22,7 +22,7 @@ pub const Swapchain = struct {
     present_mode: vk.PresentModeKHR,
 
     handle: vk.SwapchainKHR,
-    images: []SwapchainImage,
+    images: std.BoundedArray(SwapchainImage, 3),
     depth_image: Image,
     image_index: u32,
     next_image_acquired_semaphore: vk.Semaphore,
@@ -37,7 +37,7 @@ pub const Swapchain = struct {
                 .color_space = .srgb_nonlinear_khr,
             },
             desired_present_modes: []const vk.PresentModeKHR = &[_]vk.PresentModeKHR{
-                .mailbox_khr,
+                .fifo_khr,
                 .immediate_khr,
             },
             old_handle: vk.SwapchainKHR = .null_handle,
@@ -54,7 +54,6 @@ pub const Swapchain = struct {
         try self.initSurfaceFormat(options.desired_surface_format);
         try self.initPresentMode(options.desired_present_modes);
 
-        const image_count = self.getImageCount();
         const image_sharing = self.getImageSharingInfo();
 
         const device = context.device;
@@ -63,7 +62,7 @@ pub const Swapchain = struct {
         self.handle = try device_api.createSwapchainKHR(device, &.{
             .flags = .{},
             .surface = context.surface,
-            .min_image_count = image_count,
+            .min_image_count = 3,
             .image_format = self.surface_format.format,
             .image_color_space = self.surface_format.color_space,
             .image_extent = self.extent,
@@ -121,12 +120,12 @@ pub const Swapchain = struct {
         });
     }
 
-    pub fn getCurrentImage(self: Swapchain) *const SwapchainImage {
-        return &self.images[self.image_index];
+    pub fn getCurrentImage(self: *const Swapchain) *const SwapchainImage {
+        return &self.images.constSlice()[self.image_index];
     }
 
     pub fn waitForAllFences(self: Swapchain) !void {
-        for (self.images) |image| {
+        for (self.images.constSlice()) |image| {
             image.waitForFrameFence(.{}) catch {};
         }
     }
@@ -232,14 +231,6 @@ pub const Swapchain = struct {
         self.present_mode = .fifo_khr; // guaranteed to be available
     }
 
-    fn getImageCount(self: Swapchain) u32 {
-        var image_count = self.capabilities.min_image_count + 1;
-        if (self.capabilities.max_image_count > 0) {
-            image_count = @min(image_count, self.capabilities.max_image_count);
-        }
-        return image_count;
-    }
-
     fn getImageSharingInfo(self: Swapchain) ?[]const u32 {
         if (self.context.graphics_queue.family_index == self.context.present_queue.family_index) {
             return null;
@@ -256,22 +247,22 @@ pub const Swapchain = struct {
         const device_api = self.context.device_api;
 
         // get the image handles
+        // NOTE: count is always max 3 so we don't need to call twice
         var count: u32 = undefined;
-        _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, null);
+        var imageHandles: [3]vk.Image = undefined;
+        _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, &imageHandles);
 
-        const imageHandles = try self.allocator.alloc(vk.Image, count);
-        defer self.allocator.free(imageHandles);
-        _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, imageHandles.ptr);
+        if (count != 3) {
+            return error.SwapchainIsNotTripleBuffering;
+        }
 
-        // allocate swapchain images
-        self.images = try self.allocator.alloc(SwapchainImage, count);
-        errdefer self.allocator.free(self.images);
-
-        for (imageHandles, 0..) |handle, i| {
-            self.images[i] = try SwapchainImage.init(self.context, handle, self.surface_format.format);
+        // init swapchain images
+        self.images.len = 0;
+        for (0..count) |i| {
+            try self.images.append(try SwapchainImage.init(self.context, imageHandles[i], self.surface_format.format));
         }
         errdefer {
-            for (self.images) |image| {
+            for (self.images.slice()) |*image| {
                 image.deinit();
             }
         }
@@ -291,10 +282,10 @@ pub const Swapchain = struct {
     fn deinitImages(self: *Swapchain) void {
         self.depth_image.deinit();
 
-        for (self.images) |image| {
+        for (self.images.slice()) |*image| {
             image.deinit();
         }
-        self.allocator.free(self.images);
+        self.images.len = 0;
     }
 
     fn acquireNextImage(self: *Swapchain) !PresentState {
@@ -312,7 +303,7 @@ pub const Swapchain = struct {
         // after getting the next image, we swap it's image acquired semaphore with the aux semaphore.
         std.mem.swap(
             vk.Semaphore,
-            &self.images[acquired.image_index].image_acquired_semaphore,
+            &self.images.slice()[acquired.image_index].image_acquired_semaphore,
             &self.next_image_acquired_semaphore,
         );
 

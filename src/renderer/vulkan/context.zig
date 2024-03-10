@@ -233,19 +233,24 @@ pub const Context = struct {
         self.compute_queue = Queue.init(self, self.physical_device.compute_family_index);
         self.transfer_queue = Queue.init(self, self.physical_device.transfer_family_index);
 
+        // create swapchain
         self.swapchain = try Swapchain.init(allocator, self, .{});
         errdefer self.swapchain.deinit();
 
+        // create renderpasses
         self.world_render_pass = try RenderPass.init(
             self,
             .{
-                .render_area = .swapchain,
+                .clear_flags = .{
+                    .color = true,
+                    .depth = true,
+                    .stencil = true,
+                },
                 .clear_values = .{
                     .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
                     .depth = 1.0,
                     .stencil = 0,
                 },
-                .clear_flags = .{ .color = true, .depth = true, .stencil = true },
                 .has_prev = false,
                 .has_next = true,
             },
@@ -255,20 +260,13 @@ pub const Context = struct {
         self.ui_render_pass = try RenderPass.init(
             self,
             .{
-                .render_area = .swapchain,
-                .clear_values = .{
-                    .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
-                    .depth = 1.0,
-                    .stencil = 0,
-                },
-                .clear_flags = .{},
                 .has_prev = true,
                 .has_next = false,
             },
         );
         errdefer self.ui_render_pass.deinit();
 
-        // framebuffers
+        // create framebuffers
         self.framebuffers = try std.ArrayList(vk.Framebuffer).initCapacity(allocator, self.swapchain.images.len);
         errdefer self.framebuffers.deinit();
 
@@ -295,6 +293,7 @@ pub const Context = struct {
         try self.initCommandBuffers();
         errdefer self.deinitCommandBuffers();
 
+        // create shaders
         self.material_shader = try MaterialShader.init(allocator, self);
         errdefer self.material_shader.deinit();
 
@@ -322,13 +321,14 @@ pub const Context = struct {
         self.index_offset = 0;
         errdefer self.index_buffer.deinit();
 
+        // reset geometry storage
         for (&self.geometries) |*geometry| {
             geometry.*.id = null;
             geometry.*.generation = null;
         }
 
         self.frame_index = 0;
-        self.delta_time = 0;
+        self.delta_time = 1.0 / 60.0;
     }
 
     pub fn deinit(self: *Context) void {
@@ -933,7 +933,7 @@ pub const Context = struct {
     fn initCommandBuffers(self: *Context) !void {
         errdefer self.deinitCommandBuffers();
 
-        for (self.swapchain.images) |_| {
+        for (0..self.swapchain.images.len) |_| {
             try self.graphics_command_buffers.append(try CommandBuffer.init(self, self.graphics_command_pool, true));
         }
     }
@@ -950,7 +950,7 @@ pub const Context = struct {
     fn initFramebuffers(self: *Context) !void {
         errdefer self.deinitFramebuffers();
 
-        for (self.swapchain.images) |image| {
+        for (self.swapchain.images.slice()) |image| {
             const attachments = [_]vk.ImageView{
                 image.view,
                 self.swapchain.depth_image.view,
@@ -968,7 +968,7 @@ pub const Context = struct {
             );
         }
 
-        for (self.swapchain.images) |image| {
+        for (self.swapchain.images.slice()) |image| {
             const attachments = [_]vk.ImageView{
                 image.view,
             };
@@ -1150,6 +1150,14 @@ pub const PhysicalDevice = struct {
 
         if (present_mode_count == 0) {
             return error.NoDevicePresentModesFound;
+        }
+
+        const surface_capabilities = try instance_api.getPhysicalDeviceSurfaceCapabilitiesKHR(self.handle, surface);
+
+        if (surface_capabilities.min_image_count > 3 or //
+            (surface_capabilities.max_image_count > 0 and surface_capabilities.max_image_count < 3))
+        {
+            return error.TripleBufferingNotSupported;
         }
     }
 
