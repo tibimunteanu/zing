@@ -8,7 +8,6 @@ const Engine = @import("../../engine.zig").Engine;
 const Swapchain = @import("swapchain.zig").Swapchain;
 const RenderPass = @import("renderpass.zig").RenderPass;
 const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
-const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const MaterialShader = @import("material_shader.zig").MaterialShader;
 const UIShader = @import("ui_shader.zig").UIShader;
 const Buffer = @import("buffer.zig").Buffer;
@@ -170,8 +169,8 @@ pub const Context = struct {
     transfer_queue: Queue,
 
     swapchain: Swapchain,
-    framebuffers: std.ArrayList(Framebuffer),
-    world_framebuffers: std.ArrayList(Framebuffer),
+    framebuffers: std.ArrayList(vk.Framebuffer),
+    world_framebuffers: std.ArrayList(vk.Framebuffer),
 
     world_render_pass: RenderPass,
     ui_render_pass: RenderPass,
@@ -266,12 +265,12 @@ pub const Context = struct {
         errdefer self.ui_render_pass.deinit();
 
         // framebuffers
-        self.framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        self.framebuffers = try std.ArrayList(vk.Framebuffer).initCapacity(allocator, self.swapchain.images.len);
         errdefer self.framebuffers.deinit();
 
         self.framebuffers.items.len = self.swapchain.images.len;
 
-        self.world_framebuffers = try std.ArrayList(Framebuffer).initCapacity(allocator, self.swapchain.images.len);
+        self.world_framebuffers = try std.ArrayList(vk.Framebuffer).initCapacity(allocator, self.swapchain.images.len);
         errdefer self.world_framebuffers.deinit();
 
         self.world_framebuffers.items.len = self.swapchain.images.len;
@@ -463,11 +462,11 @@ pub const Context = struct {
 
         switch (render_pass_type) {
             .world => {
-                self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer().handle);
+                self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer());
                 self.material_shader.bind(command_buffer);
             },
             .ui => {
-                self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer().handle);
+                self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer());
                 self.ui_shader.bind(command_buffer);
             },
         }
@@ -486,12 +485,12 @@ pub const Context = struct {
         return &self.graphics_command_buffers.items[self.swapchain.image_index];
     }
 
-    pub fn getCurrentFramebuffer(self: Context) *Framebuffer {
-        return &self.framebuffers.items[self.swapchain.image_index];
+    pub fn getCurrentFramebuffer(self: Context) vk.Framebuffer {
+        return self.framebuffers.items[self.swapchain.image_index];
     }
 
-    pub fn getCurrentWorldFramebuffer(self: Context) *Framebuffer {
-        return &self.world_framebuffers.items[self.swapchain.image_index];
+    pub fn getCurrentWorldFramebuffer(self: Context) vk.Framebuffer {
+        return self.world_framebuffers.items[self.swapchain.image_index];
     }
 
     pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {
@@ -954,14 +953,15 @@ pub const Context = struct {
                 self.swapchain.depth_image.view,
             };
 
-            framebuffer.* = try Framebuffer.init(
-                self,
-                self.allocator,
-                &self.world_render_pass,
-                self.swapchain.extent.width,
-                self.swapchain.extent.height,
-                &attachments,
-            );
+            framebuffer.* = try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
+                .render_pass = self.world_render_pass.handle,
+                .attachment_count = @intCast(attachments.len),
+                .p_attachments = &attachments,
+                .width = self.swapchain.extent.width,
+                .height = self.swapchain.extent.height,
+                .layers = 1,
+            }, null);
+            errdefer self.device_api.destroyFramebuffer(self.device, framebuffer.*, null);
         }
 
         for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
@@ -969,27 +969,28 @@ pub const Context = struct {
                 image.view,
             };
 
-            framebuffer.* = try Framebuffer.init(
-                self,
-                self.allocator,
-                &self.ui_render_pass,
-                self.swapchain.extent.width,
-                self.swapchain.extent.height,
-                &attachments,
-            );
+            framebuffer.* = try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
+                .render_pass = self.ui_render_pass.handle,
+                .attachment_count = @intCast(attachments.len),
+                .p_attachments = &attachments,
+                .width = self.swapchain.extent.width,
+                .height = self.swapchain.extent.height,
+                .layers = 1,
+            }, null);
+            errdefer self.device_api.destroyFramebuffer(self.device, framebuffer.*, null);
         }
     }
 
     fn deinitFramebuffers(self: *Context) void {
-        for (self.framebuffers.items) |*framebuffer| {
-            if (framebuffer.handle != .null_handle) {
-                framebuffer.deinit();
+        for (self.framebuffers.items) |framebuffer| {
+            if (framebuffer != .null_handle) {
+                self.device_api.destroyFramebuffer(self.device, framebuffer, null);
             }
         }
 
-        for (self.world_framebuffers.items) |*framebuffer| {
-            if (framebuffer.handle != .null_handle) {
-                framebuffer.deinit();
+        for (self.world_framebuffers.items) |framebuffer| {
+            if (framebuffer != .null_handle) {
+                self.device_api.destroyFramebuffer(self.device, framebuffer, null);
             }
         }
     }

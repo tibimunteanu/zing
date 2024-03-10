@@ -3,7 +3,6 @@ const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const Context = @import("context.zig").Context;
 const Image = @import("image.zig").Image;
-const Framebuffer = @import("framebuffer.zig").Framebuffer;
 const Allocator = std.mem.Allocator;
 const maxInt = std.math.maxInt;
 
