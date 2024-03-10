@@ -21,8 +21,6 @@ const Engine = @This();
 
 pub var instance: Engine = undefined;
 
-const target_frame_seconds: f64 = 1.0 / 60.0;
-
 // TODO: temporary
 var choice: usize = 2;
 const names = [_][]const u8{
@@ -246,7 +244,7 @@ pub fn run() !void {
 
             // const frame_end_time = glfw.getTime();
             // const frame_elapsed_time = frame_end_time - frame_start_time;
-            // var frame_stall_time = target_frame_seconds - frame_elapsed_time;
+            // var frame_stall_time = cnt.target_frame_seconds - frame_elapsed_time;
 
             // if (frame_stall_time > 0) {
             //     std.time.sleep(@as(u64, @intFromFloat(frame_stall_time)) * std.time.ns_per_s);

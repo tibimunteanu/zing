@@ -17,6 +17,7 @@ const Texture = @import("../texture.zig");
 const Material = @import("../material.zig");
 const Geometry = @import("../geometry.zig");
 
+const cnt = @import("../../cnt.zig");
 const resources_image = @import("../../resources/image_resource.zig");
 const resources_material = @import("../../resources/material_resource.zig");
 
@@ -344,7 +345,7 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     }
 
     self.frame_index = 0;
-    self.delta_time = 1.0 / 60.0;
+    self.delta_time = cnt.target_frame_seconds;
 }
 
 pub fn deinit(self: *Context) void {
