@@ -1,141 +1,141 @@
 const std = @import("std");
-const Context = @import("context.zig").Context;
-const CommandBuffer = @import("command_buffer.zig").CommandBuffer;
+const Context = @import("context.zig");
+const CommandBuffer = @import("command_buffer.zig");
 const vk = @import("vk.zig");
 
-pub const Buffer = struct {
+const Buffer = @This();
+
+context: *const Context,
+
+handle: vk.Buffer,
+usage: vk.BufferUsageFlags,
+total_size: vk.DeviceSize,
+memory_property_flags: vk.MemoryPropertyFlags,
+memory: vk.DeviceMemory,
+is_locked: bool,
+
+// public
+pub fn init(
     context: *const Context,
-
-    handle: vk.Buffer,
+    size: usize,
     usage: vk.BufferUsageFlags,
-    total_size: vk.DeviceSize,
     memory_property_flags: vk.MemoryPropertyFlags,
-    memory: vk.DeviceMemory,
-    is_locked: bool,
+    options: struct {
+        bind_on_create: bool = false,
+    },
+) !Buffer {
+    var self: Buffer = undefined;
+    self.context = context;
 
-    // public
-    pub fn init(
-        context: *const Context,
-        size: usize,
-        usage: vk.BufferUsageFlags,
-        memory_property_flags: vk.MemoryPropertyFlags,
-        options: struct {
-            bind_on_create: bool = false,
-        },
-    ) !Buffer {
-        var self: Buffer = undefined;
-        self.context = context;
+    self.usage = usage;
+    self.total_size = size;
+    self.memory_property_flags = memory_property_flags;
 
-        self.usage = usage;
-        self.total_size = size;
-        self.memory_property_flags = memory_property_flags;
+    self.handle = try context.device_api.createBuffer(context.device, &vk.BufferCreateInfo{
+        .flags = .{},
+        .usage = usage,
+        .size = size,
+        .sharing_mode = .exclusive,
+        .queue_family_index_count = 0,
+        .p_queue_family_indices = null,
+    }, null);
+    errdefer context.device_api.destroyBuffer(context.device, self.handle, null);
 
-        self.handle = try context.device_api.createBuffer(context.device, &vk.BufferCreateInfo{
-            .flags = .{},
-            .usage = usage,
-            .size = size,
-            .sharing_mode = .exclusive,
-            .queue_family_index_count = 0,
-            .p_queue_family_indices = null,
-        }, null);
-        errdefer context.device_api.destroyBuffer(context.device, self.handle, null);
+    const memory_requirements = context.device_api.getBufferMemoryRequirements(context.device, self.handle);
 
-        const memory_requirements = context.device_api.getBufferMemoryRequirements(context.device, self.handle);
+    self.memory = try self.context.allocate(memory_requirements, memory_property_flags);
+    errdefer context.device_api.freeMemory(context.device, self.memory, null);
 
-        self.memory = try self.context.allocate(memory_requirements, memory_property_flags);
-        errdefer context.device_api.freeMemory(context.device, self.memory, null);
-
-        if (options.bind_on_create) {
-            try self.bind(0);
-        }
-
-        return self;
+    if (options.bind_on_create) {
+        try self.bind(0);
     }
 
-    pub fn deinit(self: *Buffer) void {
-        if (self.handle != .null_handle) {
-            self.context.device_api.destroyBuffer(self.context.device, self.handle, null);
-            self.handle = .null_handle;
-        }
+    return self;
+}
 
-        if (self.memory != .null_handle) {
-            self.context.device_api.freeMemory(self.context.device, self.memory, null);
-            self.memory = .null_handle;
-        }
-
-        self.total_size = 0;
-        self.is_locked = false;
+pub fn deinit(self: *Buffer) void {
+    if (self.handle != .null_handle) {
+        self.context.device_api.destroyBuffer(self.context.device, self.handle, null);
+        self.handle = .null_handle;
     }
 
-    pub fn bind(self: Buffer, offset: vk.DeviceSize) !void {
-        try self.context.device_api.bindBufferMemory(self.context.device, self.handle, self.memory, offset);
+    if (self.memory != .null_handle) {
+        self.context.device_api.freeMemory(self.context.device, self.memory, null);
+        self.memory = .null_handle;
     }
 
-    pub fn lock(self: Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
-        return @as([*]u8, @ptrCast(try self.context.device_api.mapMemory(
-            self.context.device,
-            self.memory,
-            offset,
-            size,
-            flags,
-        )));
-    }
+    self.total_size = 0;
+    self.is_locked = false;
+}
 
-    pub fn unlock(self: Buffer) void {
-        self.context.device_api.unmapMemory(self.context.device, self.memory);
-    }
+pub fn bind(self: Buffer, offset: vk.DeviceSize) !void {
+    try self.context.device_api.bindBufferMemory(self.context.device, self.handle, self.memory, offset);
+}
 
-    pub fn loadData(
-        self: Buffer,
-        offset: vk.DeviceSize,
-        size: vk.DeviceSize,
-        flags: vk.MemoryMapFlags,
-        data: []const u8,
-    ) !void {
-        const dst = try self.lock(offset, size, flags);
+pub fn lock(self: Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
+    return @as([*]u8, @ptrCast(try self.context.device_api.mapMemory(
+        self.context.device,
+        self.memory,
+        offset,
+        size,
+        flags,
+    )));
+}
 
-        @memcpy(dst, data);
+pub fn unlock(self: Buffer) void {
+    self.context.device_api.unmapMemory(self.context.device, self.memory);
+}
 
-        self.unlock();
-    }
+pub fn loadData(
+    self: Buffer,
+    offset: vk.DeviceSize,
+    size: vk.DeviceSize,
+    flags: vk.MemoryMapFlags,
+    data: []const u8,
+) !void {
+    const dst = try self.lock(offset, size, flags);
 
-    pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queue: vk.Queue) !void {
-        const new_buffer = try Buffer.init(
-            self.context,
-            new_size,
-            self.usage,
-            self.memory_property_flags,
-            .{ .bind_on_create = true },
-        );
-        errdefer new_buffer.deinit();
+    @memcpy(dst, data);
 
-        self.copyTo(&new_buffer, command_pool, queue, .{
-            .src_offset = 0,
-            .dst_offset = 0,
-            .size = self.total_size,
-        });
+    self.unlock();
+}
 
-        // TODO: is it necessary to wait upon the device or could we get away with just queueWaitIdle?
-        self.context.device_api.deviceWaitIdle(self.context.device);
+pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queue: vk.Queue) !void {
+    const new_buffer = try Buffer.init(
+        self.context,
+        new_size,
+        self.usage,
+        self.memory_property_flags,
+        .{ .bind_on_create = true },
+    );
+    errdefer new_buffer.deinit();
 
-        self.deinit();
+    self.copyTo(&new_buffer, command_pool, queue, .{
+        .src_offset = 0,
+        .dst_offset = 0,
+        .size = self.total_size,
+    });
 
-        self.* = new_buffer;
-    }
+    // TODO: is it necessary to wait upon the device or could we get away with just queueWaitIdle?
+    self.context.device_api.deviceWaitIdle(self.context.device);
 
-    pub fn copyTo(
-        self: Buffer,
-        dst: *Buffer,
-        command_pool: vk.CommandPool,
-        queue: vk.Queue,
-        region: vk.BufferCopy,
-    ) !void {
-        try self.context.device_api.queueWaitIdle(queue);
+    self.deinit();
 
-        var command_buffer = try CommandBuffer.initAndBeginSingleUse(self.context, command_pool);
+    self.* = new_buffer;
+}
 
-        self.context.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
+pub fn copyTo(
+    self: Buffer,
+    dst: *Buffer,
+    command_pool: vk.CommandPool,
+    queue: vk.Queue,
+    region: vk.BufferCopy,
+) !void {
+    try self.context.device_api.queueWaitIdle(queue);
 
-        try command_buffer.endSingleUseAndDeinit(queue);
-    }
-};
+    var command_buffer = try CommandBuffer.initAndBeginSingleUse(self.context, command_pool);
+
+    self.context.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
+
+    try command_buffer.endSingleUseAndDeinit(queue);
+}

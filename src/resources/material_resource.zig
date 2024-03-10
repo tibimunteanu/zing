@@ -2,7 +2,7 @@ const std = @import("std");
 const stbi = @import("zstbi");
 const math = @import("zmath");
 
-const TextureSystem = @import("../systems/texture_system.zig").TextureSystem;
+const TextureSystem = @import("../systems/texture_system.zig");
 const TextureMap = @import("image_resource.zig").TextureMap;
 
 const Allocator = std.mem.Allocator;

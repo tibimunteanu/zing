@@ -1,5 +1,7 @@
 const std = @import("std");
 const stbi = @import("zstbi");
+const cnt = @import("../cnt.zig");
+
 const Allocator = std.mem.Allocator;
 
 pub const BinaryResource = struct {
@@ -10,7 +12,7 @@ pub const BinaryResource = struct {
     pub fn init(allocator: Allocator, path: []const u8) !BinaryResource {
         const path_format = "assets/{s}";
 
-        var file_path_buf: [1024]u8 = undefined;
+        var file_path_buf: [cnt.max_path_length]u8 = undefined;
         const file_path = try std.fmt.bufPrintZ(&file_path_buf, path_format, .{path});
 
         const file = try std.fs.cwd().openFile(file_path, .{ .mode = .read_only });

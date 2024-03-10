@@ -2,18 +2,18 @@ const std = @import("std");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
-const Image = @import("image.zig").Image;
+const Image = @import("image.zig");
 const TextureHandle = @import("../../systems/texture_system.zig").TextureHandle;
 
-pub const material_shader_instance_max_count = 1024;
-pub const material_shader_descriptor_count = 2;
-pub const material_shader_sampler_count = 1;
+pub const material_shader_instance_max_count: u32 = 1024;
+pub const material_shader_descriptor_count: u32 = 2;
+pub const material_shader_sampler_count: u32 = 1;
 
-pub const ui_shader_instance_max_count = 1024;
-pub const ui_shader_descriptor_count = 2;
-pub const ui_shader_sampler_count = 1;
+pub const ui_shader_instance_max_count: u32 = 1024;
+pub const ui_shader_descriptor_count: u32 = 2;
+pub const ui_shader_sampler_count: u32 = 1;
 
-pub const geometry_max_count = 4096;
+pub const geometry_max_count: u32 = 4096;
 
 pub const WorldGlobalUniformData = struct {
     projection: math.Mat,

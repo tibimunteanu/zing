@@ -1,5 +1,6 @@
 const std = @import("std");
-const Engine = @import("engine.zig").Engine;
+const Engine = @import("engine.zig");
+
 const Allocator = std.mem.Allocator;
 
 // pub const std_options = struct {
