@@ -268,12 +268,8 @@ pub const Context = struct {
         self.framebuffers = try std.ArrayList(vk.Framebuffer).initCapacity(allocator, self.swapchain.images.len);
         errdefer self.framebuffers.deinit();
 
-        self.framebuffers.items.len = self.swapchain.images.len;
-
         self.world_framebuffers = try std.ArrayList(vk.Framebuffer).initCapacity(allocator, self.swapchain.images.len);
         errdefer self.world_framebuffers.deinit();
-
-        self.world_framebuffers.items.len = self.swapchain.images.len;
 
         try self.initFramebuffers();
         errdefer self.deinitFramebuffers();
@@ -291,8 +287,6 @@ pub const Context = struct {
             self.swapchain.images.len,
         );
         errdefer self.graphics_command_buffers.deinit();
-
-        self.graphics_command_buffers.items.len = self.swapchain.images.len;
 
         try self.initCommandBuffers();
         errdefer self.deinitCommandBuffers();
@@ -933,8 +927,10 @@ pub const Context = struct {
     }
 
     fn initCommandBuffers(self: *Context) !void {
-        for (self.graphics_command_buffers.items) |*buffer| {
-            buffer.* = try CommandBuffer.init(self, self.graphics_command_pool, true);
+        errdefer self.deinitCommandBuffers();
+
+        for (self.swapchain.images) |_| {
+            try self.graphics_command_buffers.append(try CommandBuffer.init(self, self.graphics_command_pool, true));
         }
     }
 
@@ -944,40 +940,45 @@ pub const Context = struct {
                 buffer.deinit();
             }
         }
+        self.graphics_command_buffers.clearRetainingCapacity();
     }
 
     fn initFramebuffers(self: *Context) !void {
-        for (self.swapchain.images, self.world_framebuffers.items) |image, *framebuffer| {
+        errdefer self.deinitFramebuffers();
+
+        for (self.swapchain.images) |image| {
             const attachments = [_]vk.ImageView{
                 image.view,
                 self.swapchain.depth_image.view,
             };
 
-            framebuffer.* = try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
-                .render_pass = self.world_render_pass.handle,
-                .attachment_count = @intCast(attachments.len),
-                .p_attachments = &attachments,
-                .width = self.swapchain.extent.width,
-                .height = self.swapchain.extent.height,
-                .layers = 1,
-            }, null);
-            errdefer self.device_api.destroyFramebuffer(self.device, framebuffer.*, null);
+            try self.world_framebuffers.append(
+                try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
+                    .render_pass = self.world_render_pass.handle,
+                    .attachment_count = @intCast(attachments.len),
+                    .p_attachments = &attachments,
+                    .width = self.swapchain.extent.width,
+                    .height = self.swapchain.extent.height,
+                    .layers = 1,
+                }, null),
+            );
         }
 
-        for (self.swapchain.images, self.framebuffers.items) |image, *framebuffer| {
+        for (self.swapchain.images) |image| {
             const attachments = [_]vk.ImageView{
                 image.view,
             };
 
-            framebuffer.* = try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
-                .render_pass = self.ui_render_pass.handle,
-                .attachment_count = @intCast(attachments.len),
-                .p_attachments = &attachments,
-                .width = self.swapchain.extent.width,
-                .height = self.swapchain.extent.height,
-                .layers = 1,
-            }, null);
-            errdefer self.device_api.destroyFramebuffer(self.device, framebuffer.*, null);
+            try self.framebuffers.append(
+                try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
+                    .render_pass = self.ui_render_pass.handle,
+                    .attachment_count = @intCast(attachments.len),
+                    .p_attachments = &attachments,
+                    .width = self.swapchain.extent.width,
+                    .height = self.swapchain.extent.height,
+                    .layers = 1,
+                }, null),
+            );
         }
     }
 
@@ -987,12 +988,14 @@ pub const Context = struct {
                 self.device_api.destroyFramebuffer(self.device, framebuffer, null);
             }
         }
+        self.framebuffers.clearRetainingCapacity();
 
         for (self.world_framebuffers.items) |framebuffer| {
             if (framebuffer != .null_handle) {
                 self.device_api.destroyFramebuffer(self.device, framebuffer, null);
             }
         }
+        self.world_framebuffers.clearRetainingCapacity();
     }
 
     fn recreateSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
