@@ -122,7 +122,7 @@ pub fn releaseTextureByHandle(self: *TextureSystem, handle: TextureHandle) void 
     }
 }
 
-pub fn getDefaultTexture(self: TextureSystem) TextureHandle {
+pub fn getDefaultTexture(self: *const TextureSystem) TextureHandle {
     return self.default_texture;
 }
 

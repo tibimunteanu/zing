@@ -131,7 +131,7 @@ pub fn releaseMaterialByHandle(self: *MaterialSystem, handle: MaterialHandle) vo
     }
 }
 
-pub fn getDefaultMaterial(self: MaterialSystem) MaterialHandle {
+pub fn getDefaultMaterial(self: *const MaterialSystem) MaterialHandle {
     return self.default_material;
 }
 

@@ -147,7 +147,7 @@ pub fn deinit(self: *RenderPass) void {
     self.handle = .null_handle;
 }
 
-pub fn begin(self: *RenderPass, command_buffer: *CommandBuffer, framebuffer: vk.Framebuffer) void {
+pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffer: vk.Framebuffer) void {
     var clear_value_count: u32 = 0;
     var clear_values: [2]vk.ClearValue = undefined;
 
@@ -183,6 +183,6 @@ pub fn begin(self: *RenderPass, command_buffer: *CommandBuffer, framebuffer: vk.
     }, .@"inline");
 }
 
-pub fn end(self: *RenderPass, command_buffer: *CommandBuffer) void {
+pub fn end(self: *RenderPass, command_buffer: *const CommandBuffer) void {
     self.context.device_api.cmdEndRenderPass(command_buffer.handle);
 }

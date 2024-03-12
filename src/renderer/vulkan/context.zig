@@ -363,7 +363,7 @@ pub fn onResized(self: *Context, new_desired_extent: glfw.Window.Size) void {
     self.desired_extent_generation += 1;
 }
 
-pub fn getMemoryIndex(self: Context, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
+pub fn getMemoryIndex(self: *const Context, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
     // TODO: should we always get fresh memory properties from the device?
     // const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
 
@@ -376,7 +376,7 @@ pub fn getMemoryIndex(self: Context, type_bits: u32, flags: vk.MemoryPropertyFla
     return error.GetMemoryIndexFailed;
 }
 
-pub fn allocate(self: Context, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
+pub fn allocate(self: *const Context, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
     return try self.device_api.allocateMemory(self.device, &.{
         .allocation_size = requirements.size,
         .memory_type_index = try self.getMemoryIndex(requirements.memory_type_bits, flags),
@@ -394,7 +394,7 @@ pub fn beginFrame(self: *Context, delta_time: f32) !Renderer.BeginFrameResult {
     }
 
     const current_image = self.swapchain.getCurrentImage();
-    var command_buffer = self.getCurrentCommandBuffer();
+    const command_buffer = self.getCurrentCommandBuffer();
 
     // make sure the current frame has finished rendering.
     // NOTE: the fences start signaled so the first frame can get past them.
@@ -455,38 +455,38 @@ pub fn endFrame(self: *Context) !void {
 }
 
 pub fn beginRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
-    var command_buffer = self.getCurrentCommandBuffer();
+    const command_buffer = self.getCurrentCommandBuffer();
 
     switch (render_pass_type) {
         .world => {
-            self.world_render_pass.begin(&command_buffer, self.getCurrentWorldFramebuffer());
-            self.material_shader.bind(&command_buffer);
+            self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer());
+            self.material_shader.bind(command_buffer);
         },
         .ui => {
-            self.ui_render_pass.begin(&command_buffer, self.getCurrentFramebuffer());
-            self.ui_shader.bind(&command_buffer);
+            self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer());
+            self.ui_shader.bind(command_buffer);
         },
     }
 }
 
 pub fn endRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
-    var command_buffer = self.getCurrentCommandBuffer();
+    const command_buffer = self.getCurrentCommandBuffer();
 
     switch (render_pass_type) {
-        .world => self.world_render_pass.end(&command_buffer),
-        .ui => self.ui_render_pass.end(&command_buffer),
+        .world => self.world_render_pass.end(command_buffer),
+        .ui => self.ui_render_pass.end(command_buffer),
     }
 }
 
-pub fn getCurrentCommandBuffer(self: Context) CommandBuffer {
-    return self.graphics_command_buffers.slice()[self.swapchain.image_index];
+pub fn getCurrentCommandBuffer(self: *const Context) *const CommandBuffer {
+    return &self.graphics_command_buffers.constSlice()[self.swapchain.image_index];
 }
 
-pub fn getCurrentFramebuffer(self: Context) vk.Framebuffer {
+pub fn getCurrentFramebuffer(self: *const Context) vk.Framebuffer {
     return self.framebuffers.slice()[self.swapchain.image_index];
 }
 
-pub fn getCurrentWorldFramebuffer(self: Context) vk.Framebuffer {
+pub fn getCurrentWorldFramebuffer(self: *const Context) vk.Framebuffer {
     return self.world_framebuffers.slice()[self.swapchain.image_index];
 }
 
@@ -549,16 +549,16 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
     var command_buffer = try CommandBuffer.initAndBeginSingleUse(self, self.graphics_command_pool);
 
     try internal_data.image.transitionLayout(
-        command_buffer,
+        &command_buffer,
         image_format,
         .undefined,
         .transfer_dst_optimal,
     );
 
-    internal_data.image.copyFromBuffer(command_buffer, staging_buffer.handle);
+    internal_data.image.copyFromBuffer(&command_buffer, staging_buffer.handle);
 
     try internal_data.image.transitionLayout(
-        command_buffer,
+        &command_buffer,
         image_format,
         .transfer_dst_optimal,
         .shader_read_only_optimal,

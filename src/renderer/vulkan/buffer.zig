@@ -68,11 +68,11 @@ pub fn deinit(self: *Buffer) void {
     self.is_locked = false;
 }
 
-pub fn bind(self: Buffer, offset: vk.DeviceSize) !void {
+pub fn bind(self: *const Buffer, offset: vk.DeviceSize) !void {
     try self.context.device_api.bindBufferMemory(self.context.device, self.handle, self.memory, offset);
 }
 
-pub fn lock(self: Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
+pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
     return @as([*]u8, @ptrCast(try self.context.device_api.mapMemory(
         self.context.device,
         self.memory,
@@ -82,12 +82,12 @@ pub fn lock(self: Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.
     )));
 }
 
-pub fn unlock(self: Buffer) void {
+pub fn unlock(self: *const Buffer) void {
     self.context.device_api.unmapMemory(self.context.device, self.memory);
 }
 
 pub fn loadData(
-    self: Buffer,
+    self: *const Buffer,
     offset: vk.DeviceSize,
     size: vk.DeviceSize,
     flags: vk.MemoryMapFlags,
@@ -125,7 +125,7 @@ pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queu
 }
 
 pub fn copyTo(
-    self: Buffer,
+    self: *const Buffer,
     dst: *Buffer,
     command_pool: vk.CommandPool,
     queue: vk.Queue,

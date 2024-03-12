@@ -197,7 +197,7 @@ pub fn run() !void {
 }
 
 // utils
-fn updateCamera(self: Engine, delta_time: f32) !void {
+fn updateCamera(self: *const Engine, delta_time: f32) !void {
     if (self.window.getKey(.d) == .press) {
         cameraYaw(1.0 * delta_time);
     }

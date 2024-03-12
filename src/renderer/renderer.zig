@@ -123,7 +123,7 @@ pub fn onResized(self: *Renderer, new_desired_extent: glfw.Window.Size) void {
     self.context.onResized(new_desired_extent);
 }
 
-pub fn waitIdle(self: Renderer) !void {
+pub fn waitIdle(self: *const Renderer) !void {
     try self.context.swapchain.waitForAllFences();
 }
 

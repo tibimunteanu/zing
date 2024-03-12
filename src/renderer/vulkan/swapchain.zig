@@ -130,7 +130,7 @@ pub fn getCurrentImage(self: *const Swapchain) *const SwapchainImage {
     return &self.images.constSlice()[self.image_index];
 }
 
-pub fn waitForAllFences(self: Swapchain) !void {
+pub fn waitForAllFences(self: *const Swapchain) !void {
     for (self.images.constSlice()) |image| {
         image.waitForFrameFence(.{}) catch {};
     }
@@ -237,7 +237,7 @@ fn initPresentMode(self: *Swapchain, desired_present_modes: []const vk.PresentMo
     self.present_mode = .fifo_khr; // guaranteed to be available
 }
 
-fn getImageSharingInfo(self: Swapchain) ?[]const u32 {
+fn getImageSharingInfo(self: *const Swapchain) ?[]const u32 {
     if (self.context.graphics_queue.family_index == self.context.present_queue.family_index) {
         return null;
     }
@@ -374,17 +374,23 @@ const SwapchainImage = struct {
         };
     }
 
-    fn deinit(self: SwapchainImage) void {
+    fn deinit(self: *SwapchainImage) void {
         self.waitForFrameFence(.{ .reset = false }) catch return;
 
         self.context.device_api.destroyFence(self.context.device, self.frame_fence, null);
         self.context.device_api.destroySemaphore(self.context.device, self.render_finished_semaphore, null);
         self.context.device_api.destroySemaphore(self.context.device, self.image_acquired_semaphore, null);
         self.context.device_api.destroyImageView(self.context.device, self.view, null);
+
+        self.handle = .null_handle;
+        self.view = .null_handle;
+        self.image_acquired_semaphore = .null_handle;
+        self.render_finished_semaphore = .null_handle;
+        self.frame_fence = .null_handle;
     }
 
     // public
-    pub fn waitForFrameFence(self: SwapchainImage, options: struct { reset: bool = false }) !void {
+    pub fn waitForFrameFence(self: *const SwapchainImage, options: struct { reset: bool = false }) !void {
         _ = try self.context.device_api.waitForFences(self.context.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
 
         if (options.reset) {

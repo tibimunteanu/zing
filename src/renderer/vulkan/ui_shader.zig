@@ -88,13 +88,13 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     var vert_path_buf: [cnt.max_path_length]u8 = undefined;
     const vert_path = try std.fmt.bufPrint(&vert_path_buf, shader_path_format, .{ shader_name, "vert" });
 
-    self.vertex_shader_module = try createShaderModule(self, vert_path);
+    self.vertex_shader_module = try self.createShaderModule(vert_path);
     errdefer context.device_api.destroyShaderModule(context.device, self.vertex_shader_module, null);
 
     var frag_path_buf: [cnt.max_path_length]u8 = undefined;
     const frag_path = try std.fmt.bufPrint(&frag_path_buf, shader_path_format, .{ shader_name, "frag" });
 
-    self.fragment_shader_module = try createShaderModule(self, frag_path);
+    self.fragment_shader_module = try self.createShaderModule(frag_path);
     errdefer context.device_api.destroyShaderModule(context.device, self.fragment_shader_module, null);
 
     const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
@@ -434,7 +434,7 @@ pub fn deinit(self: *Shader) void {
     self.context.device_api.destroyShaderModule(self.context.device, self.vertex_shader_module, null);
 }
 
-pub fn bind(self: Shader, command_buffer: *const CommandBuffer) void {
+pub fn bind(self: *const Shader, command_buffer: *const CommandBuffer) void {
     self.context.device_api.cmdBindPipeline(command_buffer.handle, self.bind_point, self.pipeline);
 }
 
@@ -687,7 +687,7 @@ pub fn releaseResources(self: *Shader, material: *Material) void {
 }
 
 // utils
-fn createShaderModule(self: Shader, path: []const u8) !vk.ShaderModule {
+fn createShaderModule(self: *const Shader, path: []const u8) !vk.ShaderModule {
     var binary_resource = try BinaryResource.init(self.allocator, path);
     defer binary_resource.deinit();
 

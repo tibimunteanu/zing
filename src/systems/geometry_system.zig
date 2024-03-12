@@ -249,11 +249,11 @@ pub fn releaseGeometryByHandle(self: *GeometrySystem, handle: GeometryHandle) vo
     }
 }
 
-pub fn getDefaultGeometry(self: GeometrySystem) GeometryHandle {
+pub fn getDefaultGeometry(self: *const GeometrySystem) GeometryHandle {
     return self.default_geometry;
 }
 
-pub fn getDefaultGeometry2D(self: GeometrySystem) GeometryHandle {
+pub fn getDefaultGeometry2D(self: *const GeometrySystem) GeometryHandle {
     return self.default_geometry_2d;
 }
 

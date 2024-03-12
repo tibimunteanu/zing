@@ -31,11 +31,11 @@ pub fn deinit(self: *CommandBuffer) void {
     self.pool = .null_handle;
 }
 
-pub fn begin(self: *CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
+pub fn begin(self: *const CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
     try self.context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
 }
 
-pub fn end(self: *CommandBuffer) !void {
+pub fn end(self: *const CommandBuffer) !void {
     try self.context.device_api.endCommandBuffer(self.handle);
 }
 

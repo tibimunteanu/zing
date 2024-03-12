@@ -99,7 +99,7 @@ pub fn deinit(self: *Image) void {
 
 pub fn transitionLayout(
     self: *Image,
-    command_buffer: CommandBuffer,
+    command_buffer: *const CommandBuffer,
     format: vk.Format,
     old_layout: vk.ImageLayout,
     new_layout: vk.ImageLayout,
@@ -156,7 +156,7 @@ pub fn transitionLayout(
     );
 }
 
-pub fn copyFromBuffer(self: *Image, command_buffer: CommandBuffer, buffer: vk.Buffer) void {
+pub fn copyFromBuffer(self: *Image, command_buffer: *const CommandBuffer, buffer: vk.Buffer) void {
     self.context.device_api.cmdCopyBufferToImage(
         command_buffer.handle,
         buffer,
