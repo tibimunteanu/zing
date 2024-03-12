@@ -28,12 +28,11 @@ pub fn deinit(self: *CommandBuffer) void {
         self.context.device_api.freeCommandBuffers(self.context.device, self.pool, 1, @ptrCast(&self.handle));
     }
     self.handle = .null_handle;
+    self.pool = .null_handle;
 }
 
 pub fn begin(self: *CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
-    try self.context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{
-        .flags = flags,
-    });
+    try self.context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
 }
 
 pub fn end(self: *CommandBuffer) !void {

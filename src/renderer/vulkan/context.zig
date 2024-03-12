@@ -161,9 +161,7 @@ pub const GeometryData = struct {
     index_buffer_offset: u32,
 };
 
-// TODO: replace ArrayList(XXX) with BoundedArray(XXX, 3)
 // NOTE: used to:
-// - dynamic arrays for framebuffers and cmd buffers
 // - prep instance and device extensions
 // - enumerate physical devices
 // - passed to the swapchain to interogate surface formats and presentation modes
@@ -186,14 +184,14 @@ compute_queue: Queue,
 transfer_queue: Queue,
 
 swapchain: Swapchain,
-framebuffers: std.ArrayList(vk.Framebuffer),
-world_framebuffers: std.ArrayList(vk.Framebuffer),
+framebuffers: std.BoundedArray(vk.Framebuffer, cnt.max_swapchain_image_count),
+world_framebuffers: std.BoundedArray(vk.Framebuffer, cnt.max_swapchain_image_count),
 
 world_render_pass: RenderPass,
 ui_render_pass: RenderPass,
 
 graphics_command_pool: vk.CommandPool,
-graphics_command_buffers: std.ArrayList(CommandBuffer),
+graphics_command_buffers: std.BoundedArray(CommandBuffer, cnt.max_swapchain_image_count),
 
 material_shader: MaterialShader,
 ui_shader: UIShader,
@@ -284,12 +282,6 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     errdefer self.ui_render_pass.deinit();
 
     // create framebuffers
-    self.framebuffers = try std.ArrayList(vk.Framebuffer).initCapacity(allocator, self.swapchain.images.len);
-    errdefer self.framebuffers.deinit();
-
-    self.world_framebuffers = try std.ArrayList(vk.Framebuffer).initCapacity(allocator, self.swapchain.images.len);
-    errdefer self.world_framebuffers.deinit();
-
     try self.initFramebuffers();
     errdefer self.deinitFramebuffers();
 
@@ -301,12 +293,6 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
     // create command buffers
-    self.graphics_command_buffers = try std.ArrayList(CommandBuffer).initCapacity(
-        self.allocator,
-        self.swapchain.images.len,
-    );
-    errdefer self.graphics_command_buffers.deinit();
-
     try self.initCommandBuffers();
     errdefer self.deinitCommandBuffers();
 
@@ -358,13 +344,9 @@ pub fn deinit(self: *Context) void {
     self.material_shader.deinit();
 
     self.deinitCommandBuffers();
-    self.graphics_command_buffers.deinit();
-
     self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
     self.deinitFramebuffers();
-    self.world_framebuffers.deinit();
-    self.framebuffers.deinit();
 
     self.ui_render_pass.deinit();
     self.world_render_pass.deinit();
@@ -473,39 +455,39 @@ pub fn endFrame(self: *Context) !void {
 }
 
 pub fn beginRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
+    var command_buffer = self.getCurrentCommandBuffer();
 
     switch (render_pass_type) {
         .world => {
-            self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer());
-            self.material_shader.bind(command_buffer);
+            self.world_render_pass.begin(&command_buffer, self.getCurrentWorldFramebuffer());
+            self.material_shader.bind(&command_buffer);
         },
         .ui => {
-            self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer());
-            self.ui_shader.bind(command_buffer);
+            self.ui_render_pass.begin(&command_buffer, self.getCurrentFramebuffer());
+            self.ui_shader.bind(&command_buffer);
         },
     }
 }
 
 pub fn endRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
+    var command_buffer = self.getCurrentCommandBuffer();
 
     switch (render_pass_type) {
-        .world => self.world_render_pass.end(command_buffer),
-        .ui => self.ui_render_pass.end(command_buffer),
+        .world => self.world_render_pass.end(&command_buffer),
+        .ui => self.ui_render_pass.end(&command_buffer),
     }
 }
 
-pub fn getCurrentCommandBuffer(self: Context) *CommandBuffer {
-    return &self.graphics_command_buffers.items[self.swapchain.image_index];
+pub fn getCurrentCommandBuffer(self: Context) CommandBuffer {
+    return self.graphics_command_buffers.slice()[self.swapchain.image_index];
 }
 
 pub fn getCurrentFramebuffer(self: Context) vk.Framebuffer {
-    return self.framebuffers.items[self.swapchain.image_index];
+    return self.framebuffers.slice()[self.swapchain.image_index];
 }
 
 pub fn getCurrentWorldFramebuffer(self: Context) vk.Framebuffer {
-    return self.world_framebuffers.items[self.swapchain.image_index];
+    return self.world_framebuffers.slice()[self.swapchain.image_index];
 }
 
 pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {
@@ -950,23 +932,25 @@ fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_
 fn initCommandBuffers(self: *Context) !void {
     errdefer self.deinitCommandBuffers();
 
+    self.graphics_command_buffers.len = 0;
     for (0..self.swapchain.images.len) |_| {
         try self.graphics_command_buffers.append(try CommandBuffer.init(self, self.graphics_command_pool, true));
     }
 }
 
 fn deinitCommandBuffers(self: *Context) void {
-    for (self.graphics_command_buffers.items) |*buffer| {
+    for (self.graphics_command_buffers.slice()) |*buffer| {
         if (buffer.handle != .null_handle) {
             buffer.deinit();
         }
     }
-    self.graphics_command_buffers.clearRetainingCapacity();
+    self.graphics_command_buffers.len = 0;
 }
 
 fn initFramebuffers(self: *Context) !void {
     errdefer self.deinitFramebuffers();
 
+    self.world_framebuffers.len = 0;
     for (self.swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,
@@ -985,6 +969,7 @@ fn initFramebuffers(self: *Context) !void {
         );
     }
 
+    self.framebuffers.len = 0;
     for (self.swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,
@@ -1004,19 +989,19 @@ fn initFramebuffers(self: *Context) !void {
 }
 
 fn deinitFramebuffers(self: *Context) void {
-    for (self.framebuffers.items) |framebuffer| {
+    for (self.framebuffers.slice()) |framebuffer| {
         if (framebuffer != .null_handle) {
             self.device_api.destroyFramebuffer(self.device, framebuffer, null);
         }
     }
-    self.framebuffers.clearRetainingCapacity();
+    self.framebuffers.len = 0;
 
-    for (self.world_framebuffers.items) |framebuffer| {
+    for (self.world_framebuffers.slice()) |framebuffer| {
         if (framebuffer != .null_handle) {
             self.device_api.destroyFramebuffer(self.device, framebuffer, null);
         }
     }
-    self.world_framebuffers.clearRetainingCapacity();
+    self.world_framebuffers.len = 0;
 }
 
 fn reinitSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
