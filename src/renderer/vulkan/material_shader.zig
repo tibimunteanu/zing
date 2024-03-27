@@ -370,6 +370,7 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     );
     errdefer context.device_api.destroyPipeline(context.device, self.pipeline, null);
 
+    // TODO: why do we copy without a staging buffer?
     self.global_uniform_buffer = try Buffer.init(
         context,
         @as(usize, @sizeOf(GlobalUniformData)) * context.swapchain.images.len,
@@ -412,6 +413,7 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
         self.global_descriptor_sets.len = 0;
     }
 
+    // TODO: why do we copy without a staging buffer?
     self.material_uniform_buffer = try Buffer.init(
         context,
         @sizeOf(InstanceUniformData) * instance_max_count,
@@ -592,12 +594,12 @@ pub fn applyMaterial(self: *Shader, material: MaterialHandle) !void {
                 .descriptor_type = .combined_image_sampler,
                 .descriptor_count = 1,
                 .dst_array_element = 0,
+                .p_buffer_info = undefined,
                 .p_image_info = @ptrCast(&vk.DescriptorImageInfo{
                     .image_layout = .shader_read_only_optimal,
                     .image_view = internal_data.image.view,
                     .sampler = internal_data.sampler,
                 }),
-                .p_buffer_info = undefined,
                 .p_texel_buffer_view = undefined,
             };
             write_count += 1;
@@ -639,6 +641,7 @@ pub fn acquireResources(self: *Shader, material: *Material) !void {
 
     var instance_state = &self.instance_states[material.internal_id.?];
 
+    // clear instance state
     for (&instance_state.descriptor_states) |*descriptor_state| {
         descriptor_state.generations.len = 0;
         descriptor_state.handles.len = 0;
@@ -686,6 +689,7 @@ pub fn releaseResources(self: *Shader, material: *Material) void {
     };
     instance_state.descriptor_sets.len = 0;
 
+    // clear instance state
     for (&instance_state.descriptor_states) |*descriptor_state| {
         descriptor_state.generations.len = 0;
         descriptor_state.handles.len = 0;

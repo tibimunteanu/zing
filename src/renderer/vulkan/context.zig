@@ -519,17 +519,7 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
     const image_size: vk.DeviceSize = texture.width * texture.height * texture.channel_count;
     const image_format: vk.Format = .r8g8b8a8_srgb;
 
-    var staging_buffer = try Buffer.init(
-        self,
-        image_size,
-        .{ .transfer_src_bit = true },
-        .{ .host_visible_bit = true, .host_coherent_bit = true },
-        .{ .bind_on_create = true },
-    );
-    defer staging_buffer.deinit();
-
-    try staging_buffer.loadData(0, image_size, .{}, pixels);
-
+    // create an image on the gpu
     internal_data.image = try Image.init(self, .{
         .width = texture.width,
         .height = texture.height,
@@ -545,6 +535,18 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
         .view_aspect_flags = .{ .color_bit = true },
     });
     errdefer internal_data.image.deinit();
+
+    // copy the pixels to the gpu
+    var staging_buffer = try Buffer.init(
+        self,
+        image_size,
+        .{ .transfer_src_bit = true },
+        .{ .host_visible_bit = true, .host_coherent_bit = true },
+        .{ .bind_on_create = true },
+    );
+    defer staging_buffer.deinit();
+
+    try staging_buffer.loadData(0, image_size, .{}, pixels);
 
     var command_buffer = try CommandBuffer.initAndBeginSingleUse(self, self.graphics_command_pool);
 
@@ -566,6 +568,7 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
 
     try command_buffer.endSingleUseAndDeinit(self.graphics_queue.handle);
 
+    // create the sampler
     internal_data.sampler = try self.device_api.createSampler(self.device, &vk.SamplerCreateInfo{
         .mag_filter = .linear,
         .min_filter = .linear,
@@ -618,7 +621,7 @@ pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: anytype, in
         return error.VerticesCannotBeEmpty;
     }
 
-    var old_region: GeometryData = undefined;
+    var prev_internal_data: GeometryData = undefined;
     var internal_data: ?*GeometryData = null;
 
     const is_reupload = geometry.internal_id != null;
@@ -626,7 +629,7 @@ pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: anytype, in
         internal_data = &self.geometries[geometry.internal_id.?];
 
         // take a copy of the old region
-        old_region = internal_data.?.*;
+        prev_internal_data = internal_data.?.*;
     } else {
         for (&self.geometries, 0..) |*slot, i| {
             if (slot.id == null) {
@@ -675,15 +678,15 @@ pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: anytype, in
         if (is_reupload) {
             self.freeDataRegion(
                 &self.vertex_buffer,
-                old_region.vertex_buffer_offset,
-                old_region.vertex_size,
+                prev_internal_data.vertex_buffer_offset,
+                prev_internal_data.vertex_size,
             );
 
-            if (old_region.index_size > 0) {
+            if (prev_internal_data.index_size > 0) {
                 self.freeDataRegion(
                     &self.index_buffer,
-                    old_region.index_buffer_offset,
-                    old_region.index_size,
+                    prev_internal_data.index_buffer_offset,
+                    prev_internal_data.index_size,
                 );
             }
         }

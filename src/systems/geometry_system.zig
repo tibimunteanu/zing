@@ -307,11 +307,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     });
 }
 
-fn loadGeometry(
-    self: *GeometrySystem,
-    config: anytype,
-    geometry: *Geometry,
-) !void {
+fn loadGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !void {
     _ = self;
 
     var temp_geometry = Geometry.init();
