@@ -145,13 +145,11 @@ pub fn destroyMaterial(self: *Renderer, material: *Material) void {
 
 pub fn createGeometry(
     self: *Renderer,
-    comptime Vertex: type,
-    comptime Index: type,
     geometry: *Geometry,
-    vertices: []const Vertex,
-    indices: []const Index,
+    vertices: anytype,
+    indices: anytype,
 ) !void {
-    try self.context.createGeometry(Vertex, Index, geometry, vertices, indices);
+    try self.context.createGeometry(geometry, vertices, indices);
 }
 
 pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {

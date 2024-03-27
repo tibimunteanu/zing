@@ -615,11 +615,9 @@ pub fn destroyMaterial(self: *Context, material: *Material) void {
 
 pub fn createGeometry(
     self: *Context,
-    comptime Vertex: type,
-    comptime Index: type,
     geometry: *Geometry,
-    vertices: []const Vertex,
-    indices: []const u32,
+    vertices: anytype,
+    indices: anytype,
 ) !void {
     if (vertices.len == 0) {
         return error.VerticesCannotBeEmpty;
@@ -650,7 +648,7 @@ pub fn createGeometry(
         // vertex data
         data.vertex_buffer_offset = @truncate(self.vertex_offset);
         data.vertex_count = @truncate(vertices.len);
-        data.vertex_size = @truncate(@sizeOf(Vertex) * vertices.len);
+        data.vertex_size = @truncate(@sizeOf(std.meta.Child(@TypeOf(vertices))) * vertices.len);
 
         // upload data to buffers
         try self.uploadDataRegion(
@@ -665,7 +663,7 @@ pub fn createGeometry(
         if (indices.len > 0) {
             data.index_buffer_offset = @truncate(self.index_offset);
             data.index_count = @truncate(indices.len);
-            data.index_size = @truncate(@sizeOf(Index) * indices.len);
+            data.index_size = @truncate(@sizeOf(std.meta.Child(@TypeOf(indices))) * indices.len);
 
             try self.uploadDataRegion(
                 &self.index_buffer,

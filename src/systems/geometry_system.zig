@@ -272,7 +272,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     geometry_3d.material = Engine.instance.material_system.getDefaultMaterial();
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
 
-    try Engine.instance.renderer.createGeometry(Vertex3D, u32, &geometry_3d, &vertices_3d, &indices_3d);
+    try Engine.instance.renderer.createGeometry(&geometry_3d, &vertices_3d, &indices_3d);
     errdefer Engine.instance.renderer.destroyGeometry(&geometry_3d);
 
     self.default_geometry = try self.geometries.add(.{
@@ -295,7 +295,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     geometry_2d.material = Engine.instance.material_system.getDefaultMaterial();
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
 
-    try Engine.instance.renderer.createGeometry(Vertex2D, u32, &geometry_2d, &vertices_2d, &indices_2d);
+    try Engine.instance.renderer.createGeometry(&geometry_2d, &vertices_2d, &indices_2d);
     errdefer Engine.instance.renderer.destroyGeometry(&geometry_2d);
 
     self.default_geometry_2d = try self.geometries.add(.{
@@ -321,13 +321,7 @@ fn loadGeometry(
         catch Engine.instance.material_system.getDefaultMaterial();
     }
 
-    try Engine.instance.renderer.createGeometry(
-        std.meta.Child(@TypeOf(config.vertices)),
-        std.meta.Child(@TypeOf(config.indices)),
-        &temp_geometry,
-        config.vertices,
-        config.indices,
-    );
+    try Engine.instance.renderer.createGeometry(&temp_geometry, config.vertices, config.indices);
     errdefer Engine.instance.renderer.destroyGeometry(&temp_geometry);
 
     Engine.instance.renderer.destroyGeometry(geometry);
