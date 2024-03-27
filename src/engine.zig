@@ -110,8 +110,6 @@ pub fn init(allocator: Allocator) !void {
     defer test_plane_config.deinit();
 
     instance.test_geometry = try instance.geometry_system.acquireGeometryByConfig(
-        Vertex3D,
-        u32,
         test_plane_config,
         .{ .auto_release = true },
     );
@@ -132,8 +130,6 @@ pub fn init(allocator: Allocator) !void {
     defer test_ui_plane_config.deinit();
 
     instance.test_ui_geometry = try instance.geometry_system.acquireGeometryByConfig(
-        Vertex2D,
-        u32,
         test_ui_plane_config,
         .{ .auto_release = true },
     );

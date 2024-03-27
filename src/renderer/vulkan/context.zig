@@ -483,11 +483,11 @@ pub fn getCurrentCommandBuffer(self: *const Context) *const CommandBuffer {
 }
 
 pub fn getCurrentFramebuffer(self: *const Context) vk.Framebuffer {
-    return self.framebuffers.slice()[self.swapchain.image_index];
+    return self.framebuffers.constSlice()[self.swapchain.image_index];
 }
 
 pub fn getCurrentWorldFramebuffer(self: *const Context) vk.Framebuffer {
-    return self.world_framebuffers.slice()[self.swapchain.image_index];
+    return self.world_framebuffers.constSlice()[self.swapchain.image_index];
 }
 
 pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {

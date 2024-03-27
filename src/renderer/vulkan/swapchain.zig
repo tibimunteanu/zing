@@ -188,6 +188,7 @@ fn initExtent(self: *Swapchain) !void {
     }
 }
 
+// TODO: check supportedTransforms, supportedCompsiteAlpha and supportedUsageFlags from caps
 fn initSurfaceFormat(self: *Swapchain, desired_surface_format: vk.SurfaceFormatKHR) !void {
     const instance_api = self.context.instance_api;
     const physical_device = self.context.physical_device.handle;
@@ -199,6 +200,12 @@ fn initSurfaceFormat(self: *Swapchain, desired_surface_format: vk.SurfaceFormatK
     const surface_formats = try self.allocator.alloc(vk.SurfaceFormatKHR, count);
     defer self.allocator.free(surface_formats);
     _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &count, surface_formats.ptr);
+
+    if (surface_formats.len == 1 and surface_formats[0].format == .undefined) {
+        // NOTE: the spec says that if this is the case, then any format is available
+        self.surface_format = desired_surface_format;
+        return;
+    }
 
     for (surface_formats) |surface_format| {
         if (std.meta.eql(surface_format, desired_surface_format)) {

@@ -180,15 +180,14 @@ pub fn deinit(self: *GeometrySystem) void {
 
 pub fn acquireGeometryByConfig(
     self: *GeometrySystem,
-    comptime Vertex: type,
-    comptime Index: type,
-    config: GeometryConfig(Vertex, Index),
+    config: anytype,
     options: struct {
         auto_release: bool,
     },
 ) !GeometryHandle {
     var geometry = Geometry.init();
-    try self.loadGeometry(Vertex, Index, config, &geometry);
+
+    try self.loadGeometry(config, &geometry);
 
     const handle = try self.geometries.add(.{
         .geometry = geometry,
@@ -308,12 +307,11 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
 
 fn loadGeometry(
     self: *GeometrySystem,
-    comptime Vertex: type,
-    comptime Index: type,
-    config: GeometryConfig(Vertex, Index),
+    config: anytype,
     geometry: *Geometry,
 ) !void {
     _ = self;
+
     var temp_geometry = Geometry.init();
     temp_geometry.name = try Geometry.Name.fromSlice(config.name);
     temp_geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
@@ -323,7 +321,13 @@ fn loadGeometry(
         catch Engine.instance.material_system.getDefaultMaterial();
     }
 
-    try Engine.instance.renderer.createGeometry(Vertex, Index, &temp_geometry, config.vertices, config.indices);
+    try Engine.instance.renderer.createGeometry(
+        std.meta.Child(@TypeOf(config.vertices)),
+        std.meta.Child(@TypeOf(config.indices)),
+        &temp_geometry,
+        config.vertices,
+        config.indices,
+    );
     errdefer Engine.instance.renderer.destroyGeometry(&temp_geometry);
 
     Engine.instance.renderer.destroyGeometry(geometry);
