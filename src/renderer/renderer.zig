@@ -143,12 +143,7 @@ pub fn destroyMaterial(self: *Renderer, material: *Material) void {
     self.context.destroyMaterial(material);
 }
 
-pub fn createGeometry(
-    self: *Renderer,
-    geometry: *Geometry,
-    vertices: anytype,
-    indices: anytype,
-) !void {
+pub fn createGeometry(self: *Renderer, geometry: *Geometry, vertices: anytype, indices: anytype) !void {
     try self.context.createGeometry(geometry, vertices, indices);
 }
 

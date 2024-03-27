@@ -613,12 +613,7 @@ pub fn destroyMaterial(self: *Context, material: *Material) void {
     }
 }
 
-pub fn createGeometry(
-    self: *Context,
-    geometry: *Geometry,
-    vertices: anytype,
-    indices: anytype,
-) !void {
+pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: anytype, indices: anytype) !void {
     if (vertices.len == 0) {
         return error.VerticesCannotBeEmpty;
     }

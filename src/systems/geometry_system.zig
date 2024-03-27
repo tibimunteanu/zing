@@ -23,6 +23,8 @@ pub const GeometryHandle = GeometryPool.Handle;
 
 pub fn GeometryConfig(comptime Vertex: type, comptime Index: type) type {
     return struct {
+        const Self = @This();
+
         allocator: Allocator,
 
         name: []const u8,
@@ -42,7 +44,7 @@ pub fn GeometryConfig(comptime Vertex: type, comptime Index: type) type {
                 tile_x: u32,
                 tile_y: u32,
             },
-        ) !GeometryConfig(Vertex, Index) {
+        ) !Self {
             if (options.width <= 0 or options.height <= 0) {
                 return error.InvalidDimensions;
             }
@@ -59,7 +61,7 @@ pub fn GeometryConfig(comptime Vertex: type, comptime Index: type) type {
                 return error.NameCannotBeEmpty;
             }
 
-            var self: GeometryConfig(Vertex, Index) = undefined;
+            var self: Self = undefined;
             self.allocator = allocator;
 
             const vertex_count = options.segment_count_x * options.segment_count_y * 4;
@@ -147,7 +149,7 @@ pub fn GeometryConfig(comptime Vertex: type, comptime Index: type) type {
             return self;
         }
 
-        pub fn deinit(self: *GeometryConfig(Vertex, Index)) void {
+        pub fn deinit(self: *Self) void {
             self.allocator.free(self.material_name);
             self.allocator.free(self.name);
             self.allocator.free(self.indices);
