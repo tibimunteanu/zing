@@ -9,16 +9,20 @@ handle: vk.CommandBuffer = .null_handle,
 pool: vk.CommandPool,
 
 // public
-pub fn init(context: *const Context, pool: vk.CommandPool, is_primary: bool) !CommandBuffer {
+pub fn init(context: *const Context, pool: vk.CommandPool, options: struct { is_primary: bool = true }) !CommandBuffer {
     var self: CommandBuffer = undefined;
     self.context = context;
     self.pool = pool;
 
-    try context.device_api.allocateCommandBuffers(context.device, &vk.CommandBufferAllocateInfo{
-        .command_pool = pool,
-        .command_buffer_count = 1,
-        .level = if (is_primary) .primary else .secondary,
-    }, @ptrCast(&self.handle));
+    try context.device_api.allocateCommandBuffers(
+        context.device,
+        &vk.CommandBufferAllocateInfo{
+            .command_pool = pool,
+            .command_buffer_count = 1,
+            .level = if (options.is_primary) .primary else .secondary,
+        },
+        @ptrCast(&self.handle),
+    );
 
     return self;
 }
@@ -40,7 +44,7 @@ pub fn end(self: *const CommandBuffer) !void {
 }
 
 pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !CommandBuffer {
-    var self = try CommandBuffer.init(context, pool, true);
+    var self = try CommandBuffer.init(context, pool, .{});
     errdefer self.deinit();
 
     try self.begin(.{ .one_time_submit_bit = true });
@@ -52,10 +56,15 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
 
     try self.end();
 
-    try self.context.device_api.queueSubmit(queue, 1, &[_]vk.SubmitInfo{.{
-        .command_buffer_count = 1,
-        .p_command_buffers = @ptrCast(&self.handle),
-    }}, .null_handle);
+    try self.context.device_api.queueSubmit(
+        queue,
+        1,
+        @ptrCast(&vk.SubmitInfo{
+            .command_buffer_count = 1,
+            .p_command_buffers = @ptrCast(&self.handle),
+        }),
+        .null_handle,
+    );
 
     try self.context.device_api.queueWaitIdle(queue);
 }

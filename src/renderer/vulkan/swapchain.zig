@@ -68,7 +68,7 @@ pub fn init(
     self.handle = try device_api.createSwapchainKHR(device, &.{
         .flags = .{},
         .surface = context.surface,
-        .min_image_count = 3, // at least triple buffering
+        .min_image_count = 3, // NOTE: at least triple buffering
         .image_format = self.surface_format.format,
         .image_color_space = self.surface_format.color_space,
         .image_extent = self.extent,
@@ -141,14 +141,17 @@ pub fn present(self: *Swapchain) !PresentState {
 
     // present the current frame
     // NOTE: it's ok to ignore .suboptimal_khr result here. the following acquireNextImage() returns it.
-    _ = try self.context.device_api.queuePresentKHR(self.context.present_queue.handle, &vk.PresentInfoKHR{
-        .wait_semaphore_count = 1,
-        .p_wait_semaphores = @ptrCast(&current_image.render_finished_semaphore),
-        .swapchain_count = 1,
-        .p_swapchains = @ptrCast(&self.handle),
-        .p_image_indices = @ptrCast(&self.image_index),
-        .p_results = null,
-    });
+    _ = try self.context.device_api.queuePresentKHR(
+        self.context.present_queue.handle,
+        &vk.PresentInfoKHR{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = @ptrCast(&current_image.render_finished_semaphore),
+            .swapchain_count = 1,
+            .p_swapchains = @ptrCast(&self.handle),
+            .p_image_indices = @ptrCast(&self.image_index),
+            .p_results = null,
+        },
+    );
 
     // acquire next frame
     // NOTE: call acquire next image as the last step so we can reference the current image while rendering.
@@ -279,18 +282,22 @@ fn initImages(self: *Swapchain) !void {
         for (self.images.slice()) |*image| {
             image.deinit();
         }
+        self.images.len = 0;
     }
 
     // create the depth image
-    self.depth_image = try Image.init(self.context, .{
-        .width = self.extent.width,
-        .height = self.extent.height,
-        .format = self.context.physical_device.depth_format,
-        .usage = .{ .depth_stencil_attachment_bit = true },
-        .memory_flags = .{ .device_local_bit = true },
-        .init_view = true,
-        .view_aspect_flags = .{ .depth_bit = true },
-    });
+    self.depth_image = try Image.init(
+        self.context,
+        .{
+            .width = self.extent.width,
+            .height = self.extent.height,
+            .format = self.context.physical_device.depth_format,
+            .usage = .{ .depth_stencil_attachment_bit = true },
+            .memory_flags = .{ .device_local_bit = true },
+            .init_view = true,
+            .view_aspect_flags = .{ .depth_bit = true },
+        },
+    );
 }
 
 fn deinitImages(self: *Swapchain) void {

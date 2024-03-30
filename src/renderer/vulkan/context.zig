@@ -47,94 +47,94 @@ const BaseAPI = vk.BaseWrapper(.{
 });
 
 const InstanceAPI = vk.InstanceWrapper(.{
-    .destroyInstance = true,
     .createDevice = true,
+    .destroyInstance = true,
     .destroySurfaceKHR = true,
-    .enumeratePhysicalDevices = true,
-    .getPhysicalDeviceFeatures = true,
-    .getPhysicalDeviceProperties = true,
     .enumerateDeviceExtensionProperties = true,
+    .enumeratePhysicalDevices = true,
+    .getDeviceProcAddr = true,
+    .getPhysicalDeviceFeatures = true,
     .getPhysicalDeviceFormatProperties = true,
+    .getPhysicalDeviceMemoryProperties = true,
+    .getPhysicalDeviceProperties = true,
+    .getPhysicalDeviceQueueFamilyProperties = true,
+    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
     .getPhysicalDeviceSurfaceFormatsKHR = true,
     .getPhysicalDeviceSurfacePresentModesKHR = true,
-    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
     .getPhysicalDeviceSurfaceSupportKHR = true,
-    .getPhysicalDeviceMemoryProperties = true,
-    .getDeviceProcAddr = true,
 });
 
 const DeviceAPI = vk.DeviceWrapper(.{
-    .destroyDevice = true,
-    .getDeviceQueue = true,
-    .createSemaphore = true,
-    .createFence = true,
-    .createImageView = true,
-    .createDescriptorSetLayout = true,
-    .createDescriptorPool = true,
-    .allocateDescriptorSets = true,
-    .cmdBindDescriptorSets = true,
-    .updateDescriptorSets = true,
-    .freeDescriptorSets = true,
-    .createSampler = true,
-    .destroySampler = true,
-    .destroyImageView = true,
-    .destroySemaphore = true,
-    .destroyFence = true,
-    .destroyDescriptorSetLayout = true,
-    .destroyDescriptorPool = true,
-    .getSwapchainImagesKHR = true,
-    .createSwapchainKHR = true,
-    .destroySwapchainKHR = true,
     .acquireNextImageKHR = true,
-    .deviceWaitIdle = true,
-    .waitForFences = true,
-    .resetFences = true,
-    .queueSubmit = true,
-    .queuePresentKHR = true,
-    .createImage = true,
-    .destroyImage = true,
-    .bindImageMemory = true,
-    .createCommandPool = true,
-    .destroyCommandPool = true,
     .allocateCommandBuffers = true,
-    .freeCommandBuffers = true,
-    .resetCommandBuffer = true,
-    .queueWaitIdle = true,
-    .createShaderModule = true,
-    .destroyShaderModule = true,
-    .createPipelineLayout = true,
-    .destroyPipelineLayout = true,
-    .createRenderPass = true,
-    .destroyRenderPass = true,
-    .createGraphicsPipelines = true,
-    .destroyPipeline = true,
-    .createFramebuffer = true,
-    .destroyFramebuffer = true,
-    .beginCommandBuffer = true,
-    .endCommandBuffer = true,
+    .allocateDescriptorSets = true,
     .allocateMemory = true,
-    .freeMemory = true,
-    .createBuffer = true,
-    .destroyBuffer = true,
-    .getBufferMemoryRequirements = true,
-    .getImageMemoryRequirements = true,
-    .mapMemory = true,
-    .unmapMemory = true,
+    .beginCommandBuffer = true,
     .bindBufferMemory = true,
+    .bindImageMemory = true,
     .cmdBeginRenderPass = true,
-    .cmdEndRenderPass = true,
-    .cmdBindPipeline = true,
-    .cmdPipelineBarrier = true,
-    .cmdDraw = true,
-    .cmdDrawIndexed = true,
-    .cmdSetViewport = true,
-    .cmdSetScissor = true,
-    .cmdBindVertexBuffers = true,
+    .cmdBindDescriptorSets = true,
     .cmdBindIndexBuffer = true,
+    .cmdBindPipeline = true,
+    .cmdBindVertexBuffers = true,
     .cmdCopyBuffer = true,
     .cmdCopyBufferToImage = true,
+    .cmdDraw = true,
+    .cmdDrawIndexed = true,
+    .cmdEndRenderPass = true,
+    .cmdPipelineBarrier = true,
     .cmdPushConstants = true,
+    .cmdSetScissor = true,
+    .cmdSetViewport = true,
+    .createBuffer = true,
+    .createCommandPool = true,
+    .createDescriptorPool = true,
+    .createDescriptorSetLayout = true,
+    .createFence = true,
+    .createFramebuffer = true,
+    .createGraphicsPipelines = true,
+    .createImage = true,
+    .createImageView = true,
+    .createPipelineLayout = true,
+    .createRenderPass = true,
+    .createSampler = true,
+    .createSemaphore = true,
+    .createShaderModule = true,
+    .createSwapchainKHR = true,
+    .destroyBuffer = true,
+    .destroyCommandPool = true,
+    .destroyDescriptorPool = true,
+    .destroyDescriptorSetLayout = true,
+    .destroyDevice = true,
+    .destroyFence = true,
+    .destroyFramebuffer = true,
+    .destroyImage = true,
+    .destroyImageView = true,
+    .destroyPipeline = true,
+    .destroyPipelineLayout = true,
+    .destroyRenderPass = true,
+    .destroySampler = true,
+    .destroySemaphore = true,
+    .destroyShaderModule = true,
+    .destroySwapchainKHR = true,
+    .deviceWaitIdle = true,
+    .endCommandBuffer = true,
+    .freeCommandBuffers = true,
+    .freeDescriptorSets = true,
+    .freeMemory = true,
+    .getBufferMemoryRequirements = true,
+    .getDeviceQueue = true,
+    .getImageMemoryRequirements = true,
+    .getSwapchainImagesKHR = true,
+    .mapMemory = true,
+    .queuePresentKHR = true,
+    .queueSubmit = true,
+    .queueWaitIdle = true,
+    .resetCommandBuffer = true,
+    .resetFences = true,
+    .unmapMemory = true,
+    .updateDescriptorSets = true,
+    .waitForFences = true,
 });
 
 const desired_depth_formats: []const vk.Format = &[_]vk.Format{
@@ -164,7 +164,7 @@ pub const GeometryData = struct {
 // NOTE: used to:
 // - prep instance and device extensions
 // - enumerate physical devices
-// - passed to the swapchain to interogate surface formats and presentation modes
+// - passed to the swapchain to enumerate surface formats and presentation modes
 // - passed to shaders to load shader resources
 // - allocate internal data on createTexture calls
 allocator: Allocator,
@@ -286,10 +286,14 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     errdefer self.deinitFramebuffers();
 
     // create command pool
-    self.graphics_command_pool = try self.device_api.createCommandPool(self.device, &vk.CommandPoolCreateInfo{
-        .queue_family_index = self.graphics_queue.family_index,
-        .flags = .{ .reset_command_buffer_bit = true },
-    }, null);
+    self.graphics_command_pool = try self.device_api.createCommandPool(
+        self.device,
+        &vk.CommandPoolCreateInfo{
+            .queue_family_index = self.graphics_queue.family_index,
+            .flags = .{ .reset_command_buffer_bit = true },
+        },
+        null,
+    );
     errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
     // create command buffers
@@ -430,15 +434,20 @@ pub fn endFrame(self: *Context) !void {
     try command_buffer.end();
 
     // submit the command buffer
-    try self.device_api.queueSubmit(self.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
-        .wait_semaphore_count = 1,
-        .p_wait_semaphores = @ptrCast(&current_image.image_acquired_semaphore),
-        .p_wait_dst_stage_mask = &[_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }},
-        .command_buffer_count = 1,
-        .p_command_buffers = @ptrCast(&command_buffer.handle),
-        .signal_semaphore_count = 1,
-        .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
-    }}, current_image.frame_fence);
+    try self.device_api.queueSubmit(
+        self.graphics_queue.handle,
+        1,
+        @ptrCast(&vk.SubmitInfo{
+            .wait_semaphore_count = 1,
+            .p_wait_semaphores = @ptrCast(&current_image.image_acquired_semaphore),
+            .p_wait_dst_stage_mask = @ptrCast(&vk.PipelineStageFlags{ .color_attachment_output_bit = true }),
+            .command_buffer_count = 1,
+            .p_command_buffers = @ptrCast(&command_buffer.handle),
+            .signal_semaphore_count = 1,
+            .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
+        }),
+        current_image.frame_fence,
+    );
 
     const state = self.swapchain.present() catch |err| switch (err) {
         error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -511,6 +520,7 @@ pub fn updateGlobalUIState(self: *Context, projection: math.Mat, view: math.Mat)
 }
 
 pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !void {
+    // TODO: create a pool for this allocation
     const internal_data = try self.allocator.create(TextureData);
     errdefer self.allocator.destroy(internal_data);
 
@@ -520,20 +530,23 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
     const image_format: vk.Format = .r8g8b8a8_srgb;
 
     // create an image on the gpu
-    internal_data.image = try Image.init(self, .{
-        .width = texture.width,
-        .height = texture.height,
-        .format = image_format,
-        .usage = .{
-            .transfer_src_bit = true,
-            .transfer_dst_bit = true,
-            .color_attachment_bit = true,
-            .sampled_bit = true,
+    internal_data.image = try Image.init(
+        self,
+        .{
+            .width = texture.width,
+            .height = texture.height,
+            .format = image_format,
+            .usage = .{
+                .transfer_src_bit = true,
+                .transfer_dst_bit = true,
+                .color_attachment_bit = true,
+                .sampled_bit = true,
+            },
+            .memory_flags = .{ .device_local_bit = true },
+            .init_view = true,
+            .view_aspect_flags = .{ .color_bit = true },
         },
-        .memory_flags = .{ .device_local_bit = true },
-        .init_view = true,
-        .view_aspect_flags = .{ .color_bit = true },
-    });
+    );
     errdefer internal_data.image.deinit();
 
     // copy the pixels to the gpu
@@ -930,7 +943,9 @@ fn initCommandBuffers(self: *Context) !void {
 
     self.graphics_command_buffers.len = 0;
     for (0..self.swapchain.images.len) |_| {
-        try self.graphics_command_buffers.append(try CommandBuffer.init(self, self.graphics_command_pool, true));
+        try self.graphics_command_buffers.append(
+            try CommandBuffer.init(self, self.graphics_command_pool, .{}),
+        );
     }
 }
 
@@ -954,14 +969,18 @@ fn initFramebuffers(self: *Context) !void {
         };
 
         try self.world_framebuffers.append(
-            try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
-                .render_pass = self.world_render_pass.handle,
-                .attachment_count = @intCast(attachments.len),
-                .p_attachments = &attachments,
-                .width = self.swapchain.extent.width,
-                .height = self.swapchain.extent.height,
-                .layers = 1,
-            }, null),
+            try self.device_api.createFramebuffer(
+                self.device,
+                &vk.FramebufferCreateInfo{
+                    .render_pass = self.world_render_pass.handle,
+                    .attachment_count = @intCast(attachments.len),
+                    .p_attachments = &attachments,
+                    .width = self.swapchain.extent.width,
+                    .height = self.swapchain.extent.height,
+                    .layers = 1,
+                },
+                null,
+            ),
         );
     }
 
@@ -972,14 +991,18 @@ fn initFramebuffers(self: *Context) !void {
         };
 
         try self.framebuffers.append(
-            try self.device_api.createFramebuffer(self.device, &vk.FramebufferCreateInfo{
-                .render_pass = self.ui_render_pass.handle,
-                .attachment_count = @intCast(attachments.len),
-                .p_attachments = &attachments,
-                .width = self.swapchain.extent.width,
-                .height = self.swapchain.extent.height,
-                .layers = 1,
-            }, null),
+            try self.device_api.createFramebuffer(
+                self.device,
+                &vk.FramebufferCreateInfo{
+                    .render_pass = self.ui_render_pass.handle,
+                    .attachment_count = @intCast(attachments.len),
+                    .p_attachments = &attachments,
+                    .width = self.swapchain.extent.width,
+                    .height = self.swapchain.extent.height,
+                    .layers = 1,
+                },
+                null,
+            ),
         );
     }
 }

@@ -40,7 +40,6 @@ texture_system: *TextureSystem,
 material_system: *MaterialSystem,
 geometry_system: *GeometrySystem,
 last_time: f64,
-frame_count: f64,
 
 var camera_view: math.Mat = undefined;
 var camera_view_dirty: bool = true;
@@ -139,25 +138,29 @@ pub fn init(allocator: Allocator) !void {
 pub fn deinit() void {
     instance.geometry_system.deinit();
     instance.allocator.destroy(instance.geometry_system);
+
     instance.material_system.deinit();
     instance.allocator.destroy(instance.material_system);
+
     instance.texture_system.deinit();
     instance.allocator.destroy(instance.texture_system);
+
     instance.renderer.deinit();
     instance.allocator.destroy(instance.renderer);
+
     instance.window.destroy();
+
     glfw.terminate();
 }
 
 pub fn run() !void {
     instance.last_time = glfw.getTime();
-    instance.frame_count = 0;
 
     while (!instance.window.shouldClose()) {
         if (instance.window.getAttrib(.iconified) == 0) {
             const frame_start_time = glfw.getTime();
             const precise_delta_time = frame_start_time - instance.last_time;
-            const delta_time: f32 = @as(f32, @floatCast(precise_delta_time));
+            const delta_time = @as(f32, @floatCast(precise_delta_time));
 
             try instance.updateCamera(delta_time);
 

@@ -82,13 +82,11 @@ pub fn init(
     const subpass = vk.SubpassDescription{
         .pipeline_bind_point = .graphics,
         .color_attachment_count = 1,
-        .p_color_attachments = &[_]vk.AttachmentReference{
-            .{
-                .attachment = 0,
-                .layout = .color_attachment_optimal,
-            },
-        },
-        .p_depth_stencil_attachment = if (options.clear_flags.depth) &.{
+        .p_color_attachments = @ptrCast(&vk.AttachmentReference{
+            .attachment = 0,
+            .layout = .color_attachment_optimal,
+        }),
+        .p_depth_stencil_attachment = if (options.clear_flags.depth) &vk.AttachmentReference{
             .attachment = 1,
             .layout = .depth_stencil_attachment_optimal,
         } else null,
@@ -99,42 +97,40 @@ pub fn init(
         .p_resolve_attachments = null,
     };
 
-    const subpasses = [_]vk.SubpassDescription{subpass};
-
     const dependencies = [_]vk.SubpassDependency{
         .{
             .src_subpass = vk.SUBPASS_EXTERNAL,
-            .dst_subpass = 0,
             .src_stage_mask = .{ .color_attachment_output_bit = true },
             .src_access_mask = .{},
+            .dst_subpass = 0,
             .dst_stage_mask = .{ .color_attachment_output_bit = true },
             .dst_access_mask = .{ .color_attachment_read_bit = true, .color_attachment_write_bit = true },
             .dependency_flags = .{},
         },
-        // NOTE: Use an incoming subpass-dependency to ensure:
-        // * Previous use of the depth-buffer is complete (execution dependency).
-        // * WAW hazard is resolved (e.g. caches are flushed and invalidated so old and new writes are not re-ordered).
-        // * Transition from UNDEFINED -> VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL happens-after previous `EARLY/LATE_FRAGMENT_TESTS` use.
-        // * Changes made to the image by the transition are accounted for by setting the appropriate dstAccessMask.
+        // NOTE: ensure that previous use of the depth-buffer is complete
         .{
             .src_subpass = vk.SUBPASS_EXTERNAL,
-            .dst_subpass = 0,
             .src_stage_mask = .{ .late_fragment_tests_bit = true }, // store op is always performed in late tests
             .src_access_mask = .{ .depth_stencil_attachment_write_bit = true }, // after subpass access
+            .dst_subpass = 0,
             .dst_stage_mask = .{ .early_fragment_tests_bit = true }, // load op is always performed in early tests
             .dst_access_mask = .{ .depth_stencil_attachment_write_bit = true, .depth_stencil_attachment_read_bit = true }, // before subpass access
             .dependency_flags = .{},
         },
     };
 
-    self.handle = try context.device_api.createRenderPass(context.device, &vk.RenderPassCreateInfo{
-        .attachment_count = if (options.clear_flags.depth) attachment_descriptions.len else 1,
-        .p_attachments = &attachment_descriptions,
-        .subpass_count = subpasses.len,
-        .p_subpasses = &subpasses,
-        .dependency_count = if (options.clear_flags.depth) dependencies.len else 1,
-        .p_dependencies = &dependencies,
-    }, null);
+    self.handle = try context.device_api.createRenderPass(
+        context.device,
+        &vk.RenderPassCreateInfo{
+            .attachment_count = if (options.clear_flags.depth) attachment_descriptions.len else 1,
+            .p_attachments = &attachment_descriptions,
+            .subpass_count = 1,
+            .p_subpasses = @ptrCast(&subpass),
+            .dependency_count = if (options.clear_flags.depth) dependencies.len else 1,
+            .p_dependencies = &dependencies,
+        },
+        null,
+    );
     errdefer context.device_api.destroyRenderPass(context.device, self.handle, null);
 
     return self;

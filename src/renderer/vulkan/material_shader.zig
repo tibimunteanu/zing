@@ -54,7 +54,6 @@ pub const InstanceState = struct {
 };
 
 context: *const Context,
-allocator: Allocator, // only needed for resource loading
 
 vertex_shader_module: vk.ShaderModule,
 fragment_shader_module: vk.ShaderModule,
@@ -72,7 +71,7 @@ global_uniform_buffer: Buffer,
 material_descriptor_pool: vk.DescriptorPool,
 material_descriptor_set_layout: vk.DescriptorSetLayout,
 material_uniform_buffer: Buffer,
-material_uniform_buffer_index: ?u32,
+material_uniform_buffer_index: ?u32, // TODO: turn this into a proper pool
 
 instance_states: [instance_max_count]InstanceState,
 
@@ -82,19 +81,19 @@ sampler_uses: [sampler_count]Texture.Use,
 pub fn init(allocator: Allocator, context: *const Context) !Shader {
     var self: Shader = undefined;
     self.context = context;
-    self.allocator = allocator;
     self.bind_point = .graphics;
 
     var vert_path_buf: [cnt.max_path_length]u8 = undefined;
     const vert_path = try std.fmt.bufPrint(&vert_path_buf, shader_path_format, .{ shader_name, "vert" });
 
-    self.vertex_shader_module = try self.createShaderModule(vert_path);
+    // NOTE: allocator only needed for resource loading
+    self.vertex_shader_module = try self.createShaderModule(allocator, vert_path);
     errdefer context.device_api.destroyShaderModule(context.device, self.vertex_shader_module, null);
 
     var frag_path_buf: [cnt.max_path_length]u8 = undefined;
     const frag_path = try std.fmt.bufPrint(&frag_path_buf, shader_path_format, .{ shader_name, "frag" });
 
-    self.fragment_shader_module = try self.createShaderModule(frag_path);
+    self.fragment_shader_module = try self.createShaderModule(allocator, frag_path);
     errdefer context.device_api.destroyShaderModule(context.device, self.fragment_shader_module, null);
 
     const shader_stages = [_]vk.PipelineShaderStageCreateInfo{
@@ -206,13 +205,29 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     );
     errdefer context.device_api.destroyDescriptorPool(context.device, self.material_descriptor_pool, null);
 
-    const viewport_state = vk.PipelineViewportStateCreateInfo{
-        .flags = .{},
-        .viewport_count = 1,
-        .p_viewports = undefined,
-        .scissor_count = 1,
-        .p_scissors = undefined,
+    const layouts = [_]vk.DescriptorSetLayout{
+        self.global_descriptor_set_layout,
+        self.material_descriptor_set_layout,
     };
+
+    const push_constant_range = vk.PushConstantRange{
+        .stage_flags = .{ .vertex_bit = true },
+        .offset = @sizeOf(math.Mat) * 0,
+        .size = @sizeOf(math.Mat) * 2,
+    };
+
+    self.pipeline_layout = try context.device_api.createPipelineLayout(
+        context.device,
+        &vk.PipelineLayoutCreateInfo{
+            .flags = .{},
+            .set_layout_count = layouts.len,
+            .p_set_layouts = &layouts,
+            .push_constant_range_count = 1,
+            .p_push_constant_ranges = @ptrCast(&push_constant_range),
+        },
+        null,
+    );
+    errdefer context.device_api.destroyPipelineLayout(context.device, self.pipeline_layout, null);
 
     const binding_description = vk.VertexInputBindingDescription{
         .binding = 0,
@@ -312,33 +327,20 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
         .blend_constants = [_]f32{ 0, 0, 0, 0 },
     };
 
+    const viewport_state = vk.PipelineViewportStateCreateInfo{
+        .flags = .{},
+        .viewport_count = 1,
+        .p_viewports = undefined,
+        .scissor_count = 1,
+        .p_scissors = undefined,
+    };
+
     const dynamic_state_props = [_]vk.DynamicState{ .viewport, .scissor, .line_width };
     const dynamic_state = vk.PipelineDynamicStateCreateInfo{
         .flags = .{},
         .dynamic_state_count = dynamic_state_props.len,
         .p_dynamic_states = &dynamic_state_props,
     };
-
-    // descriptor set layouts
-    const layouts = [_]vk.DescriptorSetLayout{
-        self.global_descriptor_set_layout,
-        self.material_descriptor_set_layout,
-    };
-
-    const push_constant_range = vk.PushConstantRange{
-        .stage_flags = .{ .vertex_bit = true },
-        .offset = @sizeOf(math.Mat) * 0,
-        .size = @sizeOf(math.Mat) * 2,
-    };
-
-    self.pipeline_layout = try context.device_api.createPipelineLayout(context.device, &.{
-        .flags = .{},
-        .set_layout_count = layouts.len,
-        .p_set_layouts = &layouts,
-        .push_constant_range_count = 1,
-        .p_push_constant_ranges = @ptrCast(&push_constant_range),
-    }, null);
-    errdefer context.device_api.destroyPipelineLayout(context.device, self.pipeline_layout, null);
 
     const pipeline_create_info = vk.GraphicsPipelineCreateInfo{
         .flags = .{},
@@ -384,6 +386,7 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     );
     errdefer self.global_uniform_buffer.deinit();
 
+    // allocate global descriptor sets
     var global_ubo_layouts: [cnt.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
     for (0..context.swapchain.images.len) |i| {
         global_ubo_layouts[i] = self.global_descriptor_set_layout;
@@ -414,6 +417,7 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     }
 
     // TODO: why do we copy without a staging buffer?
+    // TODO: why isn't this buffer size multiplied by swapchain image count?
     self.material_uniform_buffer = try Buffer.init(
         context,
         @sizeOf(InstanceUniformData) * instance_max_count,
@@ -469,6 +473,7 @@ pub fn updateGlobalUniformData(self: *Shader) !void {
         .range = range,
     };
 
+    // TODO: do we assume that global data changes every frame so we don't bother checking a generation and always write?
     const global_ubo_descriptor_write = vk.WriteDescriptorSet{
         .dst_set = global_descriptor_set,
         .dst_binding = 0,
@@ -533,18 +538,17 @@ pub fn applyMaterial(self: *Shader, material: MaterialHandle) !void {
     var dst_binding: u32 = 0;
 
     // descriptor 0 - uniform buffer
-    const range: u32 = @sizeOf(InstanceUniformData);
-    const offset: vk.DeviceSize = @sizeOf(InstanceUniformData) * p_material.internal_id.?;
-
-    const instance_uniform_data = InstanceUniformData{
-        .diffuse_color = p_material.diffuse_color,
-    };
-
-    try self.material_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(instance_uniform_data));
-
-    // only do this if the descriptor has not yet been updated
     const descriptor_material_generation = &p_material_state.descriptor_states[dst_binding].generations.slice()[image_index];
     if (descriptor_material_generation.* == null or descriptor_material_generation.* != p_material.generation) {
+        const range: u32 = @sizeOf(InstanceUniformData);
+        const offset: vk.DeviceSize = @sizeOf(InstanceUniformData) * p_material.internal_id.?;
+
+        const instance_uniform_data = InstanceUniformData{
+            .diffuse_color = p_material.diffuse_color,
+        };
+
+        try self.material_uniform_buffer.loadData(offset, range, .{}, &std.mem.toBytes(instance_uniform_data));
+
         descriptor_writes[write_count] = vk.WriteDescriptorSet{
             .dst_set = material_descriptor_set,
             .dst_binding = dst_binding,
@@ -637,20 +641,11 @@ pub fn applyMaterial(self: *Shader, material: MaterialHandle) !void {
 
 pub fn acquireResources(self: *Shader, material: *Material) !void {
     material.internal_id = self.material_uniform_buffer_index;
+
+    // TODO: wrapping this id is not ok. turn this into a proper pool
     self.material_uniform_buffer_index = if (self.material_uniform_buffer_index) |g| g +% 1 else 0;
 
     var instance_state = &self.instance_states[material.internal_id.?];
-
-    // clear instance state
-    for (&instance_state.descriptor_states) |*descriptor_state| {
-        descriptor_state.generations.len = 0;
-        descriptor_state.handles.len = 0;
-
-        for (0..self.context.swapchain.images.len) |_| {
-            descriptor_state.generations.appendAssumeCapacity(null);
-            descriptor_state.handles.appendAssumeCapacity(TextureHandle.nil);
-        }
-    }
 
     // allocate descriptor sets
     var material_ubo_layouts: [cnt.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
@@ -670,6 +665,17 @@ pub fn acquireResources(self: *Shader, material: *Material) !void {
         &material_ubo_descriptor_set_alloc_info,
         instance_state.descriptor_sets.slice().ptr,
     );
+
+    // clear descriptor states
+    for (&instance_state.descriptor_states) |*descriptor_state| {
+        descriptor_state.generations.len = 0;
+        descriptor_state.handles.len = 0;
+
+        for (0..self.context.swapchain.images.len) |_| {
+            descriptor_state.generations.appendAssumeCapacity(null);
+            descriptor_state.handles.appendAssumeCapacity(TextureHandle.nil);
+        }
+    }
 }
 
 pub fn releaseResources(self: *Shader, material: *Material) void {
@@ -689,7 +695,7 @@ pub fn releaseResources(self: *Shader, material: *Material) void {
     };
     instance_state.descriptor_sets.len = 0;
 
-    // clear instance state
+    // clear descriptor states
     for (&instance_state.descriptor_states) |*descriptor_state| {
         descriptor_state.generations.len = 0;
         descriptor_state.handles.len = 0;
@@ -704,8 +710,8 @@ pub fn releaseResources(self: *Shader, material: *Material) void {
 }
 
 // utils
-fn createShaderModule(self: *const Shader, path: []const u8) !vk.ShaderModule {
-    var binary_resource = try BinaryResource.init(self.allocator, path);
+fn createShaderModule(self: *const Shader, allocator: Allocator, path: []const u8) !vk.ShaderModule {
+    var binary_resource = try BinaryResource.init(allocator, path);
     defer binary_resource.deinit();
 
     const module = try self.context.device_api.createShaderModule(
