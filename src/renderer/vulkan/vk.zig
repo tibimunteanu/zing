@@ -20240,7 +20240,7 @@ pub fn BaseWrapper(comptime cmds: BaseCommandFlags) type {
             }
             break :blk @Type(.{
                 .Struct = .{
-                    .layout = .Auto,
+                    .layout = .auto,
                     .fields = &fields,
                     .decls = &[_]std.builtin.Type.Declaration{},
                     .is_tuple = false,
@@ -20746,7 +20746,7 @@ pub fn InstanceWrapper(comptime cmds: InstanceCommandFlags) type {
             }
             break :blk @Type(.{
                 .Struct = .{
-                    .layout = .Auto,
+                    .layout = .auto,
                     .fields = &fields,
                     .decls = &[_]std.builtin.Type.Declaration{},
                     .is_tuple = false,
@@ -24836,7 +24836,7 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
             }
             break :blk @Type(.{
                 .Struct = .{
-                    .layout = .Auto,
+                    .layout = .auto,
                     .fields = &fields,
                     .decls = &[_]std.builtin.Type.Declaration{},
                     .is_tuple = false,

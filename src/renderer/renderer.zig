@@ -77,7 +77,7 @@ pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
     self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
     self.ui_view = math.inverse(math.identity());
 
-    self.fov = deg2rad(f32, 45.0);
+    self.fov = deg2rad(45.0);
     self.near_clip = 0.1;
     self.far_clip = 1000.0;
 
