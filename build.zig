@@ -1,9 +1,10 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const zmath = @import("zmath");
 const zstbi = @import("zstbi");
 const zpool = @import("zpool");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -31,32 +32,23 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("glfw", glfw_dep.module("mach-glfw"));
 
-    b.installArtifact(exe);
+    const copy_assets = b.addSystemCommand(switch (builtin.os.tag) {
+        .windows => &.{ "xcopy", "assets", "zig-out\\bin\\assets\\", "/E/D/Y" },
+        .linux => &.{ "rsync", "-r", "-R", "./assets/", "./zig-out/bin/assets" },
+        .macos => &.{ "rsync", "-a", "--mkpath", "assets/", "zig-out/bin/assets/" },
+        else => unreachable,
+    });
 
-    const copy_assets = b.addSystemCommand(&.{ "xcopy", "assets", "zig-out\\bin\\assets\\", "/E/D/Y" });
-
-    const shaders = [_][]const u8{
+    const shader_steps = try compileShaders(b, &.{
         "material_shader",
         "ui_shader",
-    };
-    inline for ([_][]const u8{ "vert", "frag" }) |shader_type| {
-        inline for (shaders) |shader| {
-            const shader_path = "assets/shaders/" ++ shader ++ "." ++ shader_type;
-            const out_shader_path = shader_path ++ ".spv";
-
-            const compile_shader = b.addSystemCommand(&.{
-                "glslc",
-                shader_path,
-                "--target-env=vulkan1.3",
-                "-o",
-                out_shader_path,
-            });
-
-            copy_assets.step.dependOn(&compile_shader.step);
-        }
+    });
+    for (shader_steps.items) |step| {
+        copy_assets.step.dependOn(step);
     }
 
     exe.step.dependOn(&copy_assets.step);
+    b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -78,4 +70,29 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+}
+
+fn compileShaders(b: *std.Build, comptime shaders: []const []const u8) !std.ArrayList(*std.Build.Step) {
+    const shader_types = [_][]const u8{ "vertex", "fragment" };
+
+    var steps = std.ArrayList(*std.Build.Step).init(b.allocator);
+
+    inline for (shader_types) |shader_type| {
+        inline for (shaders) |shader| {
+            const shader_path = "assets/shaders/" ++ shader ++ "." ++ shader_type[0..4];
+
+            const compile_shader = b.addSystemCommand(&.{
+                "glslc",
+                "-fshader-stage=" ++ shader_type,
+                shader_path ++ ".glsl",
+                "--target-env=vulkan1.3",
+                "-o",
+                shader_path ++ ".spv",
+            });
+
+            try steps.append(&compile_shader.step);
+        }
+    }
+
+    return steps;
 }

@@ -37,7 +37,9 @@ const optional_device_extensions = [_][*:0]const u8{
 };
 
 const optional_instance_extensions = [_][*:0]const u8{
-    // nothing here yet
+    if (builtin.os.tag == .macos)
+        vk.extension_info.khr_portability_enumeration.name
+    else {},
 };
 
 const BaseAPI = vk.BaseWrapper(.{
@@ -785,11 +787,7 @@ pub fn drawGeometry(self: *Context, data: GeometryRenderData) !void {
 
 // utils
 fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const u8) !vk.Instance {
-    const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return blk: {
-        const err = glfw.mustGetError();
-        std.log.err("Failed to get required instance extensions because {s}", .{err.description});
-        break :blk error.GetRequiredInstanceExtensionsFailed;
-    };
+    const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return error.GetRequiredInstanceExtensionsFailed;
 
     // list of extensions to be requested when creating the instance
     // includes all required extensions and optional extensions that the driver supports
@@ -828,7 +826,7 @@ fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const 
             .application_version = vk.makeApiVersion(0, 0, 0, 1),
             .p_engine_name = "Zing engine",
             .engine_version = vk.makeApiVersion(0, 0, 0, 1),
-            .api_version = vk.API_VERSION_1_3,
+            .api_version = vk.API_VERSION_1_1,
         },
         .enabled_layer_count = 0,
         .pp_enabled_layer_names = null,
