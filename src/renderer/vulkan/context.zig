@@ -39,9 +39,9 @@ const optional_device_extensions = [_][*:0]const u8{
 const optional_instance_extensions = [_][*:0]const u8{
     // nothing here yet
 } ++ if (builtin.os.tag == .macos)
-    vk.extension_info.khr_portability_enumeration.name
+    [_][*:0]const u8{vk.extension_info.khr_portability_enumeration.name}
 else
-    [0][*:0]const u8{};
+    [_][*:0]const u8{};
 
 const BaseAPI = vk.BaseWrapper(.{
     .createInstance = true,
