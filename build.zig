@@ -1,8 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const zmath = @import("zmath");
-const zstbi = @import("zstbi");
-const zpool = @import("zpool");
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -15,16 +12,15 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    const zmath_pkg = zmath.package(b, target, optimize, .{
-        .options = .{ .enable_cross_platform_determinism = true },
-    });
-    zmath_pkg.link(exe);
+    const zmath_dep = b.dependency("zmath", .{ .enable_cross_platform_determinism = true });
+    exe.root_module.addImport("zmath", zmath_dep.module("root"));
 
-    const zstbi_pkg = zstbi.package(b, target, optimize, .{});
-    zstbi_pkg.link(exe);
+    const zstbi_dep = b.dependency("zstbi", .{});
+    exe.root_module.addImport("zstbi", zstbi_dep.module("root"));
+    exe.linkLibrary(zstbi_dep.artifact("zstbi"));
 
-    const zpool_pkg = zpool.package(b, target, optimize, .{});
-    zpool_pkg.link(exe);
+    const zpool_dep = b.dependency("zpool", .{});
+    exe.root_module.addImport("zpool", zpool_dep.module("root"));
 
     const glfw_dep = b.dependency("mach_glfw", .{
         .target = target,
