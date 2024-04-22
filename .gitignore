@@ -8,3 +8,4 @@ zig-out/
 *.spv
 scratchpad.*
 *.todo
+.DS_Store
