@@ -870,8 +870,6 @@ fn pickPhysicalDevice(allocator: Allocator, instance: vk.Instance, instance_api:
 }
 
 fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_api: InstanceAPI) !vk.Device {
-    const priority = [_]f32{1};
-
     var queue_count: u32 = 0;
     var queue_family_indices = [1]u32{std.math.maxInt(u32)} ** 4;
     var queue_create_infos: [4]vk.DeviceQueueCreateInfo = undefined;
@@ -888,7 +886,7 @@ fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_
                 .flags = .{},
                 .queue_family_index = queue_family_index,
                 .queue_count = 1,
-                .p_queue_priorities = &priority,
+                .p_queue_priorities = &[_]f32{1},
             };
             queue_count += 1;
         }
