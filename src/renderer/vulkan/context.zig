@@ -157,11 +157,11 @@ pub const GeometryData = struct {
     id: ?u32,
     generation: ?u32,
     vertex_count: u32,
-    vertex_size: u32,
-    vertex_buffer_offset: u32,
+    vertex_size: u64,
+    vertex_buffer_offset: u64,
     index_count: u32,
-    index_size: u32,
-    index_buffer_offset: u32,
+    index_size: u64,
+    index_buffer_offset: u64,
 };
 
 // NOTE: used to:
@@ -200,10 +200,7 @@ material_shader: MaterialShader,
 ui_shader: UIShader,
 
 vertex_buffer: Buffer,
-vertex_offset: usize,
-
 index_buffer: Buffer,
-index_offset: usize,
 
 geometries: [geometry_max_count]GeometryData,
 
@@ -316,9 +313,8 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
         100 * 1024 * 1024,
         .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
         .{ .device_local_bit = true },
-        .{ .bind_on_create = true },
+        .{ .managed = true, .bind_on_create = true },
     );
-    self.vertex_offset = 0;
     errdefer self.vertex_buffer.deinit();
 
     self.index_buffer = try Buffer.init(
@@ -326,9 +322,8 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
         10 * 1024 * 1024,
         .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
         .{ .device_local_bit = true },
-        .{ .bind_on_create = true },
+        .{ .managed = true, .bind_on_create = true },
     );
-    self.index_offset = 0;
     errdefer self.index_buffer.deinit();
 
     // reset geometry storage
@@ -659,50 +654,28 @@ pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: anytype, in
     }
 
     if (internal_data) |data| {
-        // vertex data
-        data.vertex_buffer_offset = @truncate(self.vertex_offset);
         data.vertex_count = @truncate(vertices.len);
-        data.vertex_size = @truncate(@sizeOf(std.meta.Child(@TypeOf(vertices))) * vertices.len);
-
-        // upload data to buffers
-        try self.uploadDataRegion(
-            &self.vertex_buffer,
-            data.vertex_buffer_offset,
-            data.vertex_size,
-            std.mem.sliceAsBytes(vertices),
-        );
-
-        self.vertex_offset += data.vertex_size;
+        data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(vertices)));
+        data.vertex_buffer_offset = try self.vertex_buffer.uploadData(std.mem.sliceAsBytes(vertices));
 
         if (indices.len > 0) {
-            data.index_buffer_offset = @truncate(self.index_offset);
             data.index_count = @truncate(indices.len);
-            data.index_size = @truncate(@sizeOf(std.meta.Child(@TypeOf(indices))) * indices.len);
-
-            try self.uploadDataRegion(
-                &self.index_buffer,
-                data.index_buffer_offset,
-                data.index_size,
-                std.mem.sliceAsBytes(indices),
-            );
-
-            self.index_offset += data.index_size;
+            data.index_size = @sizeOf(std.meta.Elem(@TypeOf(indices)));
+            data.index_buffer_offset = try self.index_buffer.uploadData(std.mem.sliceAsBytes(indices));
         }
 
         data.generation = if (geometry.generation) |g| g +% 1 else 0;
 
         if (is_reupload) {
-            self.freeDataRegion(
-                &self.vertex_buffer,
+            try self.vertex_buffer.free(
                 prev_internal_data.vertex_buffer_offset,
-                prev_internal_data.vertex_size,
+                prev_internal_data.vertex_count * prev_internal_data.vertex_size,
             );
 
-            if (prev_internal_data.index_size > 0) {
-                self.freeDataRegion(
-                    &self.index_buffer,
+            if (prev_internal_data.index_count > 0) {
+                try self.index_buffer.free(
                     prev_internal_data.index_buffer_offset,
-                    prev_internal_data.index_size,
+                    prev_internal_data.index_count * prev_internal_data.index_size,
                 );
             }
         }
@@ -719,18 +692,16 @@ pub fn destroyGeometry(self: *Context, geometry: *Geometry) void {
 
         const internal_data = &self.geometries[geometry.internal_id.?];
 
-        self.freeDataRegion(
-            &self.vertex_buffer,
+        self.vertex_buffer.free(
             internal_data.vertex_buffer_offset,
             internal_data.vertex_size,
-        );
+        ) catch unreachable;
 
         if (internal_data.index_size > 0) {
-            self.freeDataRegion(
-                &self.index_buffer,
+            self.index_buffer.free(
                 internal_data.index_buffer_offset,
                 internal_data.index_size,
-            );
+            ) catch unreachable;
         }
 
         internal_data.* = std.mem.zeroes(GeometryData);
@@ -1039,32 +1010,6 @@ fn reinitSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
     try self.initCommandBuffers();
 
     self.swapchain.extent_generation = self.desired_extent_generation;
-}
-
-fn uploadDataRegion(self: *Context, buffer: *Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, data: []const u8) !void {
-    var staging_buffer = try Buffer.init(
-        self,
-        buffer.total_size,
-        .{ .transfer_src_bit = true },
-        .{ .host_visible_bit = true, .host_coherent_bit = true },
-        .{ .bind_on_create = true },
-    );
-    defer staging_buffer.deinit();
-
-    try staging_buffer.loadData(0, buffer.total_size, .{}, data);
-
-    try staging_buffer.copyTo(buffer, self.graphics_command_pool, self.graphics_queue.handle, vk.BufferCopy{
-        .src_offset = 0,
-        .dst_offset = offset,
-        .size = size,
-    });
-}
-
-fn freeDataRegion(self: *Context, buffer: *Buffer, offset: vk.DeviceSize, size: vk.DeviceSize) void {
-    _ = self; // autofix
-    _ = buffer; // autofix
-    _ = offset; // autofix
-    _ = size; // autofix
 }
 
 const PhysicalDevice = struct {

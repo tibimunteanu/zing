@@ -154,63 +154,69 @@ pub fn reset(self: *FreeList) void {
     }
 }
 
-pub fn resize(self: *FreeList, new_total_size: u64, options: Config) !void {
-    if (new_total_size < self.total_size) {
-        return error.CannotResizeFreeListToSmallerSize;
+pub fn copyTo(self: *const FreeList, to: *FreeList) !void {
+    if (self.total_size > to.total_size) {
+        return error.CannotCopyToSmallerFreeList;
     }
 
-    const size_diff = new_total_size - self.total_size;
-
-    // take a copy of the free list
-    var old = self.*;
-    defer old.deinit();
-
-    // create the new one
-    self.* = try FreeList.init(self.allocator, new_total_size, options);
+    const size_diff = to.total_size - self.total_size;
 
     // copy the data from the old to the new onw
-    var curr_old_node = old.list.first;
+    var curr_from_node = self.list.first;
 
-    if (curr_old_node == null) {
+    if (curr_from_node == null) {
         // the whole space is allocated
-        var first = self.list.first.?;
-        first.data.offset = old.total_size;
-        first.data.size = size_diff;
+        var to_first = to.list.first.?;
+        to_first.data.offset = self.total_size;
+        to_first.data.size = size_diff;
 
         return;
     }
 
-    self.list.first.?.* = invalid_node;
-    self.list.first = null;
+    to.list.first.?.* = invalid_node;
+    to.list.first = null;
 
-    var curr_node = self.list.first;
+    var curr_to_node = to.list.first;
 
-    while (curr_old_node) |old_node| : (curr_old_node = old_node.next) {
-        var new_node = try self.getNode();
-        new_node.data.offset = old_node.data.offset;
-        new_node.data.size = old_node.data.size;
+    while (curr_from_node) |from_node| : (curr_from_node = from_node.next) {
+        var new_node = try to.getNode();
+        new_node.data.offset = from_node.data.offset;
+        new_node.data.size = from_node.data.size;
 
-        if (curr_node) |node| {
-            node.insertAfter(new_node);
+        if (curr_to_node) |to_node| {
+            to_node.insertAfter(new_node);
         } else {
-            self.list.first = new_node;
+            to.list.first = new_node;
         }
 
-        curr_node = new_node;
+        curr_to_node = new_node;
 
-        if (old_node.next == null) {
-            if (old_node.data.offset + old_node.data.size == old.total_size) {
+        if (from_node.next == null) {
+            if (from_node.data.offset + from_node.data.size == self.total_size) {
                 // the last old node was spanning to the end of the old free list
                 new_node.data.size += size_diff;
             } else {
-                var new_end_node = try self.getNode();
-                new_end_node.data.offset = old.total_size;
+                var new_end_node = try to.getNode();
+                new_end_node.data.offset = self.total_size;
                 new_end_node.data.size = size_diff;
 
                 new_node.insertAfter(new_end_node);
             }
         }
     }
+}
+
+pub fn resize(self: *FreeList, new_total_size: u64, options: Config) !void {
+    if (new_total_size < self.total_size) {
+        return error.CannotResizeFreeListToSmallerSize;
+    }
+
+    var new_free_list = try FreeList.init(self.allocator, new_total_size, options);
+
+    try self.copyTo(&new_free_list);
+
+    self.deinit();
+    self.* = new_free_list;
 }
 
 pub fn getFreeSpace(self: *FreeList) u64 {
