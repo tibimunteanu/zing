@@ -103,23 +103,15 @@ pub fn free(self: *Buffer, offset: u64, size: u64) !void {
     if (self.free_list) |*free_list| try free_list.free(offset, size) else return error.CannotFreeUnmanagedBuffer;
 }
 
-pub fn loadData(
-    self: *const Buffer,
-    offset: vk.DeviceSize,
-    size: vk.DeviceSize,
-    flags: vk.MemoryMapFlags,
-    data: []const u8,
-) !void {
-    const dst = try self.lock(offset, size, flags);
-
-    @memcpy(dst, data);
-
-    self.unlock();
-}
-
-pub fn uploadData(self: *Buffer, data: []const u8) !u64 {
+pub fn allocAndUpload(self: *Buffer, data: []const u8) !u64 {
     const offset = try self.alloc(data.len);
 
+    try self.upload(offset, data);
+
+    return offset;
+}
+
+pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
     var staging_buffer = try Buffer.init(
         self.context,
         self.total_size,
@@ -136,8 +128,20 @@ pub fn uploadData(self: *Buffer, data: []const u8) !u64 {
         .dst_offset = offset,
         .size = data.len,
     });
+}
 
-    return offset;
+pub fn loadData(
+    self: *const Buffer,
+    offset: vk.DeviceSize,
+    size: vk.DeviceSize,
+    flags: vk.MemoryMapFlags,
+    data: []const u8,
+) !void {
+    const dst = try self.lock(offset, size, flags);
+
+    @memcpy(dst, data);
+
+    self.unlock();
 }
 
 pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queue: vk.Queue) !void {

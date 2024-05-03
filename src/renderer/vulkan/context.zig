@@ -656,12 +656,12 @@ pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: anytype, in
     if (internal_data) |data| {
         data.vertex_count = @truncate(vertices.len);
         data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(vertices)));
-        data.vertex_buffer_offset = try self.vertex_buffer.uploadData(std.mem.sliceAsBytes(vertices));
+        data.vertex_buffer_offset = try self.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(vertices));
 
         if (indices.len > 0) {
             data.index_count = @truncate(indices.len);
             data.index_size = @sizeOf(std.meta.Elem(@TypeOf(indices)));
-            data.index_buffer_offset = try self.index_buffer.uploadData(std.mem.sliceAsBytes(indices));
+            data.index_buffer_offset = try self.index_buffer.allocAndUpload(std.mem.sliceAsBytes(indices));
         }
 
         data.generation = if (geometry.generation) |g| g +% 1 else 0;
