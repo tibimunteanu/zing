@@ -1,5 +1,5 @@
 const std = @import("std");
-const cnt = @import("../cnt.zig");
+const config = @import("../config.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -12,7 +12,7 @@ bytes: []u8,
 pub fn init(allocator: Allocator, path: []const u8) !BinaryResource {
     const path_format = "assets/{s}";
 
-    var file_path_buf: [cnt.max_path_length]u8 = undefined;
+    var file_path_buf: [config.max_path_length]u8 = undefined;
     const file_path = try std.fmt.bufPrintZ(&file_path_buf, path_format, .{path});
 
     const file = try std.fs.cwd().openFile(file_path, .{ .mode = .read_only });

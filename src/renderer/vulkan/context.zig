@@ -17,7 +17,7 @@ const Texture = @import("../texture.zig");
 const Material = @import("../material.zig");
 const Geometry = @import("../geometry.zig");
 
-const cnt = @import("../../cnt.zig");
+const config = @import("../../config.zig");
 const resources_image = @import("../../resources/image_resource.zig");
 const resources_material = @import("../../resources/material_resource.zig");
 
@@ -187,14 +187,14 @@ compute_queue: Queue,
 transfer_queue: Queue,
 
 swapchain: Swapchain,
-framebuffers: std.BoundedArray(vk.Framebuffer, cnt.max_swapchain_image_count),
-world_framebuffers: std.BoundedArray(vk.Framebuffer, cnt.max_swapchain_image_count),
+framebuffers: std.BoundedArray(vk.Framebuffer, config.max_swapchain_image_count),
+world_framebuffers: std.BoundedArray(vk.Framebuffer, config.max_swapchain_image_count),
 
 world_render_pass: RenderPass,
 ui_render_pass: RenderPass,
 
 graphics_command_pool: vk.CommandPool,
-graphics_command_buffers: std.BoundedArray(CommandBuffer, cnt.max_swapchain_image_count),
+graphics_command_buffers: std.BoundedArray(CommandBuffer, config.max_swapchain_image_count),
 
 material_shader: MaterialShader,
 ui_shader: UIShader,
@@ -333,7 +333,7 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     }
 
     self.frame_index = 0;
-    self.delta_time = cnt.target_frame_seconds;
+    self.delta_time = config.target_frame_seconds;
 }
 
 pub fn deinit(self: *Context) void {

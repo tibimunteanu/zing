@@ -2,7 +2,7 @@ const std = @import("std");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
-const cnt = @import("../../cnt.zig");
+const config = @import("../../config.zig");
 const Engine = @import("../../engine.zig");
 const Renderer = @import("../renderer.zig");
 const Context = @import("context.zig");
@@ -44,12 +44,12 @@ pub const InstanceUniformData = struct {
 };
 
 pub const DescriptorState = struct {
-    generations: std.BoundedArray(?u32, cnt.max_swapchain_image_count),
-    handles: std.BoundedArray(TextureHandle, cnt.max_swapchain_image_count),
+    generations: std.BoundedArray(?u32, config.max_swapchain_image_count),
+    handles: std.BoundedArray(TextureHandle, config.max_swapchain_image_count),
 };
 
 pub const InstanceState = struct {
-    descriptor_sets: std.BoundedArray(vk.DescriptorSet, cnt.max_swapchain_image_count),
+    descriptor_sets: std.BoundedArray(vk.DescriptorSet, config.max_swapchain_image_count),
     descriptor_states: [descriptor_count]DescriptorState,
 };
 
@@ -65,7 +65,7 @@ bind_point: vk.PipelineBindPoint,
 global_uniform_data: GlobalUniformData,
 global_descriptor_pool: vk.DescriptorPool,
 global_descriptor_set_layout: vk.DescriptorSetLayout,
-global_descriptor_sets: std.BoundedArray(vk.DescriptorSet, cnt.max_swapchain_image_count),
+global_descriptor_sets: std.BoundedArray(vk.DescriptorSet, config.max_swapchain_image_count),
 global_uniform_buffer: Buffer,
 
 material_descriptor_pool: vk.DescriptorPool,
@@ -83,14 +83,14 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     self.context = context;
     self.bind_point = .graphics;
 
-    var vert_path_buf: [cnt.max_path_length]u8 = undefined;
+    var vert_path_buf: [config.max_path_length]u8 = undefined;
     const vert_path = try std.fmt.bufPrint(&vert_path_buf, shader_path_format, .{ shader_name, "vert" });
 
     // NOTE: allocator only needed for resource loading
     self.vertex_shader_module = try self.createShaderModule(allocator, vert_path);
     errdefer context.device_api.destroyShaderModule(context.device, self.vertex_shader_module, null);
 
-    var frag_path_buf: [cnt.max_path_length]u8 = undefined;
+    var frag_path_buf: [config.max_path_length]u8 = undefined;
     const frag_path = try std.fmt.bufPrint(&frag_path_buf, shader_path_format, .{ shader_name, "frag" });
 
     self.fragment_shader_module = try self.createShaderModule(allocator, frag_path);
@@ -369,7 +369,7 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     );
     errdefer self.global_uniform_buffer.deinit();
 
-    var global_ubo_layouts: [cnt.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
+    var global_ubo_layouts: [config.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
     for (0..context.swapchain.images.len) |i| {
         global_ubo_layouts[i] = self.global_descriptor_set_layout;
     }
@@ -627,7 +627,7 @@ pub fn acquireResources(self: *Shader, material: *Material) !void {
     var instance_state = &self.instance_states[material.internal_id.?];
 
     // allocate descriptor sets
-    var material_ubo_layouts: [cnt.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
+    var material_ubo_layouts: [config.max_swapchain_image_count]vk.DescriptorSetLayout = undefined;
     for (0..self.context.swapchain.images.len) |i| {
         material_ubo_layouts[i] = self.material_descriptor_set_layout;
     }

@@ -1,7 +1,7 @@
 const std = @import("std");
 const glfw = @import("glfw");
 const vk = @import("vk.zig");
-const cnt = @import("../../cnt.zig");
+const config = @import("../../config.zig");
 const Context = @import("context.zig");
 const Image = @import("image.zig");
 
@@ -26,7 +26,7 @@ surface_format: vk.SurfaceFormatKHR,
 present_mode: vk.PresentModeKHR,
 
 handle: vk.SwapchainKHR,
-images: std.BoundedArray(SwapchainImage, cnt.max_swapchain_image_count),
+images: std.BoundedArray(SwapchainImage, config.max_swapchain_image_count),
 depth_image: Image,
 image_index: u32,
 next_image_acquired_semaphore: vk.Semaphore,
@@ -266,11 +266,11 @@ fn initImages(self: *Swapchain) !void {
     var count: u32 = undefined;
     _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, null);
 
-    if (count > cnt.max_swapchain_image_count) {
+    if (count > config.max_swapchain_image_count) {
         return error.MaxSwapchainImageCountExceeded;
     }
 
-    var imageHandles: [cnt.max_swapchain_image_count]vk.Image = undefined;
+    var imageHandles: [config.max_swapchain_image_count]vk.Image = undefined;
     _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, &imageHandles);
 
     // init swapchain images

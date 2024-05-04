@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 const math = @import("zmath");
 const glfw = @import("glfw");
 
-const cnt = @import("cnt.zig");
 const utils = @import("utils.zig");
 const Renderer = @import("renderer/renderer.zig");
 const TextureSystem = @import("systems/texture_system.zig");
