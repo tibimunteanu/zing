@@ -1,0 +1,61 @@
+{
+  "resource_type": "shader",
+  "name": "phong",
+  "render_pass_name": "world",
+  "use_instance": true,
+  "use_local": true,
+
+  "stages": [
+    {
+      "stage_type": "vertex",
+      "path": "shaders/phong.vert.glsl"
+    },
+    {
+      "stage_type": "fragment",
+      "path": "shaders/phong.frag.glsl"
+    }
+  ],
+
+  "attributes": [
+    {
+      "name": "in_position",
+      "data_type": "float32_3"
+    },
+    {
+      "name": "in_texcoord",
+      "data_type": "float32_2"
+    },
+    {
+      "name": "in_color",
+      "data_type": "float32_4"
+    }
+  ],
+
+  "uniforms": [
+    {
+      "scope": "global",
+      "name": "projection",
+      "data_type": "mat_4"
+    },
+    {
+      "scope": "global",
+      "name": "view",
+      "data_type": "mat_4"
+    },
+    {
+      "scope": "instance",
+      "name": "diffuse_color",
+      "data_type": "float32_4"
+    },
+    {
+      "scope": "instance",
+      "name": "diffuse_texture",
+      "data_type": "sampler"
+    },
+    {
+      "scope": "local",
+      "name": "model",
+      "data_type": "mat_4"
+    }
+  ]
+}

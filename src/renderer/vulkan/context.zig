@@ -9,7 +9,7 @@ const Renderer = @import("../renderer.zig");
 const Swapchain = @import("swapchain.zig");
 const RenderPass = @import("renderpass.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const MaterialShader = @import("material_shader.zig");
+const PhongShader = @import("phong_shader.zig");
 const UIShader = @import("ui_shader.zig");
 const Buffer = @import("buffer.zig");
 const Image = @import("image.zig");
@@ -196,7 +196,7 @@ ui_render_pass: RenderPass,
 graphics_command_pool: vk.CommandPool,
 graphics_command_buffers: std.BoundedArray(CommandBuffer, config.max_swapchain_image_count),
 
-material_shader: MaterialShader,
+phong_shader: PhongShader,
 ui_shader: UIShader,
 
 vertex_buffer: Buffer,
@@ -301,8 +301,8 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     errdefer self.deinitCommandBuffers();
 
     // create shaders
-    self.material_shader = try MaterialShader.init(allocator, self);
-    errdefer self.material_shader.deinit();
+    self.phong_shader = try PhongShader.init(allocator, self);
+    errdefer self.phong_shader.deinit();
 
     self.ui_shader = try UIShader.init(allocator, self);
     errdefer self.ui_shader.deinit();
@@ -343,7 +343,7 @@ pub fn deinit(self: *Context) void {
     self.index_buffer.deinit();
 
     self.ui_shader.deinit();
-    self.material_shader.deinit();
+    self.phong_shader.deinit();
 
     self.deinitCommandBuffers();
     self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
@@ -467,7 +467,7 @@ pub fn beginRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void 
     switch (render_pass_type) {
         .world => {
             self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer());
-            self.material_shader.bind(command_buffer);
+            self.phong_shader.bind(command_buffer);
         },
         .ui => {
             self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer());
@@ -499,12 +499,12 @@ pub fn getCurrentWorldFramebuffer(self: *const Context) vk.Framebuffer {
 
 pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {
     // const command_buffer = self.getCurrentCommandBuffer();
-    // self.material_shader.bind(command_buffer);
+    // self.phong_shader.bind(command_buffer);
 
-    self.material_shader.global_uniform_data.projection = projection;
-    self.material_shader.global_uniform_data.view = view;
+    self.phong_shader.global_uniform_data.projection = projection;
+    self.phong_shader.global_uniform_data.view = view;
 
-    try self.material_shader.updateGlobalUniformData();
+    try self.phong_shader.updateGlobalUniformData();
 }
 
 pub fn updateGlobalUIState(self: *Context, projection: math.Mat, view: math.Mat) !void {
@@ -613,7 +613,7 @@ pub fn destroyTexture(self: *Context, texture: *Texture) void {
 
 pub fn createMaterial(self: *Context, material: *Material) !void {
     switch (material.material_type) {
-        .world => try self.material_shader.acquireResources(material),
+        .world => try self.phong_shader.acquireResources(material),
         .ui => try self.ui_shader.acquireResources(material),
     }
 }
@@ -621,7 +621,7 @@ pub fn createMaterial(self: *Context, material: *Material) !void {
 pub fn destroyMaterial(self: *Context, material: *Material) void {
     if (material.internal_id != null) {
         switch (material.material_type) {
-            .world => self.material_shader.releaseResources(material),
+            .world => self.phong_shader.releaseResources(material),
             .ui => self.ui_shader.releaseResources(material),
         }
     }
@@ -724,8 +724,8 @@ pub fn drawGeometry(self: *Context, data: GeometryRenderData) !void {
 
     switch (material.material_type) {
         .world => {
-            self.material_shader.setModel(data.model);
-            try self.material_shader.applyMaterial(material_handle);
+            self.phong_shader.setModel(data.model);
+            try self.phong_shader.applyMaterial(material_handle);
         },
         .ui => {
             self.ui_shader.setModel(data.model);

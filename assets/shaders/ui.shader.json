@@ -1,0 +1,61 @@
+{
+  "resource_type": "shader",
+  "name": "ui",
+  "render_pass_name": "ui",
+  "use_instance": true,
+  "use_local": true,
+
+  "stages": [
+    {
+      "stage_type": "vertex",
+      "path": "shaders/ui.vert.glsl"
+    },
+    {
+      "stage_type": "fragment",
+      "path": "shaders/ui.frag.glsl"
+    }
+  ],
+
+  "attributes": [
+    {
+      "name": "in_position",
+      "data_type": "float32_2"
+    },
+    {
+      "name": "in_texcoord",
+      "data_type": "float32_2"
+    },
+    {
+      "name": "in_color",
+      "data_type": "float32_4"
+    }
+  ],
+
+  "uniforms": [
+    {
+      "scope": "global",
+      "name": "projection",
+      "data_type": "mat_4"
+    },
+    {
+      "scope": "global",
+      "name": "view",
+      "data_type": "mat_4"
+    },
+    {
+      "scope": "instance",
+      "name": "diffuse_color",
+      "data_type": "float32_4"
+    },
+    {
+      "scope": "instance",
+      "name": "diffuse_texture",
+      "data_type": "sampler"
+    },
+    {
+      "scope": "local",
+      "name": "model",
+      "data_type": "mat_4"
+    }
+  ]
+}

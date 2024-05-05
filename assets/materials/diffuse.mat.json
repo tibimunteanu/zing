@@ -1,5 +1,5 @@
 {
-  "type": "material",
+  "resource_type": "material",
   "name": "diffuse",
   "material_type": "world",
   "diffuse_color": [1.0, 1.0, 1.0, 1.0],

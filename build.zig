@@ -36,8 +36,8 @@ pub fn build(b: *std.Build) !void {
     });
 
     const shader_steps = try compileShaders(b, &.{
-        "material_shader",
-        "ui_shader",
+        "phong",
+        "ui",
     });
     for (shader_steps.items) |step| {
         copy_assets.step.dependOn(step);

@@ -2,6 +2,47 @@ const std = @import("std");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
+// CALLS shader_system.create_shader(config)
+// - state = NOT CREATED
+// - gets a handle
+// - copies name, use_instance, use_local from config
+// - resets push constant ranges
+// - creates dynamic arrays for global_textures, attributes and uniforms
+// - creates the uniform lookup
+// - resets vertex_stride, global_ubo_size, ubo_size, push_constatnt_size to 0
+// - sets push_constant_stride to 128
+// - gets the renderpass id from config.renderpass_name
+// - 1. CALLS renderer.create_shader which passes through to the backend
+//   - gets the renderpass by id
+//   - translates the stages to vulkan enums
+//   - populates a vulkan_shader_config struct
+//   - adds shader stages and copies stage file names and sets stage count
+//   - resets config.attributes (array of max attributes vk attribute descriptions)
+//   - sets 2 pool sizes for uniforms (1024) and image samplers (4096)
+//   - setup config.descriptor_sets (2 lists of vk bindings - for global and instance)
+//   - resets all instance_states
+//     - has id, offset, per frame vk descriptor sets, instance_textures, max bindings of descriptor_state
+//     - descriptor_state has per frame generations and ids
+// - state = UNINITIALIZED
+// - 2. adds attributes, uniforms and samplers from config
+//   - augments the atrributes parsed from config with typed enums and data sizes and add to the shader
+//   - augments the uniforms parsed from config and compute sizes and offsets into appropriate scopes
+//   - for samplers, pushes into global textures array or sets the texture location if instance texture
+//   - adds uniforms to the uniform lookup
+// - 3. CALLS renderer.initialize_shader which passes through to the backend
+//   - creates shader modules for each stage
+//   - translates types to vulkan types
+//   - iterates shader attributes and creates vk structs needed for pipeline creation
+//   - iterates shader uniforms and creates VkDescriptorSetLayoutBinding structs
+//   - creates 2 descriptor pools using the config.pool_sizes and config.max_descriptor_set_count
+//   - create descriptor set layouts using the config.descriptor_sets
+//   - init vk viewport and vk scissor
+//   - creates the pipeline using the above and more stuff from config
+//   - ask the device for ubo alignment and align global_ubo_stride and ubo_stride
+//   - create a uniform buffer for global and instance and map it
+//   - allocate per frame global descriptor sets
+// - adds the shader to the shader lookup
+
 const config = @import("../../config.zig");
 const Engine = @import("../../engine.zig");
 const Renderer = @import("../renderer.zig");
@@ -23,7 +64,7 @@ const Allocator = std.mem.Allocator;
 const Shader = @This();
 
 const shader_path_format = "shaders/{s}.{s}.spv";
-const shader_name = "ui_shader";
+const shader_name = "ui";
 
 pub const instance_max_count: u32 = 1024;
 pub const descriptor_count: u32 = 2;

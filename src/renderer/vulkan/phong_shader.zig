@@ -23,7 +23,7 @@ const Allocator = std.mem.Allocator;
 const Shader = @This();
 
 const shader_path_format = "shaders/{s}.{s}.spv";
-const shader_name = "material_shader";
+const shader_name = "phong";
 
 pub const instance_max_count: u32 = 1024;
 pub const descriptor_count: u32 = 2;
