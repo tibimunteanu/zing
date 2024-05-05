@@ -161,7 +161,7 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
             .descriptor_count = 1,
             .descriptor_type = .uniform_buffer,
             .p_immutable_samplers = null,
-            .stage_flags = .{ .vertex_bit = true },
+            .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
         },
     };
 
@@ -397,6 +397,7 @@ pub fn init(allocator: Allocator, context: *const Context) !Shader {
     );
     errdefer context.device_api.destroyPipeline(context.device, self.pipeline, null);
 
+    // TODO: here's where we left off. the new shader should allocate only one buffer for both global and instance
     self.global_uniform_buffer = try Buffer.init(
         context,
         @as(usize, @sizeOf(GlobalUniformData)) * context.swapchain.images.len,

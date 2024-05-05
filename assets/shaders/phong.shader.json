@@ -2,8 +2,6 @@
   "resource_type": "shader",
   "name": "phong",
   "render_pass_name": "world",
-  "use_instance": true,
-  "use_local": true,
 
   "stages": [
     {
@@ -31,29 +29,30 @@
     }
   ],
 
-  "uniforms": [
+  "global_uniforms": [
     {
-      "scope": "global",
       "name": "projection",
       "data_type": "mat_4"
     },
     {
-      "scope": "global",
       "name": "view",
       "data_type": "mat_4"
-    },
+    }
+  ],
+
+  "instance_uniforms": [
     {
-      "scope": "instance",
       "name": "diffuse_color",
       "data_type": "float32_4"
     },
     {
-      "scope": "instance",
       "name": "diffuse_texture",
       "data_type": "sampler"
-    },
+    }
+  ],
+
+  "local_uniforms": [
     {
-      "scope": "local",
       "name": "model",
       "data_type": "mat_4"
     }

@@ -10,18 +10,25 @@ const Allocator = std.mem.Allocator;
 
 const Shader = @This();
 
+allocator: Allocator,
 name: std.BoundedArray(u8, 256),
 
 backend: ShaderBackend,
 
-pub fn init(shader_config: Config) !Shader {
+pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     var self: Shader = undefined;
-    self.backend = try ShaderBackend.init(&self, shader_config);
+    self.allocator = allocator;
+
+    self.name = try std.BoundedArray(u8, 256).fromSlice(shader_config.name);
+
+    self.backend = try ShaderBackend.init(allocator, &self, shader_config);
+
     return self;
 }
 
 pub fn deinit(self: *Shader) void {
-    self.backend.deinit(self);
+    self.backend.deinit();
+
     self.* = undefined;
 }
 
@@ -29,11 +36,11 @@ pub fn deinit(self: *Shader) void {
 pub const Config = struct {
     name: []const u8 = "new_shader",
     render_pass_name: []const u8 = "world",
-    use_instance: bool = false,
-    use_local: bool = false,
     stages: []const StageConfig,
     attributes: []const AttributeConfig,
-    uniforms: []const UniformConfig,
+    global_uniforms: []const UniformConfig,
+    instance_uniforms: []const UniformConfig,
+    local_uniforms: []const UniformConfig,
 };
 
 pub const StageConfig = struct {
@@ -47,7 +54,6 @@ pub const AttributeConfig = struct {
 };
 
 pub const UniformConfig = struct {
-    scope: []const u8,
     name: []const u8,
     data_type: []const u8,
 };
