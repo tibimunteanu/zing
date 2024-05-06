@@ -9,13 +9,13 @@ const Renderer = @import("../renderer.zig");
 const Swapchain = @import("swapchain.zig");
 const RenderPass = @import("renderpass.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const PhongShader = @import("phong_shader.zig");
-const UIShader = @import("ui_shader.zig");
 const Buffer = @import("buffer.zig");
 const Image = @import("image.zig");
 const Texture = @import("../texture.zig");
 const Material = @import("../material.zig");
 const Geometry = @import("../geometry.zig");
+const Shader = @import("../shader.zig");
+const ShaderResource = @import("../../resources/shader_resource.zig");
 
 const config = @import("../../config.zig");
 const resources_image = @import("../../resources/image_resource.zig");
@@ -203,8 +203,8 @@ ui_render_pass: RenderPass,
 graphics_command_pool: vk.CommandPool,
 graphics_command_buffers: std.BoundedArray(CommandBuffer, config.max_swapchain_image_count),
 
-phong_shader: PhongShader,
-ui_shader: UIShader,
+phong_shader: Shader,
+ui_shader: Shader,
 
 vertex_buffer: Buffer,
 index_buffer: Buffer,
@@ -308,10 +308,16 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     errdefer self.deinitCommandBuffers();
 
     // create shaders
-    self.phong_shader = try PhongShader.init(allocator, self);
+    var phong_shader_resource = try ShaderResource.init(allocator, "phong");
+    defer phong_shader_resource.deinit();
+
+    self.phong_shader = try Shader.init(allocator, phong_shader_resource.config.value);
     errdefer self.phong_shader.deinit();
 
-    self.ui_shader = try UIShader.init(allocator, self);
+    var ui_shader_resource = try ShaderResource.init(allocator, "ui");
+    defer ui_shader_resource.deinit();
+
+    self.ui_shader = try Shader.init(allocator, ui_shader_resource.config.value);
     errdefer self.ui_shader.deinit();
 
     // create buffers
@@ -474,11 +480,11 @@ pub fn beginRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void 
     switch (render_pass_type) {
         .world => {
             self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer());
-            self.phong_shader.bind(command_buffer);
+            self.phong_shader.bind();
         },
         .ui => {
             self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer());
-            self.ui_shader.bind(command_buffer);
+            self.ui_shader.bind();
         },
     }
 }
@@ -505,23 +511,21 @@ pub fn getCurrentWorldFramebuffer(self: *const Context) vk.Framebuffer {
 }
 
 pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {
-    // const command_buffer = self.getCurrentCommandBuffer();
-    // self.phong_shader.bind(command_buffer);
+    self.phong_shader.bindGlobal();
 
-    self.phong_shader.global_uniform_data.projection = projection;
-    self.phong_shader.global_uniform_data.view = view;
+    try self.phong_shader.setUniform("projection", projection);
+    try self.phong_shader.setUniform("view", view);
 
-    try self.phong_shader.updateGlobalUniformData();
+    try self.phong_shader.applyGlobal();
 }
 
 pub fn updateGlobalUIState(self: *Context, projection: math.Mat, view: math.Mat) !void {
-    // const command_buffer = self.getCurrentCommandBuffer();
-    // self.ui_shader.bind(command_buffer);
+    self.ui_shader.bindGlobal();
 
-    self.ui_shader.global_uniform_data.projection = projection;
-    self.ui_shader.global_uniform_data.view = view;
+    try self.ui_shader.setUniform("projection", projection);
+    try self.ui_shader.setUniform("view", view);
 
-    try self.ui_shader.updateGlobalUniformData();
+    try self.ui_shader.applyGlobal();
 }
 
 pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !void {
@@ -620,16 +624,16 @@ pub fn destroyTexture(self: *Context, texture: *Texture) void {
 
 pub fn createMaterial(self: *Context, material: *Material) !void {
     switch (material.material_type) {
-        .world => try self.phong_shader.acquireResources(material),
-        .ui => try self.ui_shader.acquireResources(material),
+        .world => material.instance_handle = try self.phong_shader.initInstance(),
+        .ui => material.instance_handle = try self.ui_shader.initInstance(),
     }
 }
 
 pub fn destroyMaterial(self: *Context, material: *Material) void {
-    if (material.internal_id != null) {
+    if (material.instance_handle) |instance_handle| {
         switch (material.material_type) {
-            .world => self.phong_shader.releaseResources(material),
-            .ui => self.ui_shader.releaseResources(material),
+            .world => self.phong_shader.deinitInstance(instance_handle),
+            .ui => self.ui_shader.deinitInstance(instance_handle),
         }
     }
 }
@@ -731,12 +735,24 @@ pub fn drawGeometry(self: *Context, data: GeometryRenderData) !void {
 
     switch (material.material_type) {
         .world => {
-            self.phong_shader.setModel(data.model);
-            try self.phong_shader.applyMaterial(material_handle);
+            try self.phong_shader.setUniform("model", data.model);
+
+            try self.phong_shader.bindInstance(material.instance_handle.?);
+
+            try self.phong_shader.setUniform("diffuse_color", material.diffuse_color);
+            try self.phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+
+            try self.phong_shader.applyInstance();
         },
         .ui => {
-            self.ui_shader.setModel(data.model);
-            try self.ui_shader.applyMaterial(material_handle);
+            try self.ui_shader.setUniform("model", data.model);
+
+            try self.ui_shader.bindInstance(material.instance_handle.?);
+
+            try self.ui_shader.setUniform("diffuse_color", material.diffuse_color);
+            try self.ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+
+            try self.ui_shader.applyInstance();
         },
     }
 
