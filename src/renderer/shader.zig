@@ -76,14 +76,14 @@ pub fn bindInstance(self: *Shader, handle: InstanceHandle) !void {
 }
 
 pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
-    const uniform_ptr = if (@TypeOf(uniform) == UniformHandle)
-        &self.uniforms.items[uniform]
-    else if (std.meta.Elem(@TypeOf(uniform)) == u8)
-        &self.uniforms.items[self.uniform_lookup.get(uniform) orelse return error.UniformNotFound]
+    const uniform_handle = if (@TypeOf(uniform) == UniformHandle)
+        uniform
+    else if (@typeInfo(@TypeOf(uniform)) == .Pointer and std.meta.Elem(@TypeOf(uniform)) == u8)
+        self.uniform_lookup.get(uniform) orelse return error.UniformNotFound
     else
         unreachable;
 
-    try self.backend.setUniform(uniform_ptr, value);
+    try self.backend.setUniform(&self.uniforms.items[uniform_handle], value);
 }
 
 // utils
