@@ -6,11 +6,11 @@
   "stages": [
     {
       "stage_type": "vertex",
-      "path": "shaders/phong.vert.glsl"
+      "path": "shaders/phong.vert.spv"
     },
     {
       "stage_type": "fragment",
-      "path": "shaders/phong.frag.glsl"
+      "path": "shaders/phong.frag.spv"
     }
   ],
 

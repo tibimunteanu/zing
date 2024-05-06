@@ -6,11 +6,11 @@
   "stages": [
     {
       "stage_type": "vertex",
-      "path": "shaders/ui.vert.glsl"
+      "path": "shaders/ui.vert.spv"
     },
     {
       "stage_type": "fragment",
-      "path": "shaders/ui.frag.glsl"
+      "path": "shaders/ui.frag.spv"
     }
   ],
 

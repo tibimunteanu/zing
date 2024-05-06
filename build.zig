@@ -81,7 +81,7 @@ fn compileShaders(b: *std.Build, comptime shaders: []const []const u8) !std.Arra
                 "glslc",
                 "-fshader-stage=" ++ shader_type,
                 shader_path ++ ".glsl",
-                "--target-env=vulkan1.3",
+                "--target-env=vulkan1.1",
                 "-o",
                 shader_path ++ ".spv",
             });

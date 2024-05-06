@@ -134,7 +134,7 @@ pub fn init(
         context.device,
         &vk.DescriptorSetLayoutCreateInfo{
             .binding_count = global_ubo_layout_bindings.len,
-            .p_bindings = @ptrCast(global_ubo_layout_bindings.slice().ptr),
+            .p_bindings = global_ubo_layout_bindings.slice().ptr,
         },
         null,
     ));
@@ -175,7 +175,7 @@ pub fn init(
             context.device,
             &vk.DescriptorSetLayoutCreateInfo{
                 .binding_count = instance_ubo_layout_bindings.len,
-                .p_bindings = @ptrCast(instance_ubo_layout_bindings.slice().ptr),
+                .p_bindings = instance_ubo_layout_bindings.slice().ptr,
             },
             null,
         ));
@@ -203,9 +203,9 @@ pub fn init(
     self.pipeline_layout = try context.device_api.createPipelineLayout(context.device, &.{
         .flags = .{},
         .set_layout_count = self.descriptor_set_layouts.len,
-        .p_set_layouts = @ptrCast(self.descriptor_set_layouts.slice().ptr),
+        .p_set_layouts = self.descriptor_set_layouts.slice().ptr,
         .push_constant_range_count = push_constant_ranges.len,
-        .p_push_constant_ranges = @ptrCast(push_constant_ranges.slice().ptr),
+        .p_push_constant_ranges = push_constant_ranges.slice().ptr,
     }, null);
 
     const input_assembly_state = vk.PipelineInputAssemblyStateCreateInfo{
@@ -236,6 +236,19 @@ pub fn init(
         .p_sample_mask = null,
         .alpha_to_coverage_enable = vk.FALSE,
         .alpha_to_one_enable = vk.FALSE,
+    };
+
+    const depth_stencil_state = vk.PipelineDepthStencilStateCreateInfo{
+        .flags = .{},
+        .depth_test_enable = vk.TRUE,
+        .depth_write_enable = vk.TRUE,
+        .depth_compare_op = .less,
+        .depth_bounds_test_enable = vk.FALSE,
+        .stencil_test_enable = vk.FALSE,
+        .front = undefined,
+        .back = undefined,
+        .min_depth_bounds = 0,
+        .max_depth_bounds = 0,
     };
 
     const color_blend_attachment_state = vk.PipelineColorBlendAttachmentState{
@@ -276,14 +289,14 @@ pub fn init(
     const pipeline_create_info = vk.GraphicsPipelineCreateInfo{
         .flags = .{},
         .stage_count = shader_stages.len,
-        .p_stages = @ptrCast(&shader_stages.slice().ptr),
+        .p_stages = shader_stages.slice().ptr,
         .p_viewport_state = &viewport_state,
         .p_vertex_input_state = &vertex_input_state,
         .p_input_assembly_state = &input_assembly_state,
         .p_tessellation_state = null,
         .p_rasterization_state = &rasterization_state,
         .p_multisample_state = &multisample_state,
-        .p_depth_stencil_state = null,
+        .p_depth_stencil_state = &depth_stencil_state,
         .p_color_blend_state = &color_blend_state,
         .p_dynamic_state = &dynamic_state,
         .layout = self.pipeline_layout,
