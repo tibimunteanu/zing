@@ -28,6 +28,13 @@ const Allocator = std.mem.Allocator;
 
 const Context = @This();
 
+pub const ctx = struct {
+    pub inline fn get() *Context {
+        // TODO: add debug checks
+        return Engine.instance.renderer.context;
+    }
+}.get;
+
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
 };

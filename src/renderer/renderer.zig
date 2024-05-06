@@ -10,6 +10,8 @@ const Geometry = @import("geometry.zig");
 const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
 const GeometryHandle = @import("../systems/geometry_system.zig").GeometryHandle;
 
+const Shader = @import("shader.zig");
+
 const Allocator = std.mem.Allocator;
 
 const Renderer = @This();
@@ -99,6 +101,54 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
             for (packet.geometries) |geometry| {
                 try self.context.drawGeometry(geometry);
             }
+
+            // TODO: temporary
+            {
+                var shader = Engine.instance.shader;
+                const instance = Engine.instance.shader_instance;
+
+                shader.bind();
+
+                var model = Shader.Uniform{
+                    .scope = .local,
+                    .data_type = .mat_4,
+                    .size = 64,
+                    .offset = 0,
+                    .location = 0,
+                    .texture_index = 0,
+                };
+
+                try shader.setUniform(&model, [16]f32{
+                    1.0, 2.0, 3.0, 1.0, //
+                    1.0, 2.0, 3.0, 1.0, //
+                    1.0, 2.0, 3.0, 1.0, //
+                    1.0, 2.0, 3.0, 1.0,
+                });
+
+                try shader.bindInstance(instance);
+
+                var diffuse_color = Shader.Uniform{
+                    .scope = .instance,
+                    .data_type = .float32_4,
+                    .size = 16,
+                    .offset = 0,
+                    .location = 0,
+                    .texture_index = 0,
+                };
+                var diffuse_texture = Shader.Uniform{
+                    .scope = .instance,
+                    .data_type = .sampler,
+                    .size = 0,
+                    .offset = 16,
+                    .location = 0,
+                    .texture_index = 0,
+                };
+
+                try shader.setUniform(&diffuse_color, [4]f32{ 0.1, 0.2, 0.8, 1.0 });
+                try shader.setUniform(&diffuse_texture, Engine.instance.texture_system.getDefaultTexture());
+            }
+            // TODO: end temporary
+
             try self.context.endRenderPass(.world);
 
             try self.context.beginRenderPass(.ui);

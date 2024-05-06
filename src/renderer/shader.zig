@@ -7,6 +7,7 @@ const ShaderBackend = switch (config.renderer_backend_type) {
 };
 
 const Allocator = std.mem.Allocator;
+pub const InstanceHandle = ShaderBackend.InstanceHandle;
 
 const Shader = @This();
 
@@ -31,6 +32,60 @@ pub fn deinit(self: *Shader) void {
 
     self.* = undefined;
 }
+
+pub fn initInstance(self: *Shader) !InstanceHandle {
+    return try self.backend.initInstance();
+}
+
+pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
+    self.backend.deinitInstance(handle);
+}
+
+pub fn bind(self: *const Shader) void {
+    self.backend.bind();
+}
+
+pub fn bindGlobal(self: *Shader) void {
+    self.backend.bindGlobal();
+}
+
+pub fn bindInstance(self: *Shader, handle: InstanceHandle) !void {
+    try self.backend.bindInstance(handle);
+}
+
+pub fn setUniform(self: *Shader, uniform: *Uniform, value: anytype) !void {
+    try self.backend.setUniform(uniform, value);
+}
+
+pub const Scope = enum(u8) {
+    global = 0,
+    instance = 1,
+    local = 2,
+};
+
+pub const UniformDataType = enum(u8) {
+    float32,
+    float32_2,
+    float32_3,
+    float32_4,
+    int8,
+    uint8,
+    int16,
+    uint16,
+    int32,
+    uint32,
+    mat_4,
+    sampler,
+};
+
+pub const Uniform = struct {
+    scope: Scope,
+    data_type: UniformDataType,
+    size: u32,
+    offset: u32,
+    location: u16,
+    texture_index: u16,
+};
 
 // config
 pub const Config = struct {
