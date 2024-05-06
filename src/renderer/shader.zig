@@ -122,14 +122,14 @@ inline fn getDataType(data_type: []const u8) !UniformDataType {
 
 inline fn getDataTypeSize(data_type: UniformDataType) u32 {
     return switch (data_type) {
-        .sampler => @as(u32, @intCast(0)),
-        .int8, .uint8 => @as(u32, @intCast(1)),
-        .int16, .uint16 => @as(u32, @intCast(2)),
-        .int32, .uint32, .float32 => @as(u32, @intCast(4)),
-        .float32_2 => @as(u32, @intCast(8)),
-        .float32_3 => @as(u32, @intCast(12)),
-        .float32_4 => @as(u32, @intCast(16)),
-        .mat_4 => @as(u32, @intCast(64)),
+        .sampler => 0,
+        .int8, .uint8 => 1,
+        .int16, .uint16 => 2,
+        .int32, .uint32, .float32 => 4,
+        .float32_2 => 8,
+        .float32_3 => 12,
+        .float32_4 => 16,
+        .mat_4 => 64,
     };
 }
 
