@@ -8,11 +8,15 @@ const ShaderBackend = switch (config.renderer_backend_type) {
 
 const Allocator = std.mem.Allocator;
 pub const InstanceHandle = ShaderBackend.InstanceHandle;
+pub const UniformHandle = u8;
 
 const Shader = @This();
 
 allocator: Allocator,
 name: std.BoundedArray(u8, 256),
+
+uniforms: std.ArrayList(Uniform),
+uniform_lookup: std.StringHashMap(UniformHandle),
 
 backend: ShaderBackend,
 
@@ -22,12 +26,30 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
 
     self.name = try std.BoundedArray(u8, 256).fromSlice(shader_config.name);
 
+    self.uniforms = try std.ArrayList(Uniform).initCapacity(allocator, 8);
+    errdefer self.uniforms.deinit();
+
+    self.uniform_lookup = std.StringHashMap(UniformHandle).init(allocator);
+    errdefer self.uniform_lookup.deinit();
+
+    try self.addUniforms(.global, shader_config.global_uniforms);
+    try self.addUniforms(.instance, shader_config.instance_uniforms);
+    try self.addUniforms(.local, shader_config.local_uniforms);
+
     self.backend = try ShaderBackend.init(allocator, &self, shader_config);
 
     return self;
 }
 
 pub fn deinit(self: *Shader) void {
+    var it = self.uniform_lookup.keyIterator();
+    while (it.next()) |key| {
+        self.allocator.free(key.*);
+    }
+
+    self.uniform_lookup.deinit();
+    self.uniforms.deinit();
+
     self.backend.deinit();
 
     self.* = undefined;
@@ -53,8 +75,58 @@ pub fn bindInstance(self: *Shader, handle: InstanceHandle) !void {
     try self.backend.bindInstance(handle);
 }
 
-pub fn setUniform(self: *Shader, uniform: *Uniform, value: anytype) !void {
-    try self.backend.setUniform(uniform, value);
+pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
+    const uniform_ptr = if (@TypeOf(uniform) == UniformHandle)
+        &self.uniforms.items[uniform]
+    else if (std.meta.Elem(@TypeOf(uniform)) == u8)
+        &self.uniforms.items[self.uniform_lookup.get(uniform) orelse return error.UniformNotFound]
+    else
+        unreachable;
+
+    try self.backend.setUniform(uniform_ptr, value);
+}
+
+// utils
+fn addUniforms(self: *Shader, scope: Scope, uniform_configs: []const UniformConfig) !void {
+    var offset: u32 = 0;
+    var texture_index: u16 = 0;
+
+    for (uniform_configs) |uniform_config| {
+        const uniform_handle: UniformHandle = @truncate(self.uniforms.items.len);
+        const uniform_data_type = try getDataType(uniform_config.data_type);
+        const uniform_size = getDataTypeSize(uniform_data_type);
+
+        try self.uniforms.append(Shader.Uniform{
+            .scope = scope,
+            .name = try std.BoundedArray(u8, 256).fromSlice(uniform_config.name),
+            .data_type = uniform_data_type,
+            .size = uniform_size,
+            .offset = offset,
+            .texture_index = if (uniform_data_type == .sampler) texture_index else 0,
+        });
+
+        try self.uniform_lookup.put(try self.allocator.dupe(u8, uniform_config.name), uniform_handle);
+
+        offset += if (scope == .local) std.mem.alignForward(u32, uniform_size, 4) else uniform_size;
+        if (uniform_data_type == .sampler) texture_index += 1;
+    }
+}
+
+inline fn getDataType(data_type: []const u8) !UniformDataType {
+    return std.meta.stringToEnum(UniformDataType, data_type) orelse error.UnknownDataType;
+}
+
+inline fn getDataTypeSize(data_type: UniformDataType) u32 {
+    return switch (data_type) {
+        .sampler => @as(u32, @intCast(0)),
+        .int8, .uint8 => @as(u32, @intCast(1)),
+        .int16, .uint16 => @as(u32, @intCast(2)),
+        .int32, .uint32, .float32 => @as(u32, @intCast(4)),
+        .float32_2 => @as(u32, @intCast(8)),
+        .float32_3 => @as(u32, @intCast(12)),
+        .float32_4 => @as(u32, @intCast(16)),
+        .mat_4 => @as(u32, @intCast(64)),
+    };
 }
 
 pub const Scope = enum(u8) {
@@ -64,26 +136,26 @@ pub const Scope = enum(u8) {
 };
 
 pub const UniformDataType = enum(u8) {
-    float32,
-    float32_2,
-    float32_3,
-    float32_4,
+    sampler,
     int8,
     uint8,
     int16,
     uint16,
     int32,
     uint32,
+    float32,
+    float32_2,
+    float32_3,
+    float32_4,
     mat_4,
-    sampler,
 };
 
 pub const Uniform = struct {
     scope: Scope,
+    name: std.BoundedArray(u8, 256),
     data_type: UniformDataType,
     size: u32,
     offset: u32,
-    location: u16,
     texture_index: u16,
 };
 

@@ -109,16 +109,9 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
 
                 shader.bind();
 
-                var model = Shader.Uniform{
-                    .scope = .local,
-                    .data_type = .mat_4,
-                    .size = 64,
-                    .offset = 0,
-                    .location = 0,
-                    .texture_index = 0,
-                };
+                const model_handle = shader.uniform_lookup.get("model").?;
 
-                try shader.setUniform(&model, [16]f32{
+                try shader.setUniform(model_handle, [16]f32{
                     1.0, 2.0, 3.0, 1.0, //
                     1.0, 2.0, 3.0, 1.0, //
                     1.0, 2.0, 3.0, 1.0, //
@@ -127,25 +120,8 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
 
                 try shader.bindInstance(instance);
 
-                var diffuse_color = Shader.Uniform{
-                    .scope = .instance,
-                    .data_type = .float32_4,
-                    .size = 16,
-                    .offset = 0,
-                    .location = 0,
-                    .texture_index = 0,
-                };
-                var diffuse_texture = Shader.Uniform{
-                    .scope = .instance,
-                    .data_type = .sampler,
-                    .size = 0,
-                    .offset = 16,
-                    .location = 0,
-                    .texture_index = 0,
-                };
-
-                try shader.setUniform(&diffuse_color, [4]f32{ 0.1, 0.2, 0.8, 1.0 });
-                try shader.setUniform(&diffuse_texture, Engine.instance.texture_system.getDefaultTexture());
+                try shader.setUniform("diffuse_color", [4]f32{ 0.1, 0.2, 0.8, 1.0 });
+                try shader.setUniform("diffuse_texture", Engine.instance.texture_system.getDefaultTexture());
             }
             // TODO: end temporary
 

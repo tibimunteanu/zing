@@ -40,28 +40,28 @@ descriptor_set_layouts: std.BoundedArray(vk.DescriptorSetLayout, 2),
 descriptor_pool: vk.DescriptorPool,
 pipeline_layout: vk.PipelineLayout,
 pipeline: vk.Pipeline,
-uniform_buffer: Buffer,
-global_descriptor_sets: std.BoundedArray(vk.DescriptorSet, config.max_swapchain_image_count),
+
 instance_pool: InstancePool,
 
+global_descriptor_sets: std.BoundedArray(vk.DescriptorSet, config.max_swapchain_image_count),
 global_ubo_size: u64,
 global_ubo_stride: u64,
 global_ubo_offset: u64,
+global_binding_count: u32,
+global_texture_count: u32,
 
 instance_ubo_size: u64,
 instance_ubo_stride: u64,
-instance_binding_count: u64,
+instance_binding_count: u32,
 instance_texture_count: u32,
 
+ubo: Buffer,
 ubo_ptr: [*]u8,
+
 bound_instance_handle: InstanceHandle,
 bound_ubo_offset: u64,
 
-pub fn init(
-    allocator: Allocator,
-    shader: *Shader,
-    shader_config: Shader.Config,
-) !VulkanShader {
+pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config) !VulkanShader {
     var self: VulkanShader = undefined;
     self.allocator = allocator;
 
@@ -121,6 +121,19 @@ pub fn init(
     };
 
     // global descriptors
+    self.global_ubo_size = 0;
+    self.global_texture_count = 0;
+
+    for (shader.uniforms.items) |uniform| {
+        if (uniform.scope == .global) {
+            if (uniform.data_type == .sampler) {
+                self.global_texture_count += 1;
+            } else {
+                self.global_ubo_size += uniform.size;
+            }
+        }
+    }
+
     var global_ubo_layout_bindings = try std.BoundedArray(vk.DescriptorSetLayoutBinding, 2).init(0);
 
     try global_ubo_layout_bindings.append(
@@ -133,28 +146,19 @@ pub fn init(
         },
     );
 
-    self.global_ubo_size = 0;
-
-    for (shader_config.global_uniforms) |global_uniform| {
-        if (isSampler(global_uniform.data_type)) {
-            if (global_ubo_layout_bindings.len < 2) {
-                try global_ubo_layout_bindings.append(
-                    vk.DescriptorSetLayoutBinding{
-                        .binding = 1,
-                        .descriptor_count = 1,
-                        .descriptor_type = .combined_image_sampler,
-                        .p_immutable_samplers = null,
-                        .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-                    },
-                );
-            } else {
-                global_ubo_layout_bindings.slice()[1].descriptor_count += 1;
-            }
-        } else {
-            const size = try getFormatSize(global_uniform.data_type);
-            self.global_ubo_size += size;
-        }
+    if (self.global_texture_count > 0) {
+        try global_ubo_layout_bindings.append(
+            vk.DescriptorSetLayoutBinding{
+                .binding = 1,
+                .descriptor_count = self.global_texture_count,
+                .descriptor_type = .combined_image_sampler,
+                .p_immutable_samplers = null,
+                .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+            },
+        );
     }
+
+    self.global_binding_count = global_ubo_layout_bindings.len;
 
     try self.descriptor_set_layouts.append(try ctx().device_api.createDescriptorSetLayout(
         ctx().device,
@@ -167,10 +171,20 @@ pub fn init(
 
     // instance descriptors
     self.instance_ubo_size = 0;
-    self.instance_binding_count = 0;
     self.instance_texture_count = 0;
+    self.instance_binding_count = 0;
 
     if (shader_config.instance_uniforms.len > 0) {
+        for (shader.uniforms.items) |uniform| {
+            if (uniform.scope == .instance) {
+                if (uniform.data_type == .sampler) {
+                    self.instance_texture_count += 1;
+                } else {
+                    self.instance_ubo_size += uniform.size;
+                }
+            }
+        }
+
         var instance_ubo_layout_bindings = try std.BoundedArray(vk.DescriptorSetLayoutBinding, 2).init(0);
 
         try instance_ubo_layout_bindings.append(
@@ -183,26 +197,16 @@ pub fn init(
             },
         );
 
-        for (shader_config.instance_uniforms) |instance_uniform| {
-            if (isSampler(instance_uniform.data_type)) {
-                if (instance_ubo_layout_bindings.len < 2) {
-                    try instance_ubo_layout_bindings.append(
-                        vk.DescriptorSetLayoutBinding{
-                            .binding = 1,
-                            .descriptor_count = 1,
-                            .descriptor_type = .combined_image_sampler,
-                            .p_immutable_samplers = null,
-                            .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-                        },
-                    );
-                }
-
-                self.instance_texture_count += 1;
-                instance_ubo_layout_bindings.slice()[1].descriptor_count = self.instance_texture_count;
-            } else {
-                const size = try getFormatSize(instance_uniform.data_type);
-                self.instance_ubo_size += size;
-            }
+        if (self.instance_texture_count > 0) {
+            try instance_ubo_layout_bindings.append(
+                vk.DescriptorSetLayoutBinding{
+                    .binding = 1,
+                    .descriptor_count = self.instance_texture_count,
+                    .descriptor_type = .combined_image_sampler,
+                    .p_immutable_samplers = null,
+                    .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+                },
+            );
         }
 
         self.instance_binding_count = instance_ubo_layout_bindings.len;
@@ -221,19 +225,18 @@ pub fn init(
     var push_constant_offset: u32 = 0;
     var push_constant_ranges = try std.BoundedArray(vk.PushConstantRange, 32).init(0);
 
-    for (shader_config.local_uniforms) |local_uniform| {
-        push_constant_offset = std.mem.alignForward(u32, push_constant_offset, 4);
+    for (shader.uniforms.items) |uniform| {
+        if (uniform.scope == .local) {
+            const uniform_aligned_size = std.mem.alignForward(u32, uniform.size, 4);
 
-        const size = try getFormatSize(local_uniform.data_type);
-        const aligned_size = std.mem.alignForward(u32, size, 4);
+            try push_constant_ranges.append(vk.PushConstantRange{
+                .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+                .offset = push_constant_offset,
+                .size = uniform_aligned_size,
+            });
 
-        try push_constant_ranges.append(vk.PushConstantRange{
-            .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-            .offset = push_constant_offset,
-            .size = aligned_size,
-        });
-
-        push_constant_offset += aligned_size;
+            push_constant_offset += uniform_aligned_size;
+        }
     }
 
     self.pipeline_layout = try ctx().device_api.createPipelineLayout(ctx().device, &.{
@@ -355,7 +358,7 @@ pub fn init(
     self.global_ubo_stride = std.mem.alignForward(u64, self.global_ubo_size, ubo_alignment);
     self.instance_ubo_stride = std.mem.alignForward(u64, self.instance_ubo_size, ubo_alignment);
 
-    self.uniform_buffer = try Buffer.init(
+    self.ubo = try Buffer.init(
         ctx(),
         // TODO: should we allocate separate ranges per swapchain image?
         self.global_ubo_stride + (self.instance_ubo_stride * config.shader_max_instance_count),
@@ -368,9 +371,9 @@ pub fn init(
         .{ .managed = true, .bind_on_create = true },
     );
 
-    self.ubo_ptr = try self.uniform_buffer.lock(0, vk.WHOLE_SIZE, .{});
+    self.ubo_ptr = try self.ubo.lock(0, vk.WHOLE_SIZE, .{});
 
-    self.global_ubo_offset = try self.uniform_buffer.alloc(self.global_ubo_stride);
+    self.global_ubo_offset = try self.ubo.alloc(self.global_ubo_stride);
 
     // descriptor pool
     const descriptor_pool_sizes = [_]vk.DescriptorPoolSize{
@@ -390,7 +393,9 @@ pub fn init(
     );
 
     // allocate global descriptor sets
-    var global_ubo_layouts = try std.BoundedArray(vk.DescriptorSetLayout, config.max_swapchain_image_count).init(ctx().swapchain.images.len);
+    var global_ubo_layouts = try std.BoundedArray(vk.DescriptorSetLayout, config.max_swapchain_image_count).init(
+        ctx().swapchain.images.len,
+    );
     for (global_ubo_layouts.slice()) |*layout| {
         layout.* = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.global));
     }
@@ -410,8 +415,6 @@ pub fn init(
 
     self.instance_pool = try InstancePool.initMaxCapacity(allocator);
 
-    _ = shader; // autofix
-
     return self;
 }
 
@@ -426,7 +429,7 @@ pub fn deinit(self: *VulkanShader) void {
     ) catch {};
     self.global_descriptor_sets.len = 0;
 
-    self.uniform_buffer.deinit();
+    self.ubo.deinit();
 
     if (self.descriptor_pool != .null_handle) {
         ctx().device_api.destroyDescriptorPool(ctx().device, self.descriptor_pool, null);
@@ -460,7 +463,7 @@ pub fn deinit(self: *VulkanShader) void {
 pub fn initInstance(self: *VulkanShader) !InstanceHandle {
     var instance_state: InstanceState = undefined;
 
-    instance_state.offset = try self.uniform_buffer.alloc(self.instance_ubo_stride);
+    instance_state.offset = try self.ubo.alloc(self.instance_ubo_stride);
 
     // clear descriptor states
     instance_state.descriptor_states = try std.BoundedArray(DescriptorState, config.shader_max_bindings).init(
@@ -525,7 +528,7 @@ pub fn deinitInstance(self: *VulkanShader, handle: InstanceHandle) void {
         ) catch {};
         instance_state.descriptor_sets.len = 0;
 
-        self.uniform_buffer.free(instance_state.offset, self.instance_ubo_stride) catch {};
+        self.ubo.free(instance_state.offset, self.instance_ubo_stride) catch {};
 
         instance_state.* = undefined;
     }
@@ -548,42 +551,42 @@ pub fn bindInstance(self: *VulkanShader, handle: InstanceHandle) !void {
     } else return error.InvalidShaderInstanceHandle;
 }
 
-pub fn setUniform(self: *VulkanShader, uniform: *Shader.Uniform, value: anytype) !void {
-    if (self.instance_pool.getColumnPtrIfLive(self.bound_instance_handle, .instance_state)) |instance_state| {
-        if (uniform.data_type == .sampler) {
-            if (@TypeOf(value) != TextureHandle) {
-                return error.InvalidSamplerValue;
-            }
-
-            switch (uniform.scope) {
-                .global => return error.GlobalTexturesNotYetSupported,
-                .instance => {
-                    instance_state.textures.slice()[uniform.location] = value;
-                },
-                .local => return error.CannotSetLocalSamplers,
-            }
-        } else {
-            switch (uniform.scope) {
-                .local => {
-                    ctx().device_api.cmdPushConstants(
-                        ctx().getCurrentCommandBuffer().handle,
-                        self.pipeline_layout,
-                        .{ .vertex_bit = true, .fragment_bit = true },
-                        uniform.offset,
-                        uniform.size,
-                        &value,
-                    );
-                },
-                .global, .instance => {
-                    const uniform_ptr = @as([*]u8, @ptrFromInt(
-                        @intFromPtr(self.ubo_ptr) + self.bound_ubo_offset + uniform.offset,
-                    ));
-
-                    @memcpy(uniform_ptr, &std.mem.toBytes(value));
-                },
-            }
+pub fn setUniform(self: *VulkanShader, uniform: *const Shader.Uniform, value: anytype) !void {
+    if (uniform.data_type == .sampler) {
+        if (@TypeOf(value) != TextureHandle) {
+            return error.InvalidSamplerValue;
         }
-    } else return error.InvalidShaderInstanceHandle;
+
+        switch (uniform.scope) {
+            .global => return error.GlobalTexturesNotYetSupported,
+            .instance => {
+                if (self.instance_pool.getColumnPtrIfLive(self.bound_instance_handle, .instance_state)) |instance_state| {
+                    instance_state.textures.slice()[uniform.texture_index] = value;
+                } else return error.InvalidShaderInstanceHandle;
+            },
+            .local => return error.CannotSetLocalSamplers,
+        }
+    } else {
+        switch (uniform.scope) {
+            .local => {
+                ctx().device_api.cmdPushConstants(
+                    ctx().getCurrentCommandBuffer().handle,
+                    self.pipeline_layout,
+                    .{ .vertex_bit = true, .fragment_bit = true },
+                    uniform.offset,
+                    uniform.size,
+                    &value,
+                );
+            },
+            .global, .instance => {
+                const uniform_ptr = @as([*]u8, @ptrFromInt(
+                    @intFromPtr(self.ubo_ptr) + self.bound_ubo_offset + uniform.offset,
+                ));
+
+                @memcpy(uniform_ptr, &std.mem.toBytes(value));
+            },
+        }
+    }
 }
 
 // utils
