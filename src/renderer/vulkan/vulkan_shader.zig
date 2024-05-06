@@ -3,11 +3,13 @@ const pool = @import("zpool");
 const vk = @import("vk.zig");
 const config = @import("../../config.zig");
 const Engine = @import("../../engine.zig");
+const Context = @import("context.zig");
 const Shader = @import("../shader.zig");
 const Buffer = @import("buffer.zig");
 const BinaryResource = @import("../../resources/binary_resource.zig");
 const TextureSystem = @import("../../systems/texture_system.zig");
 const TextureHandle = TextureSystem.TextureHandle;
+const TextureData = Context.TextureData;
 
 const ctx = @import("context.zig").ctx;
 
@@ -586,6 +588,136 @@ pub fn setUniform(self: *VulkanShader, uniform: *const Shader.Uniform, value: an
                 @memcpy(uniform_ptr, &std.mem.toBytes(value));
             },
         }
+    }
+}
+
+pub fn applyGlobal(self: *VulkanShader) !void {
+    const image_index = ctx().swapchain.image_index;
+    const command_buffer = ctx().getCurrentCommandBuffer();
+    const descriptor_set = self.global_descriptor_sets.get(image_index);
+
+    const buffer_info = vk.DescriptorBufferInfo{
+        .buffer = self.ubo.handle,
+        .offset = self.global_ubo_offset,
+        .range = self.global_ubo_stride,
+    };
+
+    var descriptor_writes = try std.BoundedArray(vk.WriteDescriptorSet, 2).init(0);
+
+    try descriptor_writes.append(vk.WriteDescriptorSet{
+        .dst_set = descriptor_set,
+        .dst_binding = 0,
+        .dst_array_element = 0,
+        .descriptor_type = .uniform_buffer,
+        .descriptor_count = 1,
+        .p_buffer_info = @ptrCast(&buffer_info),
+        .p_image_info = undefined,
+        .p_texel_buffer_view = undefined,
+    });
+
+    if (self.global_texture_count > 0) {
+        return error.GlobalTexturesNotYetSupported;
+    }
+
+    if (descriptor_writes.len > 0) {
+        ctx().device_api.updateDescriptorSets(
+            ctx().device,
+            descriptor_writes.len,
+            @ptrCast(descriptor_writes.slice().ptr),
+            0,
+            null,
+        );
+    }
+
+    ctx().device_api.cmdBindDescriptorSets(
+        command_buffer.handle,
+        .graphics,
+        self.pipeline_layout,
+        0,
+        1,
+        @ptrCast(&descriptor_set),
+        0,
+        null,
+    );
+}
+
+pub fn applyInstance(self: *VulkanShader) !void {
+    const image_index = ctx().swapchain.image_index;
+    const command_buffer = ctx().getCurrentCommandBuffer();
+
+    if (self.instance_pool.getColumnPtrIfLive(self.bound_instance_handle, .instance_state)) |instance_state| {
+        const descriptor_set = instance_state.descriptor_sets.get(image_index);
+
+        var descriptor_writes = try std.BoundedArray(vk.WriteDescriptorSet, 2).init(0);
+
+        var dst_binding: u32 = 0;
+
+        // descriptor 0 - uniform buffer
+        const buffer_info = vk.DescriptorBufferInfo{
+            .buffer = self.ubo.handle,
+            .offset = instance_state.offset,
+            .range = self.instance_ubo_stride,
+        };
+
+        try descriptor_writes.append(vk.WriteDescriptorSet{
+            .dst_set = descriptor_set,
+            .dst_binding = dst_binding,
+            .dst_array_element = 0,
+            .descriptor_type = .uniform_buffer,
+            .descriptor_count = 1,
+            .p_buffer_info = @ptrCast(&buffer_info),
+            .p_image_info = undefined,
+            .p_texel_buffer_view = undefined,
+        });
+
+        dst_binding += 1;
+
+        // descriptor 1 - samplers
+        var image_infos = try std.BoundedArray(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+
+        for (0..self.instance_texture_count) |sampler_index| {
+            const texture_handle = instance_state.textures.slice()[sampler_index];
+            const texture = Engine.instance.texture_system.textures.getColumnPtrAssumeLive(texture_handle, .texture);
+            const texture_backend: *TextureData = @ptrCast(@alignCast(texture.internal_data));
+
+            try image_infos.append(vk.DescriptorImageInfo{
+                .image_layout = .shader_read_only_optimal,
+                .image_view = texture_backend.image.view,
+                .sampler = texture_backend.sampler,
+            });
+        }
+
+        try descriptor_writes.append(vk.WriteDescriptorSet{
+            .dst_set = descriptor_set,
+            .dst_binding = dst_binding,
+            .descriptor_type = .combined_image_sampler,
+            .descriptor_count = self.instance_texture_count,
+            .dst_array_element = 0,
+            .p_buffer_info = undefined,
+            .p_image_info = @ptrCast(image_infos.slice().ptr),
+            .p_texel_buffer_view = undefined,
+        });
+
+        if (descriptor_writes.len > 0) {
+            ctx().device_api.updateDescriptorSets(
+                ctx().device,
+                descriptor_writes.len,
+                @ptrCast(descriptor_writes.slice().ptr),
+                0,
+                null,
+            );
+        }
+
+        ctx().device_api.cmdBindDescriptorSets(
+            command_buffer.handle,
+            .graphics,
+            self.pipeline_layout,
+            1,
+            1,
+            @ptrCast(&descriptor_set),
+            0,
+            null,
+        );
     }
 }
 

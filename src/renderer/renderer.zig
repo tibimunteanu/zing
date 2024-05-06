@@ -118,10 +118,15 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
                     1.0, 2.0, 3.0, 1.0,
                 });
 
+                shader.bindGlobal();
+                try shader.applyGlobal();
+
                 try shader.bindInstance(instance);
 
                 try shader.setUniform("diffuse_color", [4]f32{ 0.1, 0.2, 0.8, 1.0 });
                 try shader.setUniform("diffuse_texture", Engine.instance.texture_system.getDefaultTexture());
+
+                try shader.applyInstance();
             }
             // TODO: end temporary
 

@@ -90,6 +90,14 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
     try self.backend.setUniform(&self.uniforms.items[uniform_handle], value);
 }
 
+pub fn applyGlobal(self: *Shader) !void {
+    try self.backend.applyGlobal();
+}
+
+pub fn applyInstance(self: *Shader) !void {
+    try self.backend.applyInstance();
+}
+
 // utils
 fn addUniforms(self: *Shader, scope: Scope, uniform_configs: []const UniformConfig) !void {
     var offset: u32 = 0;
