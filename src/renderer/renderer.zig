@@ -109,7 +109,7 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
 
                 shader.bind();
 
-                const model_handle = shader.uniform_lookup.get("model").?;
+                const model_handle = try shader.getUniformHandle("model");
 
                 try shader.setUniform(model_handle, [16]f32{
                     1.0, 2.0, 3.0, 1.0, //
