@@ -194,14 +194,14 @@ compute_queue: Queue,
 transfer_queue: Queue,
 
 swapchain: Swapchain,
-framebuffers: std.BoundedArray(vk.Framebuffer, config.max_swapchain_image_count),
-world_framebuffers: std.BoundedArray(vk.Framebuffer, config.max_swapchain_image_count),
+framebuffers: std.BoundedArray(vk.Framebuffer, config.swapchain_max_images),
+world_framebuffers: std.BoundedArray(vk.Framebuffer, config.swapchain_max_images),
 
 world_render_pass: RenderPass,
 ui_render_pass: RenderPass,
 
 graphics_command_pool: vk.CommandPool,
-graphics_command_buffers: std.BoundedArray(CommandBuffer, config.max_swapchain_image_count),
+graphics_command_buffers: std.BoundedArray(CommandBuffer, config.swapchain_max_images),
 
 phong_shader: Shader,
 ui_shader: Shader,
@@ -932,7 +932,7 @@ fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_
 fn initCommandBuffers(self: *Context) !void {
     errdefer self.deinitCommandBuffers();
 
-    self.graphics_command_buffers.len = 0;
+    try self.graphics_command_buffers.resize(0);
     for (0..self.swapchain.images.len) |_| {
         try self.graphics_command_buffers.append(
             try CommandBuffer.init(self, self.graphics_command_pool, .{}),
@@ -952,7 +952,7 @@ fn deinitCommandBuffers(self: *Context) void {
 fn initFramebuffers(self: *Context) !void {
     errdefer self.deinitFramebuffers();
 
-    self.world_framebuffers.len = 0;
+    try self.world_framebuffers.resize(0);
     for (self.swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,
@@ -975,7 +975,7 @@ fn initFramebuffers(self: *Context) !void {
         );
     }
 
-    self.framebuffers.len = 0;
+    try self.framebuffers.resize(0);
     for (self.swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,

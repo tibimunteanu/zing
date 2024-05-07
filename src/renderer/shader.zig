@@ -42,6 +42,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
 }
 
 pub fn deinit(self: *Shader) void {
+    self.backend.deinit();
+
     var it = self.uniform_lookup.keyIterator();
     while (it.next()) |key| {
         self.allocator.free(key.*);
@@ -49,8 +51,6 @@ pub fn deinit(self: *Shader) void {
 
     self.uniform_lookup.deinit();
     self.uniforms.deinit();
-
-    self.backend.deinit();
 
     self.* = undefined;
 }

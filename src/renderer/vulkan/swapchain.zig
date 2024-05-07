@@ -26,7 +26,7 @@ surface_format: vk.SurfaceFormatKHR,
 present_mode: vk.PresentModeKHR,
 
 handle: vk.SwapchainKHR,
-images: std.BoundedArray(SwapchainImage, config.max_swapchain_image_count),
+images: std.BoundedArray(SwapchainImage, config.swapchain_max_images),
 depth_image: Image,
 image_index: u32,
 next_image_acquired_semaphore: vk.Semaphore,
@@ -266,15 +266,15 @@ fn initImages(self: *Swapchain) !void {
     var count: u32 = undefined;
     _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, null);
 
-    if (count > config.max_swapchain_image_count) {
+    if (count > config.swapchain_max_images) {
         return error.MaxSwapchainImageCountExceeded;
     }
 
-    var imageHandles: [config.max_swapchain_image_count]vk.Image = undefined;
+    var imageHandles: [config.swapchain_max_images]vk.Image = undefined;
     _ = try device_api.getSwapchainImagesKHR(device, self.handle, &count, &imageHandles);
 
     // init swapchain images
-    self.images.len = 0;
+    try self.images.resize(0);
     for (0..count) |i| {
         try self.images.append(try SwapchainImage.init(self.context, imageHandles[i], self.surface_format.format));
     }
