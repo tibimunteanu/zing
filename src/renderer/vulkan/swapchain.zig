@@ -6,6 +6,7 @@ const Context = @import("context.zig");
 const Image = @import("image.zig");
 
 const Allocator = std.mem.Allocator;
+const Array = std.BoundedArray;
 
 const maxInt = std.math.maxInt;
 
@@ -26,7 +27,7 @@ surface_format: vk.SurfaceFormatKHR,
 present_mode: vk.PresentModeKHR,
 
 handle: vk.SwapchainKHR,
-images: std.BoundedArray(SwapchainImage, config.swapchain_max_images),
+images: Array(SwapchainImage, config.swapchain_max_images),
 depth_image: Image,
 image_index: u32,
 next_image_acquired_semaphore: vk.Semaphore,

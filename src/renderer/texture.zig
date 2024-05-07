@@ -1,9 +1,9 @@
 const std = @import("std");
 const TextureHandle = @import("../systems/texture_system.zig").TextureHandle;
 
-const Texture = @This();
+const Array = std.BoundedArray;
 
-pub const Name = std.BoundedArray(u8, 256);
+const Texture = @This();
 
 pub const Use = enum(u8) {
     unknown = 0,
@@ -15,7 +15,7 @@ pub const Map = struct {
     use: Use = .unknown,
 };
 
-name: Name = .{},
+name: Array(u8, 256) = .{},
 width: u32 = 0,
 height: u32 = 0,
 channel_count: u32 = 0,

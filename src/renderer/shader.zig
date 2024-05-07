@@ -7,13 +7,15 @@ const ShaderBackend = switch (config.renderer_backend_type) {
 };
 
 const Allocator = std.mem.Allocator;
+const Array = std.BoundedArray;
+
 pub const InstanceHandle = ShaderBackend.InstanceHandle;
 pub const UniformHandle = u8;
 
 const Shader = @This();
 
 allocator: Allocator,
-name: std.BoundedArray(u8, 256),
+name: Array(u8, 256),
 
 uniforms: std.ArrayList(Uniform),
 uniform_lookup: std.StringHashMap(UniformHandle),
@@ -24,7 +26,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     var self: Shader = undefined;
     self.allocator = allocator;
 
-    self.name = try std.BoundedArray(u8, 256).fromSlice(shader_config.name);
+    self.name = try Array(u8, 256).fromSlice(shader_config.name);
 
     self.uniforms = try std.ArrayList(Uniform).initCapacity(allocator, 8);
     errdefer self.uniforms.deinit();
@@ -110,7 +112,7 @@ fn addUniforms(self: *Shader, scope: Scope, uniform_configs: []const UniformConf
 
         try self.uniforms.append(Shader.Uniform{
             .scope = scope,
-            .name = try std.BoundedArray(u8, 256).fromSlice(uniform_config.name),
+            .name = try Array(u8, 256).fromSlice(uniform_config.name),
             .data_type = uniform_data_type,
             .size = uniform_size,
             .offset = offset,
@@ -164,7 +166,7 @@ pub const UniformDataType = enum(u8) {
 
 pub const Uniform = struct {
     scope: Scope,
-    name: std.BoundedArray(u8, 256),
+    name: Array(u8, 256),
     data_type: UniformDataType,
     size: u32,
     offset: u32,

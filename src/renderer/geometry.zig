@@ -1,11 +1,11 @@
 const std = @import("std");
 const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
 
+const Array = std.BoundedArray;
+
 const Geometry = @This();
 
-pub const Name = std.BoundedArray(u8, 256);
-
-name: Name = .{},
+name: Array(u8, 256) = .{},
 material: MaterialHandle = MaterialHandle.nil,
 generation: ?u32 = null,
 internal_id: ?u32 = null,

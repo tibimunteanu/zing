@@ -11,6 +11,7 @@ const Vertex3D = Renderer.Vertex3D;
 const Vertex2D = Renderer.Vertex2D;
 
 const Allocator = std.mem.Allocator;
+const Array = std.BoundedArray;
 
 const GeometrySystem = @This();
 
@@ -270,7 +271,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     const indices_3d = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
     var geometry_3d = Geometry.init();
-    geometry_3d.name = try Geometry.Name.fromSlice(default_geometry_name);
+    geometry_3d.name = try Array(u8, 256).fromSlice(default_geometry_name);
     geometry_3d.material = Engine.instance.material_system.getDefaultMaterial();
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
 
@@ -293,7 +294,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     const indices_2d = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
     var geometry_2d = Geometry.init();
-    geometry_2d.name = try Geometry.Name.fromSlice(default_geometry_2d_name);
+    geometry_2d.name = try Array(u8, 256).fromSlice(default_geometry_2d_name);
     geometry_2d.material = Engine.instance.material_system.getDefaultMaterial();
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
 
@@ -311,7 +312,7 @@ fn loadGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !vo
     _ = self;
 
     var temp_geometry = Geometry.init();
-    temp_geometry.name = try Geometry.Name.fromSlice(config.name);
+    temp_geometry.name = try Array(u8, 256).fromSlice(config.name);
     temp_geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
 
     if (config.material_name.len > 0) {

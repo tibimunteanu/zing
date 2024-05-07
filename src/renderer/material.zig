@@ -4,9 +4,9 @@ const Texture = @import("../renderer/texture.zig");
 const Shader = @import("../renderer/shader.zig");
 const TextureSystem = @import("../systems/texture_system.zig");
 
-const Material = @This();
+const Array = std.BoundedArray;
 
-pub const Name = std.BoundedArray(u8, 256);
+const Material = @This();
 
 pub const Type = enum {
     world,
@@ -21,7 +21,7 @@ pub const Config = struct {
     auto_release: bool = false,
 };
 
-name: Name = .{},
+name: Array(u8, 256) = .{},
 material_type: Type = .world,
 diffuse_color: math.Vec = math.Vec{ 0, 0, 0, 0 },
 diffuse_map: Texture.Map = .{},

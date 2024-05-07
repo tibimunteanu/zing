@@ -9,6 +9,7 @@ const Texture = @import("../renderer/texture.zig");
 const MaterialResource = @import("../resources/material_resource.zig");
 
 const Allocator = std.mem.Allocator;
+const Array = std.BoundedArray;
 
 const MaterialSystem = @This();
 
@@ -138,7 +139,7 @@ pub fn getDefaultMaterial(self: *const MaterialSystem) MaterialHandle {
 // utils
 fn createDefaultMaterial(self: *MaterialSystem) !void {
     var material = Material.init();
-    material.name = try Material.Name.fromSlice(default_material_name);
+    material.name = try Array(u8, 256).fromSlice(default_material_name);
     material.diffuse_color = math.Vec{ 1, 1, 1, 1 };
     material.diffuse_map = .{
         .use = .map_diffuse,
@@ -161,7 +162,7 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
 fn loadMaterial(self: *MaterialSystem, config: Material.Config, material: *Material) !void {
     _ = self;
     var temp_material = Material.init();
-    temp_material.name = try Material.Name.fromSlice(config.name);
+    temp_material.name = try Array(u8, 256).fromSlice(config.name);
     temp_material.material_type = if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world;
     temp_material.diffuse_color = config.diffuse_color;
 

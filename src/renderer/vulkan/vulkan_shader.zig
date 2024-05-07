@@ -14,19 +14,20 @@ const TextureData = Context.TextureData;
 const ctx = @import("context.zig").ctx;
 
 const Allocator = std.mem.Allocator;
+const Array = std.BoundedArray;
 
 const VulkanShader = @This();
 
 pub const DescriptorState = struct {
-    generations: std.BoundedArray(?u32, config.swapchain_max_images),
-    handles: std.BoundedArray(TextureHandle, config.swapchain_max_images),
+    generations: Array(?u32, config.swapchain_max_images),
+    handles: Array(TextureHandle, config.swapchain_max_images),
 };
 
 pub const InstanceState = struct {
     ubo_offset: u64,
-    descriptor_sets: std.BoundedArray(vk.DescriptorSet, config.swapchain_max_images),
-    descriptor_states: std.BoundedArray(DescriptorState, config.shader_max_bindings),
-    textures: std.BoundedArray(TextureHandle, config.shader_max_instance_textures),
+    descriptor_sets: Array(vk.DescriptorSet, config.swapchain_max_images),
+    descriptor_states: Array(DescriptorState, config.shader_max_bindings),
+    textures: Array(TextureHandle, config.shader_max_instance_textures),
 };
 
 // NOTE: index_bits = 10 results in a maximum of 1024 instances
@@ -37,15 +38,15 @@ pub const InstanceHandle = InstancePool.Handle;
 
 allocator: Allocator,
 
-shader_modules: std.BoundedArray(vk.ShaderModule, config.shader_max_stages),
-descriptor_set_layouts: std.BoundedArray(vk.DescriptorSetLayout, 2),
+shader_modules: Array(vk.ShaderModule, config.shader_max_stages),
+descriptor_set_layouts: Array(vk.DescriptorSetLayout, 2),
 descriptor_pool: vk.DescriptorPool,
 pipeline_layout: vk.PipelineLayout,
 pipeline: vk.Pipeline,
 
 instance_pool: InstancePool,
 
-global_descriptor_sets: std.BoundedArray(vk.DescriptorSet, config.swapchain_max_images),
+global_descriptor_sets: Array(vk.DescriptorSet, config.swapchain_max_images),
 global_ubo_size: u64,
 global_ubo_stride: u64,
 global_ubo_offset: u64,
@@ -77,7 +78,7 @@ pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config)
     errdefer self.deinit();
 
     // shader stages
-    var shader_stages = try std.BoundedArray(vk.PipelineShaderStageCreateInfo, config.shader_max_stages).init(0);
+    var shader_stages = try Array(vk.PipelineShaderStageCreateInfo, config.shader_max_stages).init(0);
 
     for (shader_config.stages) |stage| {
         const module = try createShaderModule(allocator, stage.path);
@@ -93,7 +94,7 @@ pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config)
     }
 
     // vertex input
-    var attribute_descriptions = try std.BoundedArray(vk.VertexInputAttributeDescription, config.shader_max_attributes).init(0);
+    var attribute_descriptions = try Array(vk.VertexInputAttributeDescription, config.shader_max_attributes).init(0);
 
     var offset: u32 = 0;
     for (shader_config.attributes, 0..) |attribute, location| {
@@ -136,7 +137,7 @@ pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config)
         }
     }
 
-    var global_ubo_layout_bindings = try std.BoundedArray(vk.DescriptorSetLayoutBinding, 2).init(0);
+    var global_ubo_layout_bindings = try Array(vk.DescriptorSetLayoutBinding, 2).init(0);
 
     try global_ubo_layout_bindings.append(
         vk.DescriptorSetLayoutBinding{
@@ -187,7 +188,7 @@ pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config)
             }
         }
 
-        var instance_ubo_layout_bindings = try std.BoundedArray(vk.DescriptorSetLayoutBinding, 2).init(0);
+        var instance_ubo_layout_bindings = try Array(vk.DescriptorSetLayoutBinding, 2).init(0);
 
         try instance_ubo_layout_bindings.append(
             vk.DescriptorSetLayoutBinding{
@@ -225,7 +226,7 @@ pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config)
 
     // local push constants
     var push_constant_offset: u32 = 0;
-    var push_constant_ranges = try std.BoundedArray(vk.PushConstantRange, 32).init(0);
+    var push_constant_ranges = try Array(vk.PushConstantRange, 32).init(0);
 
     for (shader.uniforms.items) |uniform| {
         if (uniform.scope == .local) {
@@ -399,7 +400,7 @@ pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config)
 
     // allocate global descriptor sets
     const global_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.global));
-    var global_ubo_layouts = try std.BoundedArray(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
+    var global_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
     try global_ubo_layouts.appendNTimes(global_ubo_layout, ctx().swapchain.images.len);
 
     const global_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
@@ -469,7 +470,7 @@ pub fn initInstance(self: *VulkanShader) !InstanceHandle {
     instance_state.ubo_offset = try self.ubo.alloc(self.instance_ubo_stride);
 
     // clear descriptor states
-    instance_state.descriptor_states = try std.BoundedArray(DescriptorState, config.shader_max_bindings).init(
+    instance_state.descriptor_states = try Array(DescriptorState, config.shader_max_bindings).init(
         self.instance_binding_count,
     );
     for (instance_state.descriptor_states.slice()) |*descriptor_state| {
@@ -487,7 +488,7 @@ pub fn initInstance(self: *VulkanShader) !InstanceHandle {
 
     // allocate instance descriptor sets
     const instance_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.instance));
-    var instance_ubo_layouts = try std.BoundedArray(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
+    var instance_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
     try instance_ubo_layouts.appendNTimes(instance_ubo_layout, ctx().swapchain.images.len);
 
     const instance_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
@@ -525,9 +526,9 @@ pub fn deinitInstance(self: *VulkanShader, handle: InstanceHandle) void {
         self.ubo.free(instance_state.ubo_offset, self.instance_ubo_stride) catch {};
 
         instance_state.* = undefined;
-    }
 
-    self.instance_pool.removeAssumeLive(handle);
+        self.instance_pool.removeAssumeLive(handle);
+    }
 }
 
 pub fn bind(self: *const VulkanShader) void {
@@ -594,7 +595,7 @@ pub fn applyGlobal(self: *VulkanShader) !void {
         .range = self.global_ubo_stride,
     };
 
-    var descriptor_writes = try std.BoundedArray(vk.WriteDescriptorSet, 2).init(0);
+    var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
 
     try descriptor_writes.append(vk.WriteDescriptorSet{
         .dst_set = descriptor_set,
@@ -640,7 +641,7 @@ pub fn applyInstance(self: *VulkanShader) !void {
     if (self.instance_pool.getColumnPtrIfLive(self.bound_instance_handle, .instance_state)) |instance_state| {
         const descriptor_set = instance_state.descriptor_sets.get(image_index);
 
-        var descriptor_writes = try std.BoundedArray(vk.WriteDescriptorSet, 2).init(0);
+        var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
 
         var dst_binding: u32 = 0;
 
@@ -665,7 +666,7 @@ pub fn applyInstance(self: *VulkanShader) !void {
         dst_binding += 1;
 
         // descriptor 1 - samplers
-        var image_infos = try std.BoundedArray(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+        var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
 
         for (0..self.instance_sampler_count) |sampler_index| {
             const texture_handle = instance_state.textures.slice()[sampler_index];

@@ -25,6 +25,7 @@ const Vertex3D = Renderer.Vertex3D;
 const GeometryRenderData = Renderer.GeometryRenderData;
 
 const Allocator = std.mem.Allocator;
+const Array = std.BoundedArray;
 
 const Context = @This();
 
@@ -194,14 +195,14 @@ compute_queue: Queue,
 transfer_queue: Queue,
 
 swapchain: Swapchain,
-framebuffers: std.BoundedArray(vk.Framebuffer, config.swapchain_max_images),
-world_framebuffers: std.BoundedArray(vk.Framebuffer, config.swapchain_max_images),
+framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
+world_framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
 
 world_render_pass: RenderPass,
 ui_render_pass: RenderPass,
 
 graphics_command_pool: vk.CommandPool,
-graphics_command_buffers: std.BoundedArray(CommandBuffer, config.swapchain_max_images),
+graphics_command_buffers: Array(CommandBuffer, config.swapchain_max_images),
 
 phong_shader: Shader,
 ui_shader: Shader,
