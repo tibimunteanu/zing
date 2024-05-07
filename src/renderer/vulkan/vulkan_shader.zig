@@ -97,18 +97,15 @@ pub fn init(allocator: Allocator, shader: *Shader, shader_config: Shader.Config)
     var attribute_descriptions = try Array(vk.VertexInputAttributeDescription, config.shader_max_attributes).init(0);
 
     var offset: u32 = 0;
-    for (shader_config.attributes, 0..) |attribute, location| {
-        const format = try getVkFormat(attribute.data_type);
-        const size = try getFormatSize(attribute.data_type);
-
+    for (shader.attributes.items, 0..) |attribute, location| {
         try attribute_descriptions.append(vk.VertexInputAttributeDescription{
             .binding = 0,
             .location = @intCast(location),
-            .format = format,
+            .format = try vkFormatFromAttributeDataType(attribute.data_type),
             .offset = offset,
         });
 
-        offset += size;
+        offset += attribute.size;
     }
 
     const vertex_input_state = vk.PipelineVertexInputStateCreateInfo{
@@ -741,26 +738,14 @@ fn isSampler(data_type: []const u8) bool {
     return std.mem.eql(u8, data_type, "sampler");
 }
 
-fn getVkFormat(data_type: []const u8) !vk.Format {
-    if (std.mem.eql(u8, data_type, "float32")) return .r32_sfloat;
-    if (std.mem.eql(u8, data_type, "float32_2")) return .r32g32_sfloat;
-    if (std.mem.eql(u8, data_type, "float32_3")) return .r32g32b32_sfloat;
-    if (std.mem.eql(u8, data_type, "float32_4")) return .r32g32b32a32_sfloat;
-
-    if (std.mem.eql(u8, data_type, "sampler")) return error.FoundSampler;
-
-    return error.UnknownDataType;
-}
-
-fn getFormatSize(data_type: []const u8) !u32 {
-    if (std.mem.eql(u8, data_type, "float32")) return @as(u32, @intCast(4));
-    if (std.mem.eql(u8, data_type, "float32_2")) return @as(u32, @intCast(8));
-    if (std.mem.eql(u8, data_type, "float32_3")) return @as(u32, @intCast(12));
-    if (std.mem.eql(u8, data_type, "float32_4")) return @as(u32, @intCast(16));
-    if (std.mem.eql(u8, data_type, "mat_4")) return @as(u32, @intCast(64));
-    if (std.mem.eql(u8, data_type, "sampler")) return @as(u32, @intCast(0));
-
-    return error.UnknownDataType;
+fn vkFormatFromAttributeDataType(data_type: Shader.AttributeDataType) !vk.Format {
+    return switch (data_type) {
+        .float32 => .r32_sfloat,
+        .float32_2 => .r32g32_sfloat,
+        .float32_3 => .r32g32b32_sfloat,
+        .float32_4 => .r32g32b32a32_sfloat,
+        else => error.UnknownDataType,
+    };
 }
 
 fn getVkRenderPass(render_pass_name: []const u8) !vk.RenderPass {

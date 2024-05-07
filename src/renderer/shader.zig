@@ -17,6 +17,8 @@ const Shader = @This();
 allocator: Allocator,
 name: Array(u8, 256),
 
+attributes: std.ArrayList(Attribute),
+
 uniforms: std.ArrayList(Uniform),
 uniform_lookup: std.StringHashMap(UniformHandle),
 
@@ -27,6 +29,11 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     self.allocator = allocator;
 
     self.name = try Array(u8, 256).fromSlice(shader_config.name);
+
+    self.attributes = try std.ArrayList(Attribute).initCapacity(allocator, 8);
+    errdefer self.attributes.deinit();
+
+    try self.addAttributes(shader_config.attributes);
 
     self.uniforms = try std.ArrayList(Uniform).initCapacity(allocator, 8);
     errdefer self.uniforms.deinit();
@@ -53,6 +60,8 @@ pub fn deinit(self: *Shader) void {
 
     self.uniform_lookup.deinit();
     self.uniforms.deinit();
+
+    self.attributes.deinit();
 
     self.* = undefined;
 }
@@ -101,16 +110,29 @@ pub fn applyInstance(self: *Shader) !void {
 }
 
 // utils
+fn addAttributes(self: *Shader, attribute_configs: []const AttributeConfig) !void {
+    for (attribute_configs) |attribute_config| {
+        const attribute_data_type = try parseAttributeDataType(attribute_config.data_type);
+        const attribute_size = getAttributeDataTypeSize(attribute_data_type);
+
+        try self.attributes.append(Attribute{
+            .name = try Array(u8, 256).fromSlice(attribute_config.name),
+            .data_type = attribute_data_type,
+            .size = attribute_size,
+        });
+    }
+}
+
 fn addUniforms(self: *Shader, scope: Scope, uniform_configs: []const UniformConfig) !void {
     var offset: u32 = 0;
     var texture_index: u16 = 0;
 
     for (uniform_configs) |uniform_config| {
         const uniform_handle: UniformHandle = @truncate(self.uniforms.items.len);
-        const uniform_data_type = try getDataType(uniform_config.data_type);
-        const uniform_size = getDataTypeSize(uniform_data_type);
+        const uniform_data_type = try parseUniformDataType(uniform_config.data_type);
+        const uniform_size = getUniformDataTypeSize(uniform_data_type);
 
-        try self.uniforms.append(Shader.Uniform{
+        try self.uniforms.append(Uniform{
             .scope = scope,
             .name = try Array(u8, 256).fromSlice(uniform_config.name),
             .data_type = uniform_data_type,
@@ -126,13 +148,29 @@ fn addUniforms(self: *Shader, scope: Scope, uniform_configs: []const UniformConf
     }
 }
 
-inline fn getDataType(data_type: []const u8) !UniformDataType {
-    return std.meta.stringToEnum(UniformDataType, data_type) orelse error.UnknownDataType;
+inline fn parseUniformDataType(data_type: []const u8) !UniformDataType {
+    return std.meta.stringToEnum(UniformDataType, data_type) orelse error.UnknownUniformDataType;
 }
 
-inline fn getDataTypeSize(data_type: UniformDataType) u32 {
+inline fn parseAttributeDataType(data_type: []const u8) !AttributeDataType {
+    return std.meta.stringToEnum(AttributeDataType, data_type) orelse error.UnknownAttributeDataType;
+}
+
+inline fn getUniformDataTypeSize(data_type: UniformDataType) u32 {
     return switch (data_type) {
         .sampler => 0,
+        .int8, .uint8 => 1,
+        .int16, .uint16 => 2,
+        .int32, .uint32, .float32 => 4,
+        .float32_2 => 8,
+        .float32_3 => 12,
+        .float32_4 => 16,
+        .mat_4 => 64,
+    };
+}
+
+inline fn getAttributeDataTypeSize(data_type: AttributeDataType) u32 {
+    return switch (data_type) {
         .int8, .uint8 => 1,
         .int16, .uint16 => 2,
         .int32, .uint32, .float32 => 4,
@@ -149,8 +187,7 @@ pub const Scope = enum(u8) {
     local = 2,
 };
 
-pub const UniformDataType = enum(u8) {
-    sampler,
+pub const AttributeDataType = enum(u8) {
     int8,
     uint8,
     int16,
@@ -162,6 +199,27 @@ pub const UniformDataType = enum(u8) {
     float32_3,
     float32_4,
     mat_4,
+};
+
+pub const UniformDataType = enum(u8) {
+    int8,
+    uint8,
+    int16,
+    uint16,
+    int32,
+    uint32,
+    float32,
+    float32_2,
+    float32_3,
+    float32_4,
+    mat_4,
+    sampler,
+};
+
+pub const Attribute = struct {
+    name: Array(u8, 256),
+    data_type: AttributeDataType,
+    size: u32,
 };
 
 pub const Uniform = struct {
