@@ -434,7 +434,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
 
     self.ubo_ptr = try self.ubo.lock(0, vk.WHOLE_SIZE, .{});
 
-    // alloc global range
+    // alloc global ubo range
     self.global_state.ubo_offset = try self.ubo.alloc(self.global_scope.stride);
 
     // create instance state pool
@@ -511,25 +511,6 @@ pub fn deinit(self: *Shader) void {
 pub fn initInstance(self: *Shader) !InstanceHandle {
     var instance_state: InstanceState = undefined;
 
-    instance_state.ubo_offset = try self.ubo.alloc(self.instance_scope.stride);
-
-    // clear descriptor states
-    instance_state.descriptor_states = try Array(DescriptorState, config.shader_max_bindings).init(
-        self.instance_scope.binding_count,
-    );
-    for (instance_state.descriptor_states.slice()) |*descriptor_state| {
-        try descriptor_state.generations.resize(0);
-        try descriptor_state.generations.appendNTimes(null, ctx().swapchain.images.len);
-
-        try descriptor_state.handles.resize(0);
-        try descriptor_state.handles.appendNTimes(TextureHandle.nil, ctx().swapchain.images.len);
-    }
-
-    // clear textures to default texture handle
-    const default_texture_handle = Engine.instance.texture_system.getDefaultTexture();
-    try instance_state.textures.resize(0);
-    try instance_state.textures.appendNTimes(default_texture_handle, self.instance_scope.uniform_sampler_count);
-
     // allocate instance descriptor sets
     const instance_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.instance));
     var instance_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
@@ -549,6 +530,37 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
         instance_state.descriptor_sets.slice().ptr,
     );
 
+    errdefer {
+        ctx().device_api.freeDescriptorSets(
+            ctx().device,
+            self.descriptor_pool,
+            instance_state.descriptor_sets.len,
+            instance_state.descriptor_sets.slice().ptr,
+        ) catch {};
+        instance_state.descriptor_sets.len = 0;
+    }
+
+    // allocate instance ubo range
+    instance_state.ubo_offset = try self.ubo.alloc(self.instance_scope.stride);
+    errdefer self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
+
+    // clear descriptor states
+    instance_state.descriptor_states = try Array(DescriptorState, config.shader_max_bindings).init(
+        self.instance_scope.binding_count,
+    );
+    for (instance_state.descriptor_states.slice()) |*descriptor_state| {
+        try descriptor_state.generations.resize(0);
+        try descriptor_state.generations.appendNTimes(null, ctx().swapchain.images.len);
+
+        try descriptor_state.handles.resize(0);
+        try descriptor_state.handles.appendNTimes(TextureHandle.nil, ctx().swapchain.images.len);
+    }
+
+    // clear textures to default texture handle
+    const default_texture_handle = Engine.instance.texture_system.getDefaultTexture();
+    try instance_state.textures.resize(0);
+    try instance_state.textures.appendNTimes(default_texture_handle, self.instance_scope.uniform_sampler_count);
+
     // add instance to pool
     const handle = try self.instance_state_pool.add(.{
         .instance_state = instance_state,
@@ -559,6 +571,10 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
 
 pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
     if (self.instance_state_pool.getColumnPtrIfLive(handle, .instance_state)) |instance_state| {
+        self.instance_state_pool.removeAssumeLive(handle);
+
+        self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
+
         ctx().device_api.freeDescriptorSets(
             ctx().device,
             self.descriptor_pool,
@@ -567,11 +583,7 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
         ) catch {};
         instance_state.descriptor_sets.len = 0;
 
-        self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
-
         instance_state.* = undefined;
-
-        self.instance_state_pool.removeAssumeLive(handle);
     }
 }
 
@@ -580,6 +592,7 @@ pub fn bind(self: *const Shader) void {
 }
 
 pub fn bindGlobal(self: *Shader) void {
+    self.ubo_bound_instance_handle = InstanceHandle.nil;
     self.ubo_bound_offset = self.global_state.ubo_offset;
 }
 
