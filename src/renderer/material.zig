@@ -1,7 +1,7 @@
 const std = @import("std");
 const math = @import("zmath");
-const Texture = @import("../renderer/texture.zig");
-const Shader = @import("../renderer/shader.zig");
+const Texture = @import("texture.zig");
+const Shader = @import("shader.zig");
 const TextureSystem = @import("../systems/texture_system.zig");
 
 const Array = std.BoundedArray;

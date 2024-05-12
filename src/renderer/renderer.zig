@@ -3,7 +3,7 @@ const glfw = @import("glfw");
 const math = @import("zmath");
 
 const Engine = @import("../engine.zig");
-const Context = @import("vulkan/context.zig");
+const Context = @import("context.zig");
 const Texture = @import("texture.zig");
 const Material = @import("material.zig");
 const Geometry = @import("geometry.zig");

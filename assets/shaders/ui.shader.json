@@ -4,57 +4,21 @@
   "render_pass_name": "ui",
 
   "stages": [
-    {
-      "stage_type": "vertex",
-      "path": "shaders/ui.vert.spv"
-    },
-    {
-      "stage_type": "fragment",
-      "path": "shaders/ui.frag.spv"
-    }
+    { "stage_type": "vertex", "path": "shaders/ui.vert.spv" },
+    { "stage_type": "fragment", "path": "shaders/ui.frag.spv" }
   ],
 
   "attributes": [
-    {
-      "name": "in_position",
-      "data_type": "float32_2"
-    },
-    {
-      "name": "in_texcoord",
-      "data_type": "float32_2"
-    },
-    {
-      "name": "in_color",
-      "data_type": "float32_4"
-    }
+    { "name": "in_position", "data_type": "float32_2" },
+    { "name": "in_texcoord", "data_type": "float32_2" },
+    { "name": "in_color", "data_type": "float32_4" }
   ],
 
-  "global_uniforms": [
-    {
-      "name": "projection",
-      "data_type": "mat_4"
-    },
-    {
-      "name": "view",
-      "data_type": "mat_4"
-    }
-  ],
-
-  "instance_uniforms": [
-    {
-      "name": "diffuse_color",
-      "data_type": "float32_4"
-    },
-    {
-      "name": "diffuse_texture",
-      "data_type": "sampler"
-    }
-  ],
-
-  "local_uniforms": [
-    {
-      "name": "model",
-      "data_type": "mat_4"
-    }
+  "uniforms": [
+    { "scope": "global", "name": "projection", "data_type": "mat_4" },
+    { "scope": "global", "name": "view", "data_type": "mat_4" },
+    { "scope": "instance", "name": "diffuse_color", "data_type": "float32_4" },
+    { "scope": "instance", "name": "diffuse_texture", "data_type": "sampler" },
+    { "scope": "local", "name": "model", "data_type": "mat_4" }
   ]
 }

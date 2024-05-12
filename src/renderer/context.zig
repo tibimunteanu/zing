@@ -4,22 +4,22 @@ const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
-const Engine = @import("../../engine.zig");
-const Renderer = @import("../renderer.zig");
+const Engine = @import("../engine.zig");
+const Renderer = @import("renderer.zig");
 const Swapchain = @import("swapchain.zig");
 const RenderPass = @import("renderpass.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const Buffer = @import("buffer.zig");
 const Image = @import("image.zig");
-const Texture = @import("../texture.zig");
-const Material = @import("../material.zig");
-const Geometry = @import("../geometry.zig");
-const Shader = @import("../shader.zig");
-const ShaderResource = @import("../../resources/shader_resource.zig");
+const Texture = @import("texture.zig");
+const Material = @import("material.zig");
+const Geometry = @import("geometry.zig");
+const Shader = @import("shader.zig");
+const ShaderResource = @import("../resources/shader_resource.zig");
 
-const config = @import("../../config.zig");
-const resources_image = @import("../../resources/image_resource.zig");
-const resources_material = @import("../../resources/material_resource.zig");
+const config = @import("../config.zig");
+const resources_image = @import("../resources/image_resource.zig");
+const resources_material = @import("../resources/material_resource.zig");
 
 const Vertex3D = Renderer.Vertex3D;
 const GeometryRenderData = Renderer.GeometryRenderData;

@@ -2,7 +2,7 @@ const std = @import("std");
 const vk = @import("vk.zig");
 const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const FreeList = @import("../../free_list.zig");
+const FreeList = @import("../free_list.zig");
 
 const Buffer = @This();
 

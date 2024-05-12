@@ -12,9 +12,3 @@ pub const shader_max_attributes = 16;
 pub const shader_max_uniforms = 128;
 pub const shader_max_push_constant_ranges = 32;
 pub const shader_max_descriptor_sets_allocate = 1024;
-
-pub const renderer_backend_type = RendererBackendType.vulkan;
-
-pub const RendererBackendType = enum {
-    vulkan,
-};
