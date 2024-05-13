@@ -15,10 +15,10 @@
   ],
 
   "uniforms": [
-    { "scope": "global", "name": "projection", "data_type": "mat_4" },
-    { "scope": "global", "name": "view", "data_type": "mat_4" },
+    { "scope": "global", "name": "projection", "data_type": "mat4" },
+    { "scope": "global", "name": "view", "data_type": "mat4" },
     { "scope": "instance", "name": "diffuse_color", "data_type": "float32_4" },
     { "scope": "instance", "name": "diffuse_texture", "data_type": "sampler" },
-    { "scope": "local", "name": "model", "data_type": "mat_4" }
+    { "scope": "local", "name": "model", "data_type": "mat4" }
   ]
 }

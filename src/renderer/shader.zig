@@ -16,7 +16,92 @@ const ctx = Context.ctx;
 
 const Shader = @This();
 
-pub const ScopeConfig = struct {
+pub const Scope = enum(u8) {
+    global = 0,
+    instance = 1,
+    local = 2,
+};
+
+pub const Attribute = struct {
+    name: Array(u8, 256),
+    data_type: DataType,
+    size: u32,
+
+    pub const DataType = enum(u8) {
+        int8,
+        uint8,
+        int16,
+        uint16,
+        int32,
+        uint32,
+        float32,
+        float32_2,
+        float32_3,
+        float32_4,
+        mat4,
+
+        pub fn getSize(self: DataType) u32 {
+            return switch (self) {
+                .int8, .uint8 => 1,
+                .int16, .uint16 => 2,
+                .int32, .uint32, .float32 => 4,
+                .float32_2 => 8,
+                .float32_3 => 12,
+                .float32_4 => 16,
+                .mat4 => 64,
+            };
+        }
+
+        fn toVkFormat(self: DataType) !vk.Format {
+            return switch (self) {
+                .float32 => .r32_sfloat,
+                .float32_2 => .r32g32_sfloat,
+                .float32_3 => .r32g32b32_sfloat,
+                .float32_4 => .r32g32b32a32_sfloat,
+                else => error.UnknownDataType,
+            };
+        }
+    };
+};
+
+pub const Uniform = struct {
+    scope: Scope,
+    name: Array(u8, 256),
+    data_type: DataType,
+    size: u32,
+    offset: u32,
+    texture_index: u16,
+
+    pub const DataType = enum(u8) {
+        int8,
+        uint8,
+        int16,
+        uint16,
+        int32,
+        uint32,
+        float32,
+        float32_2,
+        float32_3,
+        float32_4,
+        mat4,
+        sampler,
+
+        pub fn getSize(self: DataType) u32 {
+            return switch (self) {
+                .sampler => 0,
+                .int8, .uint8 => 1,
+                .int16, .uint16 => 2,
+                .int32, .uint32, .float32 => 4,
+                .float32_2 => 8,
+                .float32_3 => 12,
+                .float32_4 => 16,
+                .mat4 => 64,
+            };
+        }
+    };
+};
+
+pub const ScopeState = struct {
     size: u32 = 0,
     stride: u32 = 0,
     binding_count: u32 = 0,
@@ -57,9 +142,9 @@ attributes: std.ArrayList(Attribute),
 uniforms: std.ArrayList(Uniform),
 uniform_lookup: std.StringHashMap(UniformHandle),
 
-global_scope: ScopeConfig,
-instance_scope: ScopeConfig,
-local_scope: ScopeConfig,
+global_scope: ScopeState,
+instance_scope: ScopeState,
+local_scope: ScopeState,
 
 shader_modules: Array(vk.ShaderModule, config.shader_max_stages),
 descriptor_pool: vk.DescriptorPool,
@@ -85,9 +170,9 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     self.uniforms.capacity = 0;
     self.uniform_lookup.unmanaged.metadata = null;
 
-    self.global_scope = ScopeConfig{};
-    self.local_scope = ScopeConfig{};
-    self.instance_scope = ScopeConfig{};
+    self.global_scope = ScopeState{};
+    self.local_scope = ScopeState{};
+    self.instance_scope = ScopeState{};
 
     self.shader_modules.len = 0;
     self.descriptor_set_layouts.len = 0;
@@ -117,6 +202,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     self.uniforms = try std.ArrayList(Uniform).initCapacity(allocator, 8);
     self.uniform_lookup = std.StringHashMap(UniformHandle).init(allocator);
 
+    // NOTE: this also sets scope states
     try self.addUniforms(shader_config.uniforms);
 
     // create shader stages
@@ -130,7 +216,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
 
         try shader_stages.append(vk.PipelineShaderStageCreateInfo{
             .flags = .{},
-            .stage = try getVkShaderStageFlags(stage.stage_type),
+            .stage = try parseVkShaderStageFlags(stage.stage_type),
             .module = module,
             .p_name = "main",
             .p_specialization_info = null,
@@ -145,7 +231,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         try attribute_descriptions.append(vk.VertexInputAttributeDescription{
             .binding = 0,
             .location = @intCast(location),
-            .format = try vkFormatFromAttributeDataType(attribute.data_type),
+            .format = try attribute.data_type.toVkFormat(),
             .offset = offset,
         });
 
@@ -361,7 +447,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         .p_color_blend_state = &color_blend_state,
         .p_dynamic_state = &dynamic_state,
         .layout = self.pipeline_layout,
-        .render_pass = try getVkRenderPass(shader_config.render_pass_name),
+        .render_pass = try parseVkRenderPass(shader_config.render_pass_name),
         .subpass = 0,
         .base_pipeline_handle = .null_handle,
         .base_pipeline_index = -1,
@@ -788,7 +874,7 @@ pub fn applyInstance(self: *Shader) !void {
 fn addAttributes(self: *Shader, attribute_configs: []const AttributeConfig) !void {
     for (attribute_configs) |attribute_config| {
         const attribute_data_type = try parseAttributeDataType(attribute_config.data_type);
-        const attribute_size = getAttributeDataTypeSize(attribute_data_type);
+        const attribute_size = attribute_data_type.getSize();
 
         try self.attributes.append(Attribute{
             .name = try Array(u8, 256).fromSlice(attribute_config.name),
@@ -810,7 +896,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
 
         const uniform_handle: UniformHandle = @truncate(self.uniforms.items.len);
         const uniform_data_type = try parseUniformDataType(uniform_config.data_type);
-        const uniform_size = getUniformDataTypeSize(uniform_data_type);
+        const uniform_size = uniform_data_type.getSize();
         const is_sampler = uniform_data_type == .sampler;
 
         try self.uniforms.append(Uniform{
@@ -837,43 +923,6 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
     }
 }
 
-inline fn parseUniformScope(scope: []const u8) !Scope {
-    return std.meta.stringToEnum(Scope, scope) orelse error.UnknownUniformScope;
-}
-
-inline fn parseUniformDataType(data_type: []const u8) !UniformDataType {
-    return std.meta.stringToEnum(UniformDataType, data_type) orelse error.UnknownUniformDataType;
-}
-
-inline fn parseAttributeDataType(data_type: []const u8) !AttributeDataType {
-    return std.meta.stringToEnum(AttributeDataType, data_type) orelse error.UnknownAttributeDataType;
-}
-
-inline fn getUniformDataTypeSize(data_type: UniformDataType) u32 {
-    return switch (data_type) {
-        .sampler => 0,
-        .int8, .uint8 => 1,
-        .int16, .uint16 => 2,
-        .int32, .uint32, .float32 => 4,
-        .float32_2 => 8,
-        .float32_3 => 12,
-        .float32_4 => 16,
-        .mat_4 => 64,
-    };
-}
-
-inline fn getAttributeDataTypeSize(data_type: AttributeDataType) u32 {
-    return switch (data_type) {
-        .int8, .uint8 => 1,
-        .int16, .uint16 => 2,
-        .int32, .uint32, .float32 => 4,
-        .float32_2 => 8,
-        .float32_3 => 12,
-        .float32_4 => 16,
-        .mat_4 => 64,
-    };
-}
-
 fn createShaderModule(allocator: Allocator, path: []const u8) !vk.ShaderModule {
     var binary_resource = try BinaryResource.init(allocator, path);
     defer binary_resource.deinit();
@@ -889,79 +938,32 @@ fn createShaderModule(allocator: Allocator, path: []const u8) !vk.ShaderModule {
     );
 }
 
-fn getVkShaderStageFlags(stage_type: []const u8) !vk.ShaderStageFlags {
+// parse from config
+inline fn parseUniformScope(scope: []const u8) !Scope {
+    return std.meta.stringToEnum(Scope, scope) orelse error.UnknownUniformScope;
+}
+
+inline fn parseUniformDataType(data_type: []const u8) !Uniform.DataType {
+    return std.meta.stringToEnum(Uniform.DataType, data_type) orelse error.UnknownUniformDataType;
+}
+
+inline fn parseAttributeDataType(data_type: []const u8) !Attribute.DataType {
+    return std.meta.stringToEnum(Attribute.DataType, data_type) orelse error.UnknownAttributeDataType;
+}
+
+inline fn parseVkShaderStageFlags(stage_type: []const u8) !vk.ShaderStageFlags {
     if (std.mem.eql(u8, stage_type, "vertex")) return .{ .vertex_bit = true };
     if (std.mem.eql(u8, stage_type, "fragment")) return .{ .fragment_bit = true };
 
     return error.UnknownShaderStage;
 }
 
-fn vkFormatFromAttributeDataType(data_type: Shader.AttributeDataType) !vk.Format {
-    return switch (data_type) {
-        .float32 => .r32_sfloat,
-        .float32_2 => .r32g32_sfloat,
-        .float32_3 => .r32g32b32_sfloat,
-        .float32_4 => .r32g32b32a32_sfloat,
-        else => error.UnknownDataType,
-    };
-}
-
-fn getVkRenderPass(render_pass_name: []const u8) !vk.RenderPass {
+inline fn parseVkRenderPass(render_pass_name: []const u8) !vk.RenderPass {
     if (std.mem.eql(u8, render_pass_name, "world")) return ctx().world_render_pass.handle;
     if (std.mem.eql(u8, render_pass_name, "ui")) return ctx().ui_render_pass.handle;
 
     return error.UnknownRenderPass;
 }
-
-pub const Scope = enum(u8) {
-    global = 0,
-    instance = 1,
-    local = 2,
-};
-
-pub const AttributeDataType = enum(u8) {
-    int8,
-    uint8,
-    int16,
-    uint16,
-    int32,
-    uint32,
-    float32,
-    float32_2,
-    float32_3,
-    float32_4,
-    mat_4,
-};
-
-pub const UniformDataType = enum(u8) {
-    int8,
-    uint8,
-    int16,
-    uint16,
-    int32,
-    uint32,
-    float32,
-    float32_2,
-    float32_3,
-    float32_4,
-    mat_4,
-    sampler,
-};
-
-pub const Attribute = struct {
-    name: Array(u8, 256),
-    data_type: AttributeDataType,
-    size: u32,
-};
-
-pub const Uniform = struct {
-    scope: Scope,
-    name: Array(u8, 256),
-    data_type: UniformDataType,
-    size: u32,
-    offset: u32,
-    texture_index: u16,
-};
 
 // config
 pub const Config = struct {
