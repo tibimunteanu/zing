@@ -29,7 +29,6 @@ present_mode: vk.PresentModeKHR,
 handle: vk.SwapchainKHR,
 images: Array(SwapchainImage, config.swapchain_max_images),
 depth_image: Image,
-depth_image_view: vk.ImageView,
 image_index: u32,
 next_image_acquired_semaphore: vk.Semaphore,
 
@@ -310,12 +309,8 @@ fn initImages(self: *Swapchain) !void {
             .p_queue_family_indices = null,
             .initial_layout = .undefined,
         },
-    );
-
-    self.depth_image_view = try self.context.device_api.createImageView(
-        self.context.device,
-        &vk.ImageViewCreateInfo{
-            .image = self.depth_image.handle,
+        @constCast(&vk.ImageViewCreateInfo{
+            .image = .null_handle,
             .view_type = .@"2d",
             .format = self.context.physical_device.depth_format,
             .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
@@ -326,15 +321,11 @@ fn initImages(self: *Swapchain) !void {
                 .base_array_layer = 0,
                 .layer_count = 1,
             },
-        },
-        null,
+        }),
     );
-    errdefer self.context.device_api.destroyImageView(self.context.device, self.depth_image_view, null);
 }
 
 fn deinitImages(self: *Swapchain) void {
-    errdefer self.context.device_api.destroyImageView(self.context.device, self.depth_image_view, null);
-
     self.depth_image.deinit();
 
     for (self.images.slice()) |*image| {

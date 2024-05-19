@@ -11,6 +11,7 @@ context: *const Context,
 
 handle: vk.Image,
 memory: vk.DeviceMemory,
+view: vk.ImageView,
 extent: vk.Extent3D,
 
 // public
@@ -18,12 +19,14 @@ pub fn init(
     context: *const Context,
     memory_flags: vk.MemoryPropertyFlags,
     create_info: *const vk.ImageCreateInfo,
+    view_create_info: ?*vk.ImageViewCreateInfo,
 ) !Image {
     var self: Image = undefined;
     self.context = context;
     self.extent = create_info.extent;
     self.handle = .null_handle;
     self.memory = .null_handle;
+    self.view = .null_handle;
 
     errdefer self.deinit();
 
@@ -33,10 +36,18 @@ pub fn init(
     self.memory = try context.allocate(memory_requirements, memory_flags);
     try context.device_api.bindImageMemory(context.device, self.handle, self.memory, 0);
 
+    if (view_create_info) |view_info| {
+        view_info.image = self.handle;
+        self.view = try context.device_api.createImageView(context.device, view_info, null);
+    }
+
     return self;
 }
 
 pub fn deinit(self: *Image) void {
+    if (self.view != .null_handle) {
+        self.context.device_api.destroyImageView(self.context.device, self.view, null);
+    }
     if (self.handle != .null_handle) {
         self.context.device_api.destroyImage(self.context.device, self.handle, null);
     }

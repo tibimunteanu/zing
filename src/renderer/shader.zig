@@ -842,7 +842,7 @@ pub fn applyInstance(self: *Shader) !void {
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,
-                .image_view = texture_backend.image_view,
+                .image_view = texture_backend.image.view,
                 .sampler = texture_backend.sampler,
             });
         }

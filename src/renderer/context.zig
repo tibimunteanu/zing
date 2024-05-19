@@ -156,7 +156,6 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
 
 pub const TextureData = struct {
     image: Image,
-    image_view: vk.ImageView,
     sampler: vk.Sampler,
 };
 
@@ -568,13 +567,8 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
             .p_queue_family_indices = null,
             .initial_layout = .undefined,
         },
-    );
-    errdefer internal_data.image.deinit();
-
-    internal_data.image_view = try self.device_api.createImageView(
-        self.device,
-        &vk.ImageViewCreateInfo{
-            .image = internal_data.image.handle,
+        @constCast(&vk.ImageViewCreateInfo{
+            .image = .null_handle,
             .view_type = .@"2d",
             .format = image_format,
             .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
@@ -585,10 +579,9 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
                 .base_array_layer = 0,
                 .layer_count = 1,
             },
-        },
-        null,
+        }),
     );
-    errdefer self.device_api.destroyImageView(self.device, internal_data.image_view, null);
+    errdefer internal_data.image.deinit();
 
     // copy the pixels to the gpu
     var staging_buffer = try Buffer.init(
@@ -676,8 +669,6 @@ pub fn destroyTexture(self: *Context, texture: *Texture) void {
 
     const internal_data: ?*TextureData = @ptrCast(@alignCast(texture.internal_data));
     if (internal_data) |data| {
-        self.device_api.destroyImageView(self.device, data.image_view, null);
-
         data.image.deinit();
 
         self.device_api.destroySampler(self.device, data.sampler, null);
@@ -1020,7 +1011,7 @@ fn initFramebuffers(self: *Context) !void {
     for (self.swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,
-            self.swapchain.depth_image_view,
+            self.swapchain.depth_image.view,
         };
 
         try self.world_framebuffers.append(
