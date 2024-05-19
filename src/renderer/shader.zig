@@ -14,6 +14,14 @@ const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 const ctx = Context.ctx;
 
+// TODO: TextureMap
+// TODO: local push constant uniform block and apply local
+// TODO: keep sampler uniforms separate or index lookup
+// TODO: global_textures
+// TODO: flags
+// TODO: descriptor pool free list
+// TODO: needs update
+
 const Shader = @This();
 
 pub const Scope = enum(u8) {
@@ -38,7 +46,6 @@ pub const Attribute = struct {
         float32_2,
         float32_3,
         float32_4,
-        mat4,
 
         pub fn getSize(self: DataType) u32 {
             return switch (self) {
@@ -48,17 +55,21 @@ pub const Attribute = struct {
                 .float32_2 => 8,
                 .float32_3 => 12,
                 .float32_4 => 16,
-                .mat4 => 64,
             };
         }
 
         fn toVkFormat(self: DataType) !vk.Format {
             return switch (self) {
+                .int8 => .r8_sint,
+                .uint8 => .r8_uint,
+                .int16 => .r16_sint,
+                .uint16 => .r16_uint,
+                .int32 => .r32_sint,
+                .uint32 => .r32_uint,
                 .float32 => .r32_sfloat,
                 .float32_2 => .r32g32_sfloat,
                 .float32_3 => .r32g32b32_sfloat,
                 .float32_4 => .r32g32b32a32_sfloat,
-                else => error.UnknownDataType,
             };
         }
     };
@@ -831,7 +842,7 @@ pub fn applyInstance(self: *Shader) !void {
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,
-                .image_view = texture_backend.image.view,
+                .image_view = texture_backend.image_view,
                 .sampler = texture_backend.sampler,
             });
         }

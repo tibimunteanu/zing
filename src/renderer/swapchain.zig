@@ -29,6 +29,7 @@ present_mode: vk.PresentModeKHR,
 handle: vk.SwapchainKHR,
 images: Array(SwapchainImage, config.swapchain_max_images),
 depth_image: Image,
+depth_image_view: vk.ImageView,
 image_index: u32,
 next_image_acquired_semaphore: vk.Semaphore,
 
@@ -289,19 +290,51 @@ fn initImages(self: *Swapchain) !void {
     // create the depth image
     self.depth_image = try Image.init(
         self.context,
-        .{
-            .width = self.extent.width,
-            .height = self.extent.height,
+        vk.MemoryPropertyFlags{ .device_local_bit = true },
+        &vk.ImageCreateInfo{
+            .flags = .{},
+            .image_type = .@"2d",
             .format = self.context.physical_device.depth_format,
+            .extent = .{
+                .width = self.extent.width,
+                .height = self.extent.height,
+                .depth = 1,
+            },
+            .mip_levels = 1,
+            .array_layers = 1,
+            .samples = .{ .@"1_bit" = true },
+            .tiling = .optimal,
             .usage = .{ .depth_stencil_attachment_bit = true },
-            .memory_flags = .{ .device_local_bit = true },
-            .init_view = true,
-            .view_aspect_flags = .{ .depth_bit = true },
+            .sharing_mode = .exclusive,
+            .queue_family_index_count = 0,
+            .p_queue_family_indices = null,
+            .initial_layout = .undefined,
         },
     );
+
+    self.depth_image_view = try self.context.device_api.createImageView(
+        self.context.device,
+        &vk.ImageViewCreateInfo{
+            .image = self.depth_image.handle,
+            .view_type = .@"2d",
+            .format = self.context.physical_device.depth_format,
+            .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+            .subresource_range = .{
+                .aspect_mask = .{ .depth_bit = true },
+                .base_mip_level = 0,
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+        },
+        null,
+    );
+    errdefer self.context.device_api.destroyImageView(self.context.device, self.depth_image_view, null);
 }
 
 fn deinitImages(self: *Swapchain) void {
+    errdefer self.context.device_api.destroyImageView(self.context.device, self.depth_image_view, null);
+
     self.depth_image.deinit();
 
     for (self.images.slice()) |*image| {

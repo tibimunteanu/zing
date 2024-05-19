@@ -156,6 +156,7 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
 
 pub const TextureData = struct {
     image: Image,
+    image_view: vk.ImageView,
     sampler: vk.Sampler,
 };
 
@@ -542,22 +543,52 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
     // create an image on the gpu
     internal_data.image = try Image.init(
         self,
-        .{
-            .width = texture.width,
-            .height = texture.height,
+        vk.MemoryPropertyFlags{ .device_local_bit = true },
+        &vk.ImageCreateInfo{
+            .flags = .{},
+            .image_type = .@"2d",
             .format = image_format,
+            .extent = .{
+                .width = texture.width,
+                .height = texture.height,
+                .depth = 1,
+            },
+            .mip_levels = 1,
+            .array_layers = 1,
+            .samples = .{ .@"1_bit" = true },
+            .tiling = .optimal,
             .usage = .{
                 .transfer_src_bit = true,
                 .transfer_dst_bit = true,
                 .color_attachment_bit = true,
                 .sampled_bit = true,
             },
-            .memory_flags = .{ .device_local_bit = true },
-            .init_view = true,
-            .view_aspect_flags = .{ .color_bit = true },
+            .sharing_mode = .exclusive,
+            .queue_family_index_count = 0,
+            .p_queue_family_indices = null,
+            .initial_layout = .undefined,
         },
     );
     errdefer internal_data.image.deinit();
+
+    internal_data.image_view = try self.device_api.createImageView(
+        self.device,
+        &vk.ImageViewCreateInfo{
+            .image = internal_data.image.handle,
+            .view_type = .@"2d",
+            .format = image_format,
+            .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+            .subresource_range = .{
+                .aspect_mask = .{ .color_bit = true },
+                .base_mip_level = 0,
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+        },
+        null,
+    );
+    errdefer self.device_api.destroyImageView(self.device, internal_data.image_view, null);
 
     // copy the pixels to the gpu
     var staging_buffer = try Buffer.init(
@@ -573,19 +604,48 @@ pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !voi
 
     var command_buffer = try CommandBuffer.initAndBeginSingleUse(self, self.graphics_command_pool);
 
-    try internal_data.image.transitionLayout(
+    try internal_data.image.pipelineImageBarrier(
         &command_buffer,
-        image_format,
+        .{ .top_of_pipe_bit = true },
+        .{},
         .undefined,
+        .{ .transfer_bit = true },
+        .{ .transfer_write_bit = true },
         .transfer_dst_optimal,
     );
 
-    internal_data.image.copyFromBuffer(&command_buffer, staging_buffer.handle);
-
-    try internal_data.image.transitionLayout(
-        &command_buffer,
-        image_format,
+    self.device_api.cmdCopyBufferToImage(
+        command_buffer.handle,
+        staging_buffer.handle,
+        internal_data.image.handle,
         .transfer_dst_optimal,
+        1,
+        @ptrCast(&vk.BufferImageCopy{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .image_subresource = vk.ImageSubresourceLayers{
+                .aspect_mask = .{ .color_bit = true },
+                .mip_level = 0,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+            .image_offset = vk.Offset3D{
+                .x = 0,
+                .y = 0,
+                .z = 0,
+            },
+            .image_extent = internal_data.image.extent,
+        }),
+    );
+
+    try internal_data.image.pipelineImageBarrier(
+        &command_buffer,
+        .{ .transfer_bit = true },
+        .{ .transfer_write_bit = true },
+        .transfer_dst_optimal,
+        .{ .fragment_shader_bit = true },
+        .{ .shader_read_bit = true },
         .shader_read_only_optimal,
     );
 
@@ -616,7 +676,10 @@ pub fn destroyTexture(self: *Context, texture: *Texture) void {
 
     const internal_data: ?*TextureData = @ptrCast(@alignCast(texture.internal_data));
     if (internal_data) |data| {
+        self.device_api.destroyImageView(self.device, data.image_view, null);
+
         data.image.deinit();
+
         self.device_api.destroySampler(self.device, data.sampler, null);
 
         self.allocator.destroy(data);
@@ -957,7 +1020,7 @@ fn initFramebuffers(self: *Context) !void {
     for (self.swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,
-            self.swapchain.depth_image.view,
+            self.swapchain.depth_image_view,
         };
 
         try self.world_framebuffers.append(
