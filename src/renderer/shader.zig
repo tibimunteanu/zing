@@ -12,13 +12,6 @@ const TextureHandle = TextureSystem.TextureHandle;
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
-pub const ctx = struct {
-    pub inline fn get() *Context {
-        // TODO: add debug checks
-        return Engine.instance.renderer.context;
-    }
-}.get;
-
 // TODO: TextureMap
 // TODO: local push constant uniform block and apply local
 // TODO: keep sampler uniforms separate or index lookup
@@ -293,8 +286,10 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         );
     }
 
-    try self.descriptor_set_layouts.append(try ctx().device_api.createDescriptorSetLayout(
-        ctx().device,
+    const ctx = Engine.instance.renderer.context;
+
+    try self.descriptor_set_layouts.append(try ctx.device_api.createDescriptorSetLayout(
+        ctx.device,
         &vk.DescriptorSetLayoutCreateInfo{
             .binding_count = global_bindings.len,
             .p_bindings = global_bindings.slice().ptr,
@@ -330,8 +325,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
             );
         }
 
-        try self.descriptor_set_layouts.append(try ctx().device_api.createDescriptorSetLayout(
-            ctx().device,
+        try self.descriptor_set_layouts.append(try ctx.device_api.createDescriptorSetLayout(
+            ctx.device,
             &vk.DescriptorSetLayoutCreateInfo{
                 .binding_count = instance_bindings.len,
                 .p_bindings = instance_bindings.slice().ptr,
@@ -361,7 +356,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     }
 
     // create pipeline layout
-    self.pipeline_layout = try ctx().device_api.createPipelineLayout(ctx().device, &.{
+    self.pipeline_layout = try ctx.device_api.createPipelineLayout(ctx.device, &.{
         .flags = .{},
         .set_layout_count = self.descriptor_set_layouts.len,
         .p_set_layouts = self.descriptor_set_layouts.slice().ptr,
@@ -469,8 +464,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         .base_pipeline_index = -1,
     };
 
-    _ = try ctx().device_api.createGraphicsPipelines(
-        ctx().device,
+    _ = try ctx.device_api.createGraphicsPipelines(
+        ctx.device,
         .null_handle,
         1,
         @ptrCast(&pipeline_create_info),
@@ -484,8 +479,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         vk.DescriptorPoolSize{ .type = .combined_image_sampler, .descriptor_count = 4096 },
     };
 
-    self.descriptor_pool = try ctx().device_api.createDescriptorPool(
-        ctx().device,
+    self.descriptor_pool = try ctx.device_api.createDescriptorPool(
+        ctx.device,
         &vk.DescriptorPoolCreateInfo{
             .flags = .{ .free_descriptor_set_bit = true },
             .pool_size_count = descriptor_pool_sizes.len,
@@ -498,7 +493,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     // allocate global descriptor sets
     const global_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.global));
     var global_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
-    try global_ubo_layouts.appendNTimes(global_ubo_layout, ctx().swapchain.images.len);
+    try global_ubo_layouts.appendNTimes(global_ubo_layout, ctx.swapchain.images.len);
 
     const global_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = self.descriptor_pool,
@@ -508,14 +503,14 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
 
     try self.global_state.descriptor_sets.resize(global_ubo_layouts.len);
 
-    try ctx().device_api.allocateDescriptorSets(
-        ctx().device,
+    try ctx.device_api.allocateDescriptorSets(
+        ctx.device,
         &global_ubo_descriptor_set_alloc_info,
         self.global_state.descriptor_sets.slice().ptr,
     );
 
     // create and map ubo
-    const ubo_alignment: u32 = @intCast(ctx().physical_device.properties.limits.min_uniform_buffer_offset_alignment);
+    const ubo_alignment: u32 = @intCast(ctx.physical_device.properties.limits.min_uniform_buffer_offset_alignment);
 
     self.global_scope.stride = std.mem.alignForward(u32, self.global_scope.size, ubo_alignment);
     self.instance_scope.stride = std.mem.alignForward(u32, self.instance_scope.size, ubo_alignment);
@@ -527,7 +522,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         ubo_size,
         .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
         .{
-            .device_local_bit = ctx().physical_device.supports_local_host_visible,
+            .device_local_bit = ctx.physical_device.supports_local_host_visible,
             .host_visible_bit = true,
             .host_coherent_bit = true,
         },
@@ -554,9 +549,11 @@ pub fn deinit(self: *Shader) void {
         self.ubo.deinit();
     }
 
+    const ctx = Engine.instance.renderer.context;
+
     if (self.global_state.descriptor_sets.len > 0) {
-        ctx().device_api.freeDescriptorSets(
-            ctx().device,
+        ctx.device_api.freeDescriptorSets(
+            ctx.device,
             self.descriptor_pool,
             self.global_state.descriptor_sets.len,
             self.global_state.descriptor_sets.slice().ptr,
@@ -565,27 +562,27 @@ pub fn deinit(self: *Shader) void {
     }
 
     if (self.descriptor_pool != .null_handle) {
-        ctx().device_api.destroyDescriptorPool(ctx().device, self.descriptor_pool, null);
+        ctx.device_api.destroyDescriptorPool(ctx.device, self.descriptor_pool, null);
     }
 
     if (self.pipeline != .null_handle) {
-        ctx().device_api.destroyPipeline(ctx().device, self.pipeline, null);
+        ctx.device_api.destroyPipeline(ctx.device, self.pipeline, null);
     }
 
     if (self.pipeline_layout != .null_handle) {
-        ctx().device_api.destroyPipelineLayout(ctx().device, self.pipeline_layout, null);
+        ctx.device_api.destroyPipelineLayout(ctx.device, self.pipeline_layout, null);
     }
 
     for (self.descriptor_set_layouts.slice()) |descriptor_set_layout| {
         if (descriptor_set_layout != .null_handle) {
-            ctx().device_api.destroyDescriptorSetLayout(ctx().device, descriptor_set_layout, null);
+            ctx.device_api.destroyDescriptorSetLayout(ctx.device, descriptor_set_layout, null);
         }
     }
     self.descriptor_set_layouts.len = 0;
 
     for (self.shader_modules.slice()) |module| {
         if (module != .null_handle) {
-            ctx().device_api.destroyShaderModule(ctx().device, module, null);
+            ctx.device_api.destroyShaderModule(ctx.device, module, null);
         }
     }
     self.shader_modules.len = 0;
@@ -611,12 +608,14 @@ pub fn deinit(self: *Shader) void {
 }
 
 pub fn initInstance(self: *Shader) !InstanceHandle {
+    const ctx = Engine.instance.renderer.context;
+
     var instance_state: InstanceState = undefined;
 
     // allocate instance descriptor sets
     const instance_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.instance));
     var instance_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
-    try instance_ubo_layouts.appendNTimes(instance_ubo_layout, ctx().swapchain.images.len);
+    try instance_ubo_layouts.appendNTimes(instance_ubo_layout, ctx.swapchain.images.len);
 
     const instance_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = self.descriptor_pool,
@@ -626,15 +625,15 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
 
     try instance_state.descriptor_sets.resize(instance_ubo_layouts.len);
 
-    try ctx().device_api.allocateDescriptorSets(
-        ctx().device,
+    try ctx.device_api.allocateDescriptorSets(
+        ctx.device,
         &instance_ubo_descriptor_set_alloc_info,
         instance_state.descriptor_sets.slice().ptr,
     );
 
     errdefer {
-        ctx().device_api.freeDescriptorSets(
-            ctx().device,
+        ctx.device_api.freeDescriptorSets(
+            ctx.device,
             self.descriptor_pool,
             instance_state.descriptor_sets.len,
             instance_state.descriptor_sets.slice().ptr,
@@ -652,10 +651,10 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     );
     for (instance_state.descriptor_states.slice()) |*descriptor_state| {
         try descriptor_state.generations.resize(0);
-        try descriptor_state.generations.appendNTimes(null, ctx().swapchain.images.len);
+        try descriptor_state.generations.appendNTimes(null, ctx.swapchain.images.len);
 
         try descriptor_state.handles.resize(0);
-        try descriptor_state.handles.appendNTimes(TextureHandle.nil, ctx().swapchain.images.len);
+        try descriptor_state.handles.appendNTimes(TextureHandle.nil, ctx.swapchain.images.len);
     }
 
     // clear textures to default texture handle
@@ -677,8 +676,10 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
 
         self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
 
-        ctx().device_api.freeDescriptorSets(
-            ctx().device,
+        const ctx = Engine.instance.renderer.context;
+
+        ctx.device_api.freeDescriptorSets(
+            ctx.device,
             self.descriptor_pool,
             instance_state.descriptor_sets.len,
             instance_state.descriptor_sets.slice().ptr,
@@ -690,7 +691,9 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
 }
 
 pub fn bind(self: *const Shader) void {
-    ctx().device_api.cmdBindPipeline(Engine.instance.renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
+    const ctx = Engine.instance.renderer.context;
+
+    ctx.device_api.cmdBindPipeline(Engine.instance.renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
 }
 
 pub fn bindGlobal(self: *Shader) void {
@@ -736,7 +739,9 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
     } else {
         switch (p_uniform.scope) {
             .local => {
-                ctx().device_api.cmdPushConstants(
+                const ctx = Engine.instance.renderer.context;
+
+                ctx.device_api.cmdPushConstants(
                     Engine.instance.renderer.getCurrentCommandBuffer().handle,
                     self.pipeline_layout,
                     .{ .vertex_bit = true, .fragment_bit = true },
@@ -757,7 +762,9 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
 }
 
 pub fn applyGlobal(self: *Shader) !void {
-    const image_index = ctx().swapchain.image_index;
+    const ctx = Engine.instance.renderer.context;
+
+    const image_index = ctx.swapchain.image_index;
     const command_buffer = Engine.instance.renderer.getCurrentCommandBuffer();
     const descriptor_set = self.global_state.descriptor_sets.get(image_index);
 
@@ -785,8 +792,8 @@ pub fn applyGlobal(self: *Shader) !void {
     }
 
     if (descriptor_writes.len > 0) {
-        ctx().device_api.updateDescriptorSets(
-            ctx().device,
+        ctx.device_api.updateDescriptorSets(
+            ctx.device,
             descriptor_writes.len,
             @ptrCast(descriptor_writes.slice().ptr),
             0,
@@ -794,7 +801,7 @@ pub fn applyGlobal(self: *Shader) !void {
         );
     }
 
-    ctx().device_api.cmdBindDescriptorSets(
+    ctx.device_api.cmdBindDescriptorSets(
         command_buffer.handle,
         .graphics,
         self.pipeline_layout,
@@ -807,7 +814,9 @@ pub fn applyGlobal(self: *Shader) !void {
 }
 
 pub fn applyInstance(self: *Shader) !void {
-    const image_index = ctx().swapchain.image_index;
+    const ctx = Engine.instance.renderer.context;
+
+    const image_index = ctx.swapchain.image_index;
     const command_buffer = Engine.instance.renderer.getCurrentCommandBuffer();
 
     if (self.instance_state_pool.getColumnPtrIfLive(self.ubo_bound_instance_handle, .instance_state)) |instance_state| {
@@ -863,8 +872,8 @@ pub fn applyInstance(self: *Shader) !void {
         });
 
         if (descriptor_writes.len > 0) {
-            ctx().device_api.updateDescriptorSets(
-                ctx().device,
+            ctx.device_api.updateDescriptorSets(
+                ctx.device,
                 descriptor_writes.len,
                 @ptrCast(descriptor_writes.slice().ptr),
                 0,
@@ -872,7 +881,7 @@ pub fn applyInstance(self: *Shader) !void {
             );
         }
 
-        ctx().device_api.cmdBindDescriptorSets(
+        ctx.device_api.cmdBindDescriptorSets(
             command_buffer.handle,
             .graphics,
             self.pipeline_layout,
@@ -939,11 +948,13 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
 }
 
 fn createShaderModule(allocator: Allocator, path: []const u8) !vk.ShaderModule {
+    const ctx = Engine.instance.renderer.context;
+
     var binary_resource = try BinaryResource.init(allocator, path);
     defer binary_resource.deinit();
 
-    return try ctx().device_api.createShaderModule(
-        ctx().device,
+    return try ctx.device_api.createShaderModule(
+        ctx.device,
         &vk.ShaderModuleCreateInfo{
             .flags = .{},
             .code_size = binary_resource.bytes.len,
