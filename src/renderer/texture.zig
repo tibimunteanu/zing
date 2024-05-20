@@ -47,11 +47,8 @@ pub fn init(
         }
     }
 
-    const ctx = Engine.instance.renderer.context;
-
     // create an image on the gpu
     self.image = try Image.init(
-        ctx,
         vk.MemoryPropertyFlags{ .device_local_bit = true },
         &vk.ImageCreateInfo{
             .flags = .{},
@@ -105,7 +102,7 @@ pub fn init(
 
     try staging_buffer.loadData(0, image_size, .{}, pixels);
 
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(ctx, Engine.instance.renderer.graphics_command_pool);
+    var command_buffer = try CommandBuffer.initAndBeginSingleUse(Engine.instance.renderer.graphics_command_pool);
 
     try self.image.pipelineImageBarrier(
         &command_buffer,
@@ -116,6 +113,8 @@ pub fn init(
         .{ .transfer_write_bit = true },
         .transfer_dst_optimal,
     );
+
+    const ctx = Engine.instance.renderer.context;
 
     ctx.device_api.cmdCopyBufferToImage(
         command_buffer.handle,

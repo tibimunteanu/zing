@@ -1,21 +1,22 @@
 const std = @import("std");
 const vk = @import("vk.zig");
+const Engine = @import("../engine.zig");
 const Context = @import("context.zig");
 
 const CommandBuffer = @This();
 
-context: *const Context,
 handle: vk.CommandBuffer = .null_handle,
 pool: vk.CommandPool,
 
 // public
-pub fn init(context: *const Context, pool: vk.CommandPool, options: struct { is_primary: bool = true }) !CommandBuffer {
+pub fn init(pool: vk.CommandPool, options: struct { is_primary: bool = true }) !CommandBuffer {
     var self: CommandBuffer = undefined;
-    self.context = context;
     self.pool = pool;
 
-    try context.device_api.allocateCommandBuffers(
-        context.device,
+    const ctx = Engine.instance.renderer.context;
+
+    try ctx.device_api.allocateCommandBuffers(
+        ctx.device,
         &vk.CommandBufferAllocateInfo{
             .command_pool = pool,
             .command_buffer_count = 1,
@@ -28,23 +29,29 @@ pub fn init(context: *const Context, pool: vk.CommandPool, options: struct { is_
 }
 
 pub fn deinit(self: *CommandBuffer) void {
+    const ctx = Engine.instance.renderer.context;
+
     if (self.handle != .null_handle) {
-        self.context.device_api.freeCommandBuffers(self.context.device, self.pool, 1, @ptrCast(&self.handle));
+        ctx.device_api.freeCommandBuffers(ctx.device, self.pool, 1, @ptrCast(&self.handle));
     }
     self.handle = .null_handle;
     self.pool = .null_handle;
 }
 
 pub fn begin(self: *const CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
-    try self.context.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
+    const ctx = Engine.instance.renderer.context;
+
+    try ctx.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
 }
 
 pub fn end(self: *const CommandBuffer) !void {
-    try self.context.device_api.endCommandBuffer(self.handle);
+    const ctx = Engine.instance.renderer.context;
+
+    try ctx.device_api.endCommandBuffer(self.handle);
 }
 
-pub fn initAndBeginSingleUse(context: *const Context, pool: vk.CommandPool) !CommandBuffer {
-    var self = try CommandBuffer.init(context, pool, .{});
+pub fn initAndBeginSingleUse(pool: vk.CommandPool) !CommandBuffer {
+    var self = try CommandBuffer.init(pool, .{});
     errdefer self.deinit();
 
     try self.begin(.{ .one_time_submit_bit = true });
@@ -56,7 +63,9 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
 
     try self.end();
 
-    try self.context.device_api.queueSubmit(
+    const ctx = Engine.instance.renderer.context;
+
+    try ctx.device_api.queueSubmit(
         queue,
         1,
         @ptrCast(&vk.SubmitInfo{
@@ -66,5 +75,5 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
         .null_handle,
     );
 
-    try self.context.device_api.queueWaitIdle(queue);
+    try ctx.device_api.queueWaitIdle(queue);
 }

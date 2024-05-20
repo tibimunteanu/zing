@@ -105,7 +105,6 @@ pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
 
     // create renderpasses
     self.world_render_pass = try RenderPass.init(
-        self.context,
         .{
             .clear_flags = .{
                 .color = true,
@@ -124,7 +123,6 @@ pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
     errdefer self.world_render_pass.deinit();
 
     self.ui_render_pass = try RenderPass.init(
-        self.context,
         .{
             .has_prev = true,
             .has_next = false,
@@ -657,7 +655,7 @@ fn initCommandBuffers(self: *Renderer) !void {
     try self.graphics_command_buffers.resize(0);
     for (0..self.context.swapchain.images.len) |_| {
         try self.graphics_command_buffers.append(
-            try CommandBuffer.init(self.context, self.graphics_command_pool, .{}),
+            try CommandBuffer.init(self.graphics_command_pool, .{}),
         );
     }
 }

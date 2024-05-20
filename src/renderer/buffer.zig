@@ -204,7 +204,7 @@ pub fn copyTo(
 
     try ctx.device_api.queueWaitIdle(queue);
 
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(ctx, command_pool);
+    var command_buffer = try CommandBuffer.initAndBeginSingleUse(command_pool);
 
     ctx.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
 

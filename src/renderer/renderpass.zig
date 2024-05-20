@@ -1,5 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
+const Engine = @import("../engine.zig");
 const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 
@@ -29,7 +30,6 @@ pub const ClearValues = struct {
     stencil: u32,
 };
 
-context: *const Context,
 handle: vk.RenderPass,
 render_area: RenderArea,
 clear_values: ClearValues,
@@ -39,7 +39,6 @@ has_next: bool,
 
 // public
 pub fn init(
-    context: *const Context,
     options: struct {
         render_area: RenderArea = .swapchain,
         clear_flags: ClearFlags = .{},
@@ -49,7 +48,8 @@ pub fn init(
     },
 ) !RenderPass {
     var self: RenderPass = undefined;
-    self.context = context;
+
+    const ctx = Engine.instance.renderer.context;
 
     self.render_area = options.render_area;
     self.clear_flags = options.clear_flags;
@@ -59,7 +59,7 @@ pub fn init(
 
     const attachment_descriptions = [_]vk.AttachmentDescription{
         .{
-            .format = context.swapchain.surface_format.format,
+            .format = ctx.swapchain.surface_format.format,
             .samples = .{ .@"1_bit" = true },
             .load_op = if (options.clear_flags.color) .clear else .load,
             .store_op = .store,
@@ -69,7 +69,7 @@ pub fn init(
             .final_layout = if (options.has_next) .color_attachment_optimal else .present_src_khr,
         },
         .{
-            .format = context.physical_device.depth_format,
+            .format = ctx.physical_device.depth_format,
             .samples = .{ .@"1_bit" = true },
             .load_op = if (options.clear_flags.depth) .clear else .load,
             .store_op = .dont_care,
@@ -120,8 +120,8 @@ pub fn init(
         },
     };
 
-    self.handle = try context.device_api.createRenderPass(
-        context.device,
+    self.handle = try ctx.device_api.createRenderPass(
+        ctx.device,
         &vk.RenderPassCreateInfo{
             .attachment_count = if (options.clear_flags.depth) attachment_descriptions.len else 1,
             .p_attachments = &attachment_descriptions,
@@ -132,19 +132,23 @@ pub fn init(
         },
         null,
     );
-    errdefer context.device_api.destroyRenderPass(context.device, self.handle, null);
+    errdefer ctx.device_api.destroyRenderPass(ctx.device, self.handle, null);
 
     return self;
 }
 
 pub fn deinit(self: *RenderPass) void {
+    const ctx = Engine.instance.renderer.context;
+
     if (self.handle != .null_handle) {
-        self.context.device_api.destroyRenderPass(self.context.device, self.handle, null);
+        ctx.device_api.destroyRenderPass(ctx.device, self.handle, null);
     }
     self.handle = .null_handle;
 }
 
 pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffer: vk.Framebuffer) void {
+    const ctx = Engine.instance.renderer.context;
+
     var clear_value_count: u32 = 0;
     var clear_values: [2]vk.ClearValue = undefined;
 
@@ -165,14 +169,14 @@ pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffe
         clear_value_count += 1;
     }
 
-    self.context.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
+    ctx.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
         .render_pass = self.handle,
         .framebuffer = framebuffer,
         .render_area = switch (self.render_area) {
             .fixed => |area| area,
             .swapchain => .{
                 .offset = .{ .x = 0, .y = 0 },
-                .extent = self.context.swapchain.extent,
+                .extent = ctx.swapchain.extent,
             },
         },
         .clear_value_count = clear_value_count,
@@ -181,5 +185,9 @@ pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffe
 }
 
 pub fn end(self: *RenderPass, command_buffer: *const CommandBuffer) void {
-    self.context.device_api.cmdEndRenderPass(command_buffer.handle);
+    _ = self;
+
+    const ctx = Engine.instance.renderer.context;
+
+    ctx.device_api.cmdEndRenderPass(command_buffer.handle);
 }

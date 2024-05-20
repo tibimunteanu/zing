@@ -4,6 +4,7 @@ const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
+const Engine = @import("../engine.zig");
 const Swapchain = @import("swapchain.zig");
 
 const Allocator = std.mem.Allocator;
@@ -178,13 +179,13 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     errdefer self.device_api.destroyDevice(self.device, null);
 
     // get queues
-    self.graphics_queue = Queue.init(self, self.physical_device.graphics_family_index);
-    self.present_queue = Queue.init(self, self.physical_device.present_family_index);
-    self.compute_queue = Queue.init(self, self.physical_device.compute_family_index);
-    self.transfer_queue = Queue.init(self, self.physical_device.transfer_family_index);
+    self.graphics_queue = Queue.init(self.physical_device.graphics_family_index);
+    self.present_queue = Queue.init(self.physical_device.present_family_index);
+    self.compute_queue = Queue.init(self.physical_device.compute_family_index);
+    self.transfer_queue = Queue.init(self.physical_device.transfer_family_index);
 
     // create swapchain
-    self.swapchain = try Swapchain.init(allocator, self, .{});
+    self.swapchain = try Swapchain.init(allocator, .{});
     errdefer self.swapchain.deinit();
 
     std.log.info("Graphics device: {?s}", .{
@@ -586,9 +587,11 @@ const Queue = struct {
     handle: vk.Queue,
     family_index: u32,
 
-    fn init(context: *const Context, family_index: u32) Queue {
+    fn init(family_index: u32) Queue {
+        const ctx = Engine.instance.renderer.context;
+
         return .{
-            .handle = context.device_api.getDeviceQueue(context.device, family_index, 0),
+            .handle = ctx.device_api.getDeviceQueue(ctx.device, family_index, 0),
             .family_index = family_index,
         };
     }

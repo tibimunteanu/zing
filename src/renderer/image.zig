@@ -1,13 +1,12 @@
 const std = @import("std");
 const vk = @import("vk.zig");
+const Engine = @import("../engine.zig");
 const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 
 const Allocator = std.mem.Allocator;
 
 const Image = @This();
-
-context: *const Context,
 
 handle: vk.Image,
 memory: vk.DeviceMemory,
@@ -16,13 +15,11 @@ extent: vk.Extent3D,
 
 // public
 pub fn init(
-    context: *const Context,
     memory_flags: vk.MemoryPropertyFlags,
     create_info: *const vk.ImageCreateInfo,
     view_create_info: ?*vk.ImageViewCreateInfo,
 ) !Image {
     var self: Image = undefined;
-    self.context = context;
     self.extent = create_info.extent;
     self.handle = .null_handle;
     self.memory = .null_handle;
@@ -30,29 +27,33 @@ pub fn init(
 
     errdefer self.deinit();
 
-    self.handle = try context.device_api.createImage(context.device, create_info, null);
+    const ctx = Engine.instance.renderer.context;
 
-    const memory_requirements = context.device_api.getImageMemoryRequirements(context.device, self.handle);
-    self.memory = try context.allocate(memory_requirements, memory_flags);
-    try context.device_api.bindImageMemory(context.device, self.handle, self.memory, 0);
+    self.handle = try ctx.device_api.createImage(ctx.device, create_info, null);
+
+    const memory_requirements = ctx.device_api.getImageMemoryRequirements(ctx.device, self.handle);
+    self.memory = try ctx.allocate(memory_requirements, memory_flags);
+    try ctx.device_api.bindImageMemory(ctx.device, self.handle, self.memory, 0);
 
     if (view_create_info) |view_info| {
         view_info.image = self.handle;
-        self.view = try context.device_api.createImageView(context.device, view_info, null);
+        self.view = try ctx.device_api.createImageView(ctx.device, view_info, null);
     }
 
     return self;
 }
 
 pub fn deinit(self: *Image) void {
+    const ctx = Engine.instance.renderer.context;
+
     if (self.view != .null_handle) {
-        self.context.device_api.destroyImageView(self.context.device, self.view, null);
+        ctx.device_api.destroyImageView(ctx.device, self.view, null);
     }
     if (self.handle != .null_handle) {
-        self.context.device_api.destroyImage(self.context.device, self.handle, null);
+        ctx.device_api.destroyImage(ctx.device, self.handle, null);
     }
     if (self.memory != .null_handle) {
-        self.context.device_api.freeMemory(self.context.device, self.memory, null);
+        ctx.device_api.freeMemory(ctx.device, self.memory, null);
     }
 }
 
@@ -85,7 +86,9 @@ pub fn pipelineImageBarrier(
         .subresource_range = subresource_range,
     };
 
-    self.context.device_api.cmdPipelineBarrier(
+    const ctx = Engine.instance.renderer.context;
+
+    ctx.device_api.cmdPipelineBarrier(
         command_buffer.handle,
         src_stage_mask,
         dst_stage_mask,
