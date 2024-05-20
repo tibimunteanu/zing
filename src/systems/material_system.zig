@@ -8,6 +8,7 @@ const Material = @import("../renderer/material.zig");
 const Texture = @import("../renderer/texture.zig");
 const MaterialResource = @import("../resources/material_resource.zig");
 
+const TextureMap = TextureSystem.TextureMap;
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
@@ -143,7 +144,7 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     material.diffuse_color = math.Vec{ 1, 1, 1, 1 };
     material.diffuse_map = .{
         .use = .map_diffuse,
-        .texture = Engine.instance.texture_system.getDefaultTexture(),
+        .texture = Engine.instance.texture_system.acquireDefaultTexture(),
     };
     material.generation = null; // NOTE: default material always has null generation
 
@@ -167,12 +168,12 @@ fn loadMaterial(self: *MaterialSystem, config: Material.Config, material: *Mater
     temp_material.diffuse_color = config.diffuse_color;
 
     if (config.diffuse_map_name.len > 0) {
-        temp_material.diffuse_map = Texture.Map{
+        temp_material.diffuse_map = TextureMap{
             .use = .map_diffuse,
             .texture = Engine.instance.texture_system.acquireTextureByName(
                 config.diffuse_map_name,
                 .{ .auto_release = true },
-            ) catch Engine.instance.texture_system.getDefaultTexture(),
+            ) catch Engine.instance.texture_system.acquireDefaultTexture(),
         };
     }
 

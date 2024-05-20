@@ -9,10 +9,15 @@ const BinaryResource = @import("../resources/binary_resource.zig");
 const TextureSystem = @import("../systems/texture_system.zig");
 
 const TextureHandle = TextureSystem.TextureHandle;
-const TextureData = Context.TextureData;
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
-const ctx = Context.ctx;
+
+pub const ctx = struct {
+    pub inline fn get() *Context {
+        // TODO: add debug checks
+        return Engine.instance.renderer.context;
+    }
+}.get;
 
 // TODO: TextureMap
 // TODO: local push constant uniform block and apply local
@@ -654,7 +659,7 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     }
 
     // clear textures to default texture handle
-    const default_texture_handle = Engine.instance.texture_system.getDefaultTexture();
+    const default_texture_handle = Engine.instance.texture_system.acquireDefaultTexture();
     try instance_state.textures.resize(0);
     try instance_state.textures.appendNTimes(default_texture_handle, self.instance_scope.uniform_sampler_count);
 
@@ -838,12 +843,11 @@ pub fn applyInstance(self: *Shader) !void {
         for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
             const texture_handle = instance_state.textures.slice()[sampler_index];
             const texture = Engine.instance.texture_system.textures.getColumnPtrAssumeLive(texture_handle, .texture);
-            const texture_backend: *TextureData = @ptrCast(@alignCast(texture.internal_data));
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,
-                .image_view = texture_backend.image.view,
-                .sampler = texture_backend.sampler,
+                .image_view = texture.image.view,
+                .sampler = texture.sampler,
             });
         }
 

@@ -4,37 +4,16 @@ const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
-const Engine = @import("../engine.zig");
-const Renderer = @import("renderer.zig");
 const Swapchain = @import("swapchain.zig");
 const RenderPass = @import("renderpass.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const Buffer = @import("buffer.zig");
-const Image = @import("image.zig");
-const Texture = @import("texture.zig");
-const Material = @import("material.zig");
-const Geometry = @import("geometry.zig");
-const Shader = @import("shader.zig");
-const ShaderResource = @import("../resources/shader_resource.zig");
 
 const config = @import("../config.zig");
-const resources_image = @import("../resources/image_resource.zig");
-const resources_material = @import("../resources/material_resource.zig");
-
-const Vertex3D = Renderer.Vertex3D;
-const GeometryRenderData = Renderer.GeometryRenderData;
 
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
 const Context = @This();
-
-pub const ctx = struct {
-    pub inline fn get() *Context {
-        // TODO: add debug checks
-        return Engine.instance.renderer.context;
-    }
-}.get;
 
 const required_device_extensions = [_][*:0]const u8{
     vk.extension_info.khr_swapchain.name,
@@ -154,29 +133,10 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d24_unorm_s8_uint,
 };
 
-pub const TextureData = struct {
-    image: Image,
-    sampler: vk.Sampler,
-};
-
-pub const geometry_max_count: u32 = 4096;
-
-pub const GeometryData = struct {
-    id: ?u32,
-    generation: ?u32,
-    vertex_count: u32,
-    vertex_size: u64,
-    vertex_buffer_offset: u64,
-    index_count: u32,
-    index_size: u64,
-    index_buffer_offset: u64,
-};
-
 // NOTE: used to:
 // - prep instance and device extensions
 // - enumerate physical devices
 // - passed to the swapchain to enumerate surface formats and presentation modes
-// - passed to shaders to load shader resources
 // - allocate internal data on createTexture calls
 allocator: Allocator,
 
@@ -195,6 +155,7 @@ compute_queue: Queue,
 transfer_queue: Queue,
 
 swapchain: Swapchain,
+
 framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
 world_framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
 
@@ -203,14 +164,6 @@ ui_render_pass: RenderPass,
 
 graphics_command_pool: vk.CommandPool,
 graphics_command_buffers: Array(CommandBuffer, config.swapchain_max_images),
-
-phong_shader: Shader,
-ui_shader: Shader,
-
-vertex_buffer: Buffer,
-index_buffer: Buffer,
-
-geometries: [geometry_max_count]GeometryData,
 
 desired_extent: glfw.Window.Size,
 desired_extent_generation: u32,
@@ -260,6 +213,21 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     self.swapchain = try Swapchain.init(allocator, self, .{});
     errdefer self.swapchain.deinit();
 
+    // create command pool
+    self.graphics_command_pool = try self.device_api.createCommandPool(
+        self.device,
+        &vk.CommandPoolCreateInfo{
+            .queue_family_index = self.graphics_queue.family_index,
+            .flags = .{ .reset_command_buffer_bit = true },
+        },
+        null,
+    );
+    errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
+
+    // create command buffers
+    try self.initCommandBuffers();
+    errdefer self.deinitCommandBuffers();
+
     // create renderpasses
     self.world_render_pass = try RenderPass.init(
         self,
@@ -293,79 +261,28 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     try self.initFramebuffers();
     errdefer self.deinitFramebuffers();
 
-    // create command pool
-    self.graphics_command_pool = try self.device_api.createCommandPool(
-        self.device,
-        &vk.CommandPoolCreateInfo{
-            .queue_family_index = self.graphics_queue.family_index,
-            .flags = .{ .reset_command_buffer_bit = true },
-        },
-        null,
-    );
-    errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
-
-    // create command buffers
-    try self.initCommandBuffers();
-    errdefer self.deinitCommandBuffers();
-
-    // create shaders
-    var phong_shader_resource = try ShaderResource.init(allocator, "phong");
-    defer phong_shader_resource.deinit();
-
-    self.phong_shader = try Shader.init(allocator, phong_shader_resource.config.value);
-    errdefer self.phong_shader.deinit();
-
-    var ui_shader_resource = try ShaderResource.init(allocator, "ui");
-    defer ui_shader_resource.deinit();
-
-    self.ui_shader = try Shader.init(allocator, ui_shader_resource.config.value);
-    errdefer self.ui_shader.deinit();
-
-    // create buffers
-    self.vertex_buffer = try Buffer.init(
-        self,
-        100 * 1024 * 1024,
-        .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
-        .{ .device_local_bit = true },
-        .{ .managed = true, .bind_on_create = true },
-    );
-    errdefer self.vertex_buffer.deinit();
-
-    self.index_buffer = try Buffer.init(
-        self,
-        10 * 1024 * 1024,
-        .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
-        .{ .device_local_bit = true },
-        .{ .managed = true, .bind_on_create = true },
-    );
-    errdefer self.index_buffer.deinit();
-
-    // reset geometry storage
-    for (&self.geometries) |*geometry| {
-        geometry.*.id = null;
-        geometry.*.generation = null;
-    }
-
     self.frame_index = 0;
     self.delta_time = config.target_frame_seconds;
+
+    std.log.info("Graphics device: {?s}", .{
+        self.context.physical_device.properties.device_name,
+    });
+    std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}", .{
+        self.context.graphics_queue.family_index,
+        self.context.present_queue.family_index,
+        self.context.compute_queue.family_index,
+        self.context.transfer_queue.family_index,
+    });
 }
 
 pub fn deinit(self: *Context) void {
-    self.device_api.deviceWaitIdle(self.device) catch {};
-
-    self.vertex_buffer.deinit();
-    self.index_buffer.deinit();
-
-    self.ui_shader.deinit();
-    self.phong_shader.deinit();
-
-    self.deinitCommandBuffers();
-    self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
-
     self.deinitFramebuffers();
 
     self.ui_render_pass.deinit();
     self.world_render_pass.deinit();
+
+    self.deinitCommandBuffers();
+    self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
 
     self.swapchain.deinit();
 
@@ -399,14 +316,14 @@ pub fn allocate(self: *const Context, requirements: vk.MemoryRequirements, flags
     }, null);
 }
 
-pub fn beginFrame(self: *Context, delta_time: f32) !Renderer.BeginFrameResult {
+pub fn beginFrame(self: *Context, delta_time: f32) !bool {
     self.delta_time = delta_time;
 
     if (self.desired_extent_generation != self.swapchain.extent_generation) {
         // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
         // which is handled by endFrame() by recreating resources, but this way we avoid a best practices warning
         try self.reinitSwapchainFramebuffersAndCmdBuffers();
-        return .resize;
+        return false;
     }
 
     const current_image = self.swapchain.getCurrentImage();
@@ -435,7 +352,7 @@ pub fn beginFrame(self: *Context, delta_time: f32) !Renderer.BeginFrameResult {
     self.device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
     self.device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
 
-    return .render;
+    return true;
 }
 
 pub fn endFrame(self: *Context) !void {
@@ -475,30 +392,6 @@ pub fn endFrame(self: *Context) !void {
     }
 }
 
-pub fn beginRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
-
-    switch (render_pass_type) {
-        .world => {
-            self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer());
-            self.phong_shader.bind();
-        },
-        .ui => {
-            self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer());
-            self.ui_shader.bind();
-        },
-    }
-}
-
-pub fn endRenderPass(self: *Context, render_pass_type: RenderPass.Type) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
-
-    switch (render_pass_type) {
-        .world => self.world_render_pass.end(command_buffer),
-        .ui => self.ui_render_pass.end(command_buffer),
-    }
-}
-
 pub fn getCurrentCommandBuffer(self: *const Context) *const CommandBuffer {
     return &self.graphics_command_buffers.constSlice()[self.swapchain.image_index];
 }
@@ -509,330 +402,6 @@ pub fn getCurrentFramebuffer(self: *const Context) vk.Framebuffer {
 
 pub fn getCurrentWorldFramebuffer(self: *const Context) vk.Framebuffer {
     return self.world_framebuffers.constSlice()[self.swapchain.image_index];
-}
-
-pub fn updateGlobalWorldState(self: *Context, projection: math.Mat, view: math.Mat) !void {
-    self.phong_shader.bindGlobal();
-
-    try self.phong_shader.setUniform("projection", projection);
-    try self.phong_shader.setUniform("view", view);
-
-    try self.phong_shader.applyGlobal();
-}
-
-pub fn updateGlobalUIState(self: *Context, projection: math.Mat, view: math.Mat) !void {
-    self.ui_shader.bindGlobal();
-
-    try self.ui_shader.setUniform("projection", projection);
-    try self.ui_shader.setUniform("view", view);
-
-    try self.ui_shader.applyGlobal();
-}
-
-pub fn createTexture(self: *Context, texture: *Texture, pixels: []const u8) !void {
-    // TODO: create a pool for this allocation
-    const internal_data = try self.allocator.create(TextureData);
-    errdefer self.allocator.destroy(internal_data);
-
-    texture.internal_data = internal_data;
-
-    const image_size: vk.DeviceSize = texture.width * texture.height * texture.channel_count;
-    const image_format: vk.Format = .r8g8b8a8_srgb;
-
-    // create an image on the gpu
-    internal_data.image = try Image.init(
-        self,
-        vk.MemoryPropertyFlags{ .device_local_bit = true },
-        &vk.ImageCreateInfo{
-            .flags = .{},
-            .image_type = .@"2d",
-            .format = image_format,
-            .extent = .{
-                .width = texture.width,
-                .height = texture.height,
-                .depth = 1,
-            },
-            .mip_levels = 1,
-            .array_layers = 1,
-            .samples = .{ .@"1_bit" = true },
-            .tiling = .optimal,
-            .usage = .{
-                .transfer_src_bit = true,
-                .transfer_dst_bit = true,
-                .color_attachment_bit = true,
-                .sampled_bit = true,
-            },
-            .sharing_mode = .exclusive,
-            .queue_family_index_count = 0,
-            .p_queue_family_indices = null,
-            .initial_layout = .undefined,
-        },
-        @constCast(&vk.ImageViewCreateInfo{
-            .image = .null_handle,
-            .view_type = .@"2d",
-            .format = image_format,
-            .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
-            .subresource_range = .{
-                .aspect_mask = .{ .color_bit = true },
-                .base_mip_level = 0,
-                .level_count = 1,
-                .base_array_layer = 0,
-                .layer_count = 1,
-            },
-        }),
-    );
-    errdefer internal_data.image.deinit();
-
-    // copy the pixels to the gpu
-    var staging_buffer = try Buffer.init(
-        self,
-        image_size,
-        .{ .transfer_src_bit = true },
-        .{ .host_visible_bit = true, .host_coherent_bit = true },
-        .{ .bind_on_create = true },
-    );
-    defer staging_buffer.deinit();
-
-    try staging_buffer.loadData(0, image_size, .{}, pixels);
-
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(self, self.graphics_command_pool);
-
-    try internal_data.image.pipelineImageBarrier(
-        &command_buffer,
-        .{ .top_of_pipe_bit = true },
-        .{},
-        .undefined,
-        .{ .transfer_bit = true },
-        .{ .transfer_write_bit = true },
-        .transfer_dst_optimal,
-    );
-
-    self.device_api.cmdCopyBufferToImage(
-        command_buffer.handle,
-        staging_buffer.handle,
-        internal_data.image.handle,
-        .transfer_dst_optimal,
-        1,
-        @ptrCast(&vk.BufferImageCopy{
-            .buffer_offset = 0,
-            .buffer_row_length = 0,
-            .buffer_image_height = 0,
-            .image_subresource = vk.ImageSubresourceLayers{
-                .aspect_mask = .{ .color_bit = true },
-                .mip_level = 0,
-                .base_array_layer = 0,
-                .layer_count = 1,
-            },
-            .image_offset = vk.Offset3D{
-                .x = 0,
-                .y = 0,
-                .z = 0,
-            },
-            .image_extent = internal_data.image.extent,
-        }),
-    );
-
-    try internal_data.image.pipelineImageBarrier(
-        &command_buffer,
-        .{ .transfer_bit = true },
-        .{ .transfer_write_bit = true },
-        .transfer_dst_optimal,
-        .{ .fragment_shader_bit = true },
-        .{ .shader_read_bit = true },
-        .shader_read_only_optimal,
-    );
-
-    try command_buffer.endSingleUseAndDeinit(self.graphics_queue.handle);
-
-    // create the sampler
-    internal_data.sampler = try self.device_api.createSampler(self.device, &vk.SamplerCreateInfo{
-        .mag_filter = .linear,
-        .min_filter = .linear,
-        .address_mode_u = .repeat,
-        .address_mode_v = .repeat,
-        .address_mode_w = .repeat,
-        .anisotropy_enable = 0,
-        .max_anisotropy = 16,
-        .border_color = .int_opaque_black,
-        .unnormalized_coordinates = 0,
-        .compare_enable = 0,
-        .compare_op = .always,
-        .mipmap_mode = .linear,
-        .mip_lod_bias = 0,
-        .min_lod = 0,
-        .max_lod = 0,
-    }, null);
-}
-
-pub fn destroyTexture(self: *Context, texture: *Texture) void {
-    self.device_api.deviceWaitIdle(self.device) catch {};
-
-    const internal_data: ?*TextureData = @ptrCast(@alignCast(texture.internal_data));
-    if (internal_data) |data| {
-        data.image.deinit();
-
-        self.device_api.destroySampler(self.device, data.sampler, null);
-
-        self.allocator.destroy(data);
-    }
-}
-
-pub fn createMaterial(self: *Context, material: *Material) !void {
-    switch (material.material_type) {
-        .world => material.instance_handle = try self.phong_shader.initInstance(),
-        .ui => material.instance_handle = try self.ui_shader.initInstance(),
-    }
-}
-
-pub fn destroyMaterial(self: *Context, material: *Material) void {
-    if (material.instance_handle) |instance_handle| {
-        switch (material.material_type) {
-            .world => self.phong_shader.deinitInstance(instance_handle),
-            .ui => self.ui_shader.deinitInstance(instance_handle),
-        }
-    }
-}
-
-pub fn createGeometry(self: *Context, geometry: *Geometry, vertices: anytype, indices: anytype) !void {
-    if (vertices.len == 0) {
-        return error.VerticesCannotBeEmpty;
-    }
-
-    var prev_internal_data: GeometryData = undefined;
-    var internal_data: ?*GeometryData = null;
-
-    const is_reupload = geometry.internal_id != null;
-    if (is_reupload) {
-        internal_data = &self.geometries[geometry.internal_id.?];
-
-        // take a copy of the old region
-        prev_internal_data = internal_data.?.*;
-    } else {
-        for (&self.geometries, 0..) |*slot, i| {
-            if (slot.id == null) {
-                const id: u32 = @truncate(i);
-                geometry.internal_id = id;
-                slot.*.id = id;
-                internal_data = slot;
-                break;
-            }
-        }
-    }
-
-    if (internal_data) |data| {
-        data.vertex_count = @truncate(vertices.len);
-        data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(vertices)));
-        data.vertex_buffer_offset = try self.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(vertices));
-
-        if (indices.len > 0) {
-            data.index_count = @truncate(indices.len);
-            data.index_size = @sizeOf(std.meta.Elem(@TypeOf(indices)));
-            data.index_buffer_offset = try self.index_buffer.allocAndUpload(std.mem.sliceAsBytes(indices));
-        }
-
-        data.generation = if (geometry.generation) |g| g +% 1 else 0;
-
-        if (is_reupload) {
-            try self.vertex_buffer.free(
-                prev_internal_data.vertex_buffer_offset,
-                prev_internal_data.vertex_count * prev_internal_data.vertex_size,
-            );
-
-            if (prev_internal_data.index_count > 0) {
-                try self.index_buffer.free(
-                    prev_internal_data.index_buffer_offset,
-                    prev_internal_data.index_count * prev_internal_data.index_size,
-                );
-            }
-        }
-    } else {
-        return error.FaildToReserveInternalData;
-    }
-}
-
-pub fn destroyGeometry(self: *Context, geometry: *Geometry) void {
-    if (geometry.internal_id != null) {
-        self.device_api.deviceWaitIdle(self.device) catch {
-            std.log.err("Could not destroy geometry {s}", .{geometry.name.slice()});
-        };
-
-        const internal_data = &self.geometries[geometry.internal_id.?];
-
-        self.vertex_buffer.free(
-            internal_data.vertex_buffer_offset,
-            internal_data.vertex_size,
-        ) catch unreachable;
-
-        if (internal_data.index_size > 0) {
-            self.index_buffer.free(
-                internal_data.index_buffer_offset,
-                internal_data.index_size,
-            ) catch unreachable;
-        }
-
-        internal_data.* = std.mem.zeroes(GeometryData);
-        internal_data.id = null;
-        internal_data.generation = null;
-    }
-}
-
-pub fn drawGeometry(self: *Context, data: GeometryRenderData) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
-
-    const geometry: *Geometry = try Engine.instance.geometry_system.geometries.getColumnPtr(data.geometry, .geometry);
-
-    const material_handle = if (Engine.instance.material_system.materials.isLiveHandle(geometry.material)) //
-        geometry.material
-    else
-        Engine.instance.material_system.getDefaultMaterial();
-
-    const material: *Material = try Engine.instance.material_system.materials.getColumnPtr(material_handle, .material);
-
-    switch (material.material_type) {
-        .world => {
-            try self.phong_shader.setUniform("model", data.model);
-
-            try self.phong_shader.bindInstance(material.instance_handle.?);
-
-            try self.phong_shader.setUniform("diffuse_color", material.diffuse_color);
-            try self.phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-
-            try self.phong_shader.applyInstance();
-        },
-        .ui => {
-            try self.ui_shader.setUniform("model", data.model);
-
-            try self.ui_shader.bindInstance(material.instance_handle.?);
-
-            try self.ui_shader.setUniform("diffuse_color", material.diffuse_color);
-            try self.ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-
-            try self.ui_shader.applyInstance();
-        },
-    }
-
-    const buffer_data = self.geometries[geometry.internal_id.?];
-
-    self.device_api.cmdBindVertexBuffers(
-        command_buffer.handle,
-        0,
-        1,
-        @ptrCast(&self.vertex_buffer.handle),
-        @ptrCast(&[_]u64{buffer_data.vertex_buffer_offset}),
-    );
-
-    if (buffer_data.index_count > 0) {
-        self.device_api.cmdBindIndexBuffer(
-            command_buffer.handle,
-            self.index_buffer.handle,
-            buffer_data.index_buffer_offset,
-            .uint32,
-        );
-
-        self.device_api.cmdDrawIndexed(command_buffer.handle, buffer_data.index_count, 1, 0, 0, 0);
-    } else {
-        self.device_api.cmdDraw(command_buffer.handle, buffer_data.vertex_count, 1, 0, 0);
-    }
 }
 
 // utils

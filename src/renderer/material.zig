@@ -1,10 +1,10 @@
 const std = @import("std");
 const math = @import("zmath");
-const Texture = @import("texture.zig");
 const Shader = @import("shader.zig");
 const TextureSystem = @import("../systems/texture_system.zig");
 
 const Array = std.BoundedArray;
+const TextureMap = TextureSystem.TextureMap;
 
 const Material = @This();
 
@@ -24,7 +24,7 @@ pub const Config = struct {
 name: Array(u8, 256) = .{},
 material_type: Type = .world,
 diffuse_color: math.Vec = math.Vec{ 0, 0, 0, 0 },
-diffuse_map: Texture.Map = .{},
+diffuse_map: TextureMap = .{},
 generation: ?u32 = null,
 instance_handle: ?Shader.InstanceHandle = null,
 
