@@ -5,10 +5,11 @@ const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const FreeList = @import("../free_list.zig");
 
+const Allocator = std.mem.Allocator;
+
 const Buffer = @This();
 
-context: *const Context,
-
+allocator: ?Allocator,
 handle: vk.Buffer,
 usage: vk.BufferUsageFlags,
 total_size: vk.DeviceSize,
@@ -19,7 +20,7 @@ free_list: ?FreeList,
 
 // public
 pub fn init(
-    context: *const Context,
+    allocator: ?Allocator,
     size: usize,
     usage: vk.BufferUsageFlags,
     memory_property_flags: vk.MemoryPropertyFlags,
@@ -29,13 +30,15 @@ pub fn init(
     },
 ) !Buffer {
     var self: Buffer = undefined;
-    self.context = context;
+    self.allocator = allocator;
 
     self.usage = usage;
     self.total_size = size;
     self.memory_property_flags = memory_property_flags;
 
-    self.handle = try context.device_api.createBuffer(context.device, &vk.BufferCreateInfo{
+    const ctx = Engine.instance.renderer.context;
+
+    self.handle = try ctx.device_api.createBuffer(ctx.device, &vk.BufferCreateInfo{
         .flags = .{},
         .usage = usage,
         .size = size,
@@ -43,18 +46,18 @@ pub fn init(
         .queue_family_index_count = 0,
         .p_queue_family_indices = null,
     }, null);
-    errdefer context.device_api.destroyBuffer(context.device, self.handle, null);
+    errdefer ctx.device_api.destroyBuffer(ctx.device, self.handle, null);
 
-    const memory_requirements = context.device_api.getBufferMemoryRequirements(context.device, self.handle);
+    const memory_requirements = ctx.device_api.getBufferMemoryRequirements(ctx.device, self.handle);
 
-    self.memory = try self.context.allocate(memory_requirements, memory_property_flags);
-    errdefer context.device_api.freeMemory(context.device, self.memory, null);
+    self.memory = try ctx.allocate(memory_requirements, memory_property_flags);
+    errdefer ctx.device_api.freeMemory(ctx.device, self.memory, null);
 
     if (options.bind_on_create) {
         try self.bind(0);
     }
 
-    self.free_list = if (options.managed) try FreeList.init(context.allocator, size, .{}) else null;
+    self.free_list = if (options.managed) try FreeList.init(self.allocator.?, size, .{}) else null;
 
     return self;
 }
@@ -64,13 +67,15 @@ pub fn deinit(self: *Buffer) void {
         free_list.deinit();
     }
 
+    const ctx = Engine.instance.renderer.context;
+
     if (self.handle != .null_handle) {
-        self.context.device_api.destroyBuffer(self.context.device, self.handle, null);
+        ctx.device_api.destroyBuffer(ctx.device, self.handle, null);
         self.handle = .null_handle;
     }
 
     if (self.memory != .null_handle) {
-        self.context.device_api.freeMemory(self.context.device, self.memory, null);
+        ctx.device_api.freeMemory(ctx.device, self.memory, null);
         self.memory = .null_handle;
     }
 
@@ -79,12 +84,16 @@ pub fn deinit(self: *Buffer) void {
 }
 
 pub fn bind(self: *const Buffer, offset: vk.DeviceSize) !void {
-    try self.context.device_api.bindBufferMemory(self.context.device, self.handle, self.memory, offset);
+    const ctx = Engine.instance.renderer.context;
+
+    try ctx.device_api.bindBufferMemory(ctx.device, self.handle, self.memory, offset);
 }
 
 pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
-    return @as([*]u8, @ptrCast(try self.context.device_api.mapMemory(
-        self.context.device,
+    const ctx = Engine.instance.renderer.context;
+
+    return @as([*]u8, @ptrCast(try ctx.device_api.mapMemory(
+        ctx.device,
         self.memory,
         offset,
         size,
@@ -93,7 +102,9 @@ pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, fla
 }
 
 pub fn unlock(self: *const Buffer) void {
-    self.context.device_api.unmapMemory(self.context.device, self.memory);
+    const ctx = Engine.instance.renderer.context;
+
+    ctx.device_api.unmapMemory(ctx.device, self.memory);
 }
 
 pub fn alloc(self: *Buffer, size: u64) !u64 {
@@ -113,8 +124,10 @@ pub fn allocAndUpload(self: *Buffer, data: []const u8) !u64 {
 }
 
 pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
+    const ctx = Engine.instance.renderer.context;
+
     var staging_buffer = try Buffer.init(
-        self.context,
+        null,
         self.total_size,
         .{ .transfer_src_bit = true },
         .{ .host_visible_bit = true, .host_coherent_bit = true },
@@ -127,7 +140,7 @@ pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
     try staging_buffer.copyTo(
         self,
         Engine.instance.renderer.graphics_command_pool,
-        Engine.instance.renderer.context.graphics_queue.handle,
+        ctx.graphics_queue.handle,
         vk.BufferCopy{
             .src_offset = 0,
             .dst_offset = offset,
@@ -155,8 +168,10 @@ pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queu
         return error.CannotResizeBufferToSmallerSize;
     }
 
+    const ctx = Engine.instance.renderer.context;
+
     const new_buffer = try Buffer.init(
-        self.context,
+        ctx,
         new_size,
         self.usage,
         self.memory_property_flags,
@@ -185,11 +200,13 @@ pub fn copyTo(
         try self.free_list.?.copyTo(&dst.free_list.?);
     }
 
-    try self.context.device_api.queueWaitIdle(queue);
+    const ctx = Engine.instance.renderer.context;
 
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(self.context, command_pool);
+    try ctx.device_api.queueWaitIdle(queue);
 
-    self.context.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
+    var command_buffer = try CommandBuffer.initAndBeginSingleUse(ctx, command_pool);
+
+    ctx.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
 
     try command_buffer.endSingleUseAndDeinit(queue);
 }

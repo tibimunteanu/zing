@@ -128,8 +128,6 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d24_unorm_s8_uint,
 };
 
-allocator: Allocator,
-
 base_api: BaseAPI,
 instance_api: InstanceAPI,
 device_api: DeviceAPI,
@@ -151,8 +149,6 @@ desired_extent_generation: u32,
 
 // public
 pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !void {
-    self.allocator = allocator;
-
     self.desired_extent = window.getFramebufferSize();
     self.desired_extent_generation = 0;
 

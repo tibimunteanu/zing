@@ -166,7 +166,7 @@ pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
 
     // create buffers
     self.vertex_buffer = try Buffer.init(
-        self.context,
+        allocator,
         100 * 1024 * 1024,
         .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
         .{ .device_local_bit = true },
@@ -175,7 +175,7 @@ pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
     errdefer self.vertex_buffer.deinit();
 
     self.index_buffer = try Buffer.init(
-        self.context,
+        allocator,
         10 * 1024 * 1024,
         .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
         .{ .device_local_bit = true },

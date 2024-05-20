@@ -95,7 +95,7 @@ pub fn init(
 
     // copy the pixels to the gpu
     var staging_buffer = try Buffer.init(
-        ctx,
+        null,
         image_size,
         .{ .transfer_src_bit = true },
         .{ .host_visible_bit = true, .host_coherent_bit = true },

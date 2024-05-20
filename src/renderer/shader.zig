@@ -523,7 +523,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     const ubo_size = self.global_scope.stride + (self.instance_scope.stride * config.shader_max_instances);
 
     self.ubo = try Buffer.init(
-        ctx(),
+        allocator,
         ubo_size,
         .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
         .{
