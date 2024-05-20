@@ -259,6 +259,18 @@ pub fn releaseGeometryByHandle(self: *GeometrySystem, handle: GeometryHandle) vo
     }
 }
 
+pub inline fn exists(self: *GeometrySystem, handle: GeometryHandle) bool {
+    return self.geometries.isLiveHandle(handle);
+}
+
+pub inline fn get(self: *GeometrySystem, handle: GeometryHandle) !*Geometry {
+    return try self.geometries.getColumnPtr(handle, .geometry);
+}
+
+pub inline fn getIfExists(self: *GeometrySystem, handle: GeometryHandle) ?*Geometry {
+    return self.geometries.getColumnPtrIfLive(handle, .geometry);
+}
+
 // utils
 fn createDefaultGeometries(self: *GeometrySystem) !void {
     const vertices_3d = [_]Vertex3D{

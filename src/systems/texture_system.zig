@@ -120,6 +120,18 @@ pub fn releaseTextureByHandle(self: *TextureSystem, handle: TextureHandle) void 
     }
 }
 
+pub inline fn exists(self: *TextureSystem, handle: TextureHandle) bool {
+    return self.textures.isLiveHandle(handle);
+}
+
+pub inline fn get(self: *TextureSystem, handle: TextureHandle) !*Texture {
+    return try self.textures.getColumnPtr(handle, .texture);
+}
+
+pub inline fn getIfExists(self: *TextureSystem, handle: TextureHandle) ?*Texture {
+    return self.textures.getColumnPtrIfLive(handle, .texture);
+}
+
 // utils
 fn createDefaultTextures(self: *TextureSystem) !void {
     const size: u32 = 64;

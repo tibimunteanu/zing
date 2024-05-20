@@ -7,7 +7,6 @@ const zing = @import("zing.zig");
 const utils = @import("utils.zig");
 const Renderer = @import("renderer/renderer.zig");
 const TextureSystem = @import("systems/texture_system.zig");
-const MaterialSystem = @import("systems/material_system.zig");
 const GeometrySystem = @import("systems/geometry_system.zig");
 const Shader = @import("renderer/shader.zig");
 const ShaderResource = @import("resources/shader_resource.zig");
@@ -222,8 +221,8 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
         choice += 1;
         choice %= names.len;
 
-        if (zing.sys.geometry.geometries.getColumnPtrIfLive(self.test_geometry, .geometry)) |geometry| {
-            const material = zing.sys.material.materials.getColumnPtrAssumeLive(geometry.material, .material);
+        if (zing.sys.geometry.getIfExists(self.test_geometry)) |geometry| {
+            const material = try zing.sys.material.get(geometry.material);
 
             const prev_texture = material.diffuse_map.texture;
             material.diffuse_map.texture = try zing.sys.texture.acquireTextureByName(

@@ -3,9 +3,9 @@ const builtin = @import("builtin");
 const glfw = @import("glfw");
 const math = @import("zmath");
 const vk = @import("vk.zig");
+const zing = @import("../zing.zig");
 const config = @import("../config.zig");
 
-const zing = @import("../zing.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const Material = @import("material.zig");
@@ -199,9 +199,6 @@ transfer_queue: Queue,
 
 swapchain: Swapchain,
 
-desired_extent: glfw.Window.Size,
-desired_extent_generation: u32,
-
 framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
 world_framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
 
@@ -227,6 +224,8 @@ fov: f32,
 near_clip: f32,
 far_clip: f32,
 
+desired_extent: glfw.Window.Size,
+desired_extent_generation: u32,
 frame_index: u64,
 delta_time: f32,
 
@@ -395,29 +394,6 @@ pub fn deinit(self: *Renderer) void {
     self.instance_api.destroyInstance(self.instance, null);
 }
 
-pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
-    if (try self.beginFrame(packet.delta_time)) {
-        try self.beginRenderPass(.world);
-        try self.updateGlobalWorldState(self.projection, self.view);
-        for (packet.geometries) |geometry| {
-            try self.drawGeometry(geometry);
-        }
-
-        try self.endRenderPass(.world);
-
-        try self.beginRenderPass(.ui);
-        try self.updateGlobalUIState(self.ui_projection, self.ui_view);
-        for (packet.ui_geometries) |ui_geometry| {
-            try self.drawGeometry(ui_geometry);
-        }
-        try self.endRenderPass(.ui);
-
-        try self.endFrame();
-
-        self.frame_index += 1;
-    }
-}
-
 pub fn getMemoryIndex(self: *const Renderer, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
     // TODO: should we always get fresh memory properties from the device?
     // const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
@@ -537,6 +513,29 @@ pub fn endFrame(self: *Renderer) !void {
     }
 }
 
+pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
+    if (try self.beginFrame(packet.delta_time)) {
+        try self.beginRenderPass(.world);
+        try self.updateGlobalWorldState(self.projection, self.view);
+        for (packet.geometries) |geometry| {
+            try self.drawGeometry(geometry);
+        }
+
+        try self.endRenderPass(.world);
+
+        try self.beginRenderPass(.ui);
+        try self.updateGlobalUIState(self.ui_projection, self.ui_view);
+        for (packet.ui_geometries) |ui_geometry| {
+            try self.drawGeometry(ui_geometry);
+        }
+        try self.endRenderPass(.ui);
+
+        try self.endFrame();
+
+        self.frame_index += 1;
+    }
+}
+
 pub fn createMaterial(self: *Renderer, material: *Material) !void {
     switch (material.material_type) {
         .world => material.instance_handle = try self.phong_shader.initInstance(),
@@ -639,14 +638,14 @@ pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {
 pub fn drawGeometry(self: *Renderer, data: GeometryRenderData) !void {
     const command_buffer = self.getCurrentCommandBuffer();
 
-    const geometry: *Geometry = try zing.sys.geometry.geometries.getColumnPtr(data.geometry, .geometry);
+    const geometry: *Geometry = try zing.sys.geometry.get(data.geometry);
 
-    const material_handle = if (zing.sys.material.materials.isLiveHandle(geometry.material)) //
+    const material_handle = if (zing.sys.material.exists(geometry.material)) //
         geometry.material
     else
         zing.sys.material.acquireDefaultMaterial();
 
-    const material: *Material = try zing.sys.material.materials.getColumnPtr(material_handle, .material);
+    const material: *Material = try zing.sys.material.get(material_handle);
 
     switch (material.material_type) {
         .world => {

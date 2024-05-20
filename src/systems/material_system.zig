@@ -137,6 +137,18 @@ pub fn releaseMaterialByHandle(self: *MaterialSystem, handle: MaterialHandle) vo
     }
 }
 
+pub inline fn exists(self: *MaterialSystem, handle: MaterialHandle) bool {
+    return self.materials.isLiveHandle(handle);
+}
+
+pub inline fn get(self: *MaterialSystem, handle: MaterialHandle) !*Material {
+    return try self.materials.getColumnPtr(handle, .material);
+}
+
+pub inline fn getIfExists(self: *MaterialSystem, handle: MaterialHandle) ?*Material {
+    return self.materials.getColumnPtrIfLive(handle, .material);
+}
+
 // utils
 fn createDefaultMaterial(self: *MaterialSystem) !void {
     var material = Material.init();
