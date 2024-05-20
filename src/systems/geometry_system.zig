@@ -177,8 +177,16 @@ pub fn init(self: *GeometrySystem, allocator: Allocator) !void {
 }
 
 pub fn deinit(self: *GeometrySystem) void {
-    self.unloadAllGeometries();
+    self.destroyAllGeometries();
     self.geometries.deinit();
+}
+
+pub fn acquireDefaultGeometry(self: *const GeometrySystem) GeometryHandle {
+    return self.default_geometry;
+}
+
+pub fn acquireDefaultGeometry2D(self: *const GeometrySystem) GeometryHandle {
+    return self.default_geometry_2d;
 }
 
 pub fn acquireGeometryByConfig(
@@ -190,7 +198,7 @@ pub fn acquireGeometryByConfig(
 ) !GeometryHandle {
     var geometry = Geometry.init();
 
-    try self.loadGeometry(config, &geometry);
+    try self.createGeometry(config, &geometry);
 
     const handle = try self.geometries.add(.{
         .geometry = geometry,
@@ -199,7 +207,7 @@ pub fn acquireGeometryByConfig(
     });
     errdefer self.geometries.removeAssumeLive(handle);
 
-    std.log.info("GeometrySystem: Geometry '{s}' was loaded. Ref count: 1", .{geometry.name.slice()});
+    std.log.info("GeometrySystem: Create geometry '{s}'. Ref count: 1", .{geometry.name.slice()});
 
     return handle;
 }
@@ -245,18 +253,10 @@ pub fn releaseGeometryByHandle(self: *GeometrySystem, handle: GeometryHandle) vo
     reference_count.* -|= 1;
 
     if (reference_count.* == 0 and auto_release) {
-        self.unloadGeometry(handle);
+        self.destroyGeometry(handle);
     } else {
         std.log.info("GeometrySystem: Geometry '{s}' was released. Ref count: {}", .{ geometry.name.slice(), reference_count.* });
     }
-}
-
-pub fn getDefaultGeometry(self: *const GeometrySystem) GeometryHandle {
-    return self.default_geometry;
-}
-
-pub fn getDefaultGeometry2D(self: *const GeometrySystem) GeometryHandle {
-    return self.default_geometry_2d;
 }
 
 // utils
@@ -272,7 +272,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
 
     var geometry_3d = Geometry.init();
     geometry_3d.name = try Array(u8, 256).fromSlice(default_geometry_name);
-    geometry_3d.material = Engine.instance.material_system.getDefaultMaterial();
+    geometry_3d.material = Engine.instance.material_system.acquireDefaultMaterial();
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
 
     try Engine.instance.renderer.createGeometry(&geometry_3d, &vertices_3d, &indices_3d);
@@ -295,7 +295,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
 
     var geometry_2d = Geometry.init();
     geometry_2d.name = try Array(u8, 256).fromSlice(default_geometry_2d_name);
-    geometry_2d.material = Engine.instance.material_system.getDefaultMaterial();
+    geometry_2d.material = Engine.instance.material_system.acquireDefaultMaterial();
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
 
     try Engine.instance.renderer.createGeometry(&geometry_2d, &vertices_2d, &indices_2d);
@@ -308,7 +308,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     });
 }
 
-fn loadGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !void {
+fn createGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !void {
     _ = self;
 
     var temp_geometry = Geometry.init();
@@ -317,7 +317,7 @@ fn loadGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !vo
 
     if (config.material_name.len > 0) {
         temp_geometry.material = Engine.instance.material_system.acquireMaterialByName(config.material_name) //
-        catch Engine.instance.material_system.getDefaultMaterial();
+        catch Engine.instance.material_system.acquireDefaultMaterial();
     }
 
     try Engine.instance.renderer.createGeometry(&temp_geometry, config.vertices, config.indices);
@@ -327,22 +327,20 @@ fn loadGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !vo
     geometry.* = temp_geometry;
 }
 
-fn unloadGeometry(self: *GeometrySystem, handle: GeometryHandle) void {
+fn destroyGeometry(self: *GeometrySystem, handle: GeometryHandle) void {
     if (self.geometries.getColumnPtrIfLive(handle, .geometry)) |geometry| {
-        const geometry_name = geometry.name; // NOTE: take a copy of the name
+        std.log.info("GeometrySystem: Destroy geometry '{s}'", .{geometry.name.slice()});
 
         Engine.instance.material_system.releaseMaterialByHandle(geometry.material);
         Engine.instance.renderer.destroyGeometry(geometry);
 
         self.geometries.removeAssumeLive(handle); // NOTE: this calls geometry.deinit()
-
-        std.log.info("GeometrySystem: Geometry '{s}' was unloaded", .{geometry_name.slice()});
     }
 }
 
-fn unloadAllGeometries(self: *GeometrySystem) void {
+fn destroyAllGeometries(self: *GeometrySystem) void {
     var it = self.geometries.liveHandles();
     while (it.next()) |handle| {
-        self.unloadGeometry(handle);
+        self.destroyGeometry(handle);
     }
 }

@@ -478,7 +478,7 @@ pub fn drawGeometry(self: *Renderer, data: GeometryRenderData) !void {
     const material_handle = if (Engine.instance.material_system.materials.isLiveHandle(geometry.material)) //
         geometry.material
     else
-        Engine.instance.material_system.getDefaultMaterial();
+        Engine.instance.material_system.acquireDefaultMaterial();
 
     const material: *Material = try Engine.instance.material_system.materials.getColumnPtr(material_handle, .material);
 

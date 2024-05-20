@@ -43,14 +43,18 @@ pub fn init(self: *MaterialSystem, allocator: Allocator) !void {
 }
 
 pub fn deinit(self: *MaterialSystem) void {
-    self.unloadAllMaterials();
+    self.destroyAllMaterials();
     self.lookup.deinit();
     self.materials.deinit();
 }
 
+pub fn acquireDefaultMaterial(self: *const MaterialSystem) MaterialHandle {
+    return self.default_material;
+}
+
 pub fn acquireMaterialByConfig(self: *MaterialSystem, config: Material.Config) !MaterialHandle {
     var material = Material.init();
-    try self.loadMaterial(config, &material);
+    try self.createMaterial(config, &material);
 
     const handle = try self.materials.add(.{
         .material = material,
@@ -62,7 +66,7 @@ pub fn acquireMaterialByConfig(self: *MaterialSystem, config: Material.Config) !
     try self.lookup.put(material.name.slice(), handle);
     errdefer self.lookup.remove(material.name.slice());
 
-    std.log.info("MaterialSystem: Material '{s}' was loaded. Ref count: 1", .{material.name.slice()});
+    std.log.info("MaterialSystem: Create material '{s}'. Ref count: 1", .{material.name.slice()});
 
     return handle;
 }
@@ -127,14 +131,10 @@ pub fn releaseMaterialByHandle(self: *MaterialSystem, handle: MaterialHandle) vo
     reference_count.* -|= 1;
 
     if (reference_count.* == 0 and auto_release) {
-        self.unloadMaterial(handle);
+        self.destroyMaterial(handle);
     } else {
         std.log.info("MaterialSystem: Material '{s}' was released. Ref count: {}", .{ material.name.slice(), reference_count.* });
     }
-}
-
-pub fn getDefaultMaterial(self: *const MaterialSystem) MaterialHandle {
-    return self.default_material;
 }
 
 // utils
@@ -160,7 +160,7 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     try self.lookup.put(default_material_name, self.default_material);
 }
 
-fn loadMaterial(self: *MaterialSystem, config: Material.Config, material: *Material) !void {
+fn createMaterial(self: *MaterialSystem, config: Material.Config, material: *Material) !void {
     _ = self;
     var temp_material = Material.init();
     temp_material.name = try Array(u8, 256).fromSlice(config.name);
@@ -186,8 +186,10 @@ fn loadMaterial(self: *MaterialSystem, config: Material.Config, material: *Mater
     material.* = temp_material;
 }
 
-fn unloadMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
+fn destroyMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
     if (self.materials.getColumnPtrIfLive(handle, .material)) |material| {
+        std.log.info("MaterialSystem: Destroy material '{s}'", .{material.name.slice()});
+
         const material_name = material.name; // NOTE: take a copy of the name
 
         Engine.instance.texture_system.releaseTextureByHandle(material.diffuse_map.texture);
@@ -195,14 +197,12 @@ fn unloadMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
 
         self.materials.removeAssumeLive(handle); // NOTE: this calls material.deinit()
         _ = self.lookup.remove(material_name.slice());
-
-        std.log.info("MaterialSystem: Material '{s}' was unloaded", .{material_name.slice()});
     }
 }
 
-fn unloadAllMaterials(self: *MaterialSystem) void {
+fn destroyAllMaterials(self: *MaterialSystem) void {
     var it = self.materials.liveHandles();
     while (it.next()) |handle| {
-        self.unloadMaterial(handle);
+        self.destroyMaterial(handle);
     }
 }
