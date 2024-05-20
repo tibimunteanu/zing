@@ -59,7 +59,7 @@ pub fn init(
 
     const image_sharing = self.getImageSharingInfo();
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     const device = ctx.device;
     const device_api = ctx.device_api;
@@ -108,7 +108,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Swapchain) void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     self.deinitImages();
     ctx.device_api.destroySemaphore(ctx.device, self.next_image_acquired_semaphore, null);
@@ -116,7 +116,7 @@ pub fn deinit(self: *Swapchain) void {
 }
 
 pub fn reinit(self: *Swapchain) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     var old = self.*;
     old.deinitImages();
@@ -142,7 +142,7 @@ pub fn waitForAllFences(self: *const Swapchain) !void {
 pub fn present(self: *Swapchain) !PresentState {
     const current_image = self.getCurrentImage();
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     // present the current frame
     // NOTE: it's ok to ignore .suboptimal_khr result here. the following acquireNextImage() returns it.
@@ -165,7 +165,7 @@ pub fn present(self: *Swapchain) !PresentState {
 
 // utils
 fn initCapabilities(self: *Swapchain) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     self.capabilities = try ctx.instance_api.getPhysicalDeviceSurfaceCapabilitiesKHR(
         ctx.physical_device.handle,
@@ -174,7 +174,7 @@ fn initCapabilities(self: *Swapchain) !void {
 }
 
 fn initExtent(self: *Swapchain) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     self.extent = self.capabilities.current_extent;
 
@@ -202,7 +202,7 @@ fn initExtent(self: *Swapchain) !void {
 
 // TODO: check supportedTransforms, supportedCompsiteAlpha and supportedUsageFlags from caps
 fn initSurfaceFormat(self: *Swapchain, desired_surface_format: vk.SurfaceFormatKHR) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
     const physical_device = ctx.physical_device.handle;
 
     var count: u32 = undefined;
@@ -233,7 +233,7 @@ fn initSurfaceFormat(self: *Swapchain, desired_surface_format: vk.SurfaceFormatK
 }
 
 fn initPresentMode(self: *Swapchain, desired_present_modes: []const vk.PresentModeKHR) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
     const physical_device = ctx.physical_device.handle;
 
     var count: u32 = undefined;
@@ -257,7 +257,7 @@ fn initPresentMode(self: *Swapchain, desired_present_modes: []const vk.PresentMo
 fn getImageSharingInfo(self: *const Swapchain) ?[]const u32 {
     _ = self;
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     if (ctx.graphics_queue.family_index == ctx.present_queue.family_index) {
         return null;
@@ -270,7 +270,7 @@ fn getImageSharingInfo(self: *const Swapchain) ?[]const u32 {
 }
 
 fn initImages(self: *Swapchain) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     // get the image handles
     var count: u32 = undefined;
@@ -343,7 +343,7 @@ fn deinitImages(self: *Swapchain) void {
 }
 
 fn acquireNextImage(self: *Swapchain) !PresentState {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     // NOTE: in order to reference the current image while rendering,
     // call acquire next image as the last step.
@@ -382,7 +382,7 @@ const SwapchainImage = struct {
 
     // utils
     fn init(handle: vk.Image, format: vk.Format) !SwapchainImage {
-        const ctx = Engine.instance.renderer.context;
+        const ctx = Engine.renderer.context;
 
         const view = try ctx.device_api.createImageView(ctx.device, &.{
             .flags = .{},
@@ -422,7 +422,7 @@ const SwapchainImage = struct {
     fn deinit(self: *SwapchainImage) void {
         self.waitForFrameFence(.{ .reset = false }) catch return;
 
-        const ctx = Engine.instance.renderer.context;
+        const ctx = Engine.renderer.context;
 
         ctx.device_api.destroyFence(ctx.device, self.frame_fence, null);
         ctx.device_api.destroySemaphore(ctx.device, self.render_finished_semaphore, null);
@@ -438,7 +438,7 @@ const SwapchainImage = struct {
 
     // public
     pub fn waitForFrameFence(self: *const SwapchainImage, options: struct { reset: bool = false }) !void {
-        const ctx = Engine.instance.renderer.context;
+        const ctx = Engine.renderer.context;
 
         _ = try ctx.device_api.waitForFences(ctx.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
 

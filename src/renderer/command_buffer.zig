@@ -13,7 +13,7 @@ pub fn init(pool: vk.CommandPool, options: struct { is_primary: bool = true }) !
     var self: CommandBuffer = undefined;
     self.pool = pool;
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     try ctx.device_api.allocateCommandBuffers(
         ctx.device,
@@ -29,7 +29,7 @@ pub fn init(pool: vk.CommandPool, options: struct { is_primary: bool = true }) !
 }
 
 pub fn deinit(self: *CommandBuffer) void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     if (self.handle != .null_handle) {
         ctx.device_api.freeCommandBuffers(ctx.device, self.pool, 1, @ptrCast(&self.handle));
@@ -39,13 +39,13 @@ pub fn deinit(self: *CommandBuffer) void {
 }
 
 pub fn begin(self: *const CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     try ctx.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
 }
 
 pub fn end(self: *const CommandBuffer) !void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     try ctx.device_api.endCommandBuffer(self.handle);
 }
@@ -63,7 +63,7 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
 
     try self.end();
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     try ctx.device_api.queueSubmit(
         queue,

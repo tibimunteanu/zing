@@ -22,6 +22,7 @@ const Allocator = std.mem.Allocator;
 const Engine = @This();
 
 pub var instance: Engine = undefined;
+pub var renderer: Renderer = undefined;
 
 // TODO: temporary
 var choice: usize = 2;
@@ -36,7 +37,6 @@ test_ui_geometry: GeometryHandle,
 
 allocator: Allocator,
 window: glfw.Window,
-renderer: *Renderer,
 texture_system: *TextureSystem,
 material_system: *MaterialSystem,
 geometry_system: *GeometrySystem,
@@ -68,11 +68,8 @@ pub fn init(allocator: Allocator) !void {
     };
     errdefer instance.window.destroy();
 
-    instance.renderer = try allocator.create(Renderer);
-    errdefer allocator.destroy(instance.renderer);
-
-    try instance.renderer.init(allocator, instance.window);
-    errdefer instance.renderer.deinit();
+    try renderer.init(allocator, instance.window);
+    errdefer renderer.deinit();
 
     instance.texture_system = try allocator.create(TextureSystem);
     errdefer allocator.destroy(instance.texture_system);
@@ -146,8 +143,7 @@ pub fn deinit() void {
     instance.texture_system.deinit();
     instance.allocator.destroy(instance.texture_system);
 
-    instance.renderer.deinit();
-    instance.allocator.destroy(instance.renderer);
+    renderer.deinit();
 
     instance.window.destroy();
 
@@ -181,7 +177,7 @@ pub fn run() !void {
                 },
             };
 
-            try instance.renderer.drawFrame(packet);
+            try renderer.drawFrame(packet);
 
             // const frame_end_time = glfw.getTime();
             // const frame_elapsed_time = frame_end_time - frame_start_time;
@@ -193,7 +189,7 @@ pub fn run() !void {
         glfw.pollEvents();
     }
 
-    try instance.renderer.waitIdle();
+    try renderer.waitIdle();
 }
 
 // utils
@@ -239,7 +235,7 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
     }
 
     recomputeCameraView();
-    self.renderer.view = camera_view;
+    renderer.view = camera_view;
 
     const pressN = self.window.getKey(.n);
     if (pressN == .press and prevPressN == .release) {

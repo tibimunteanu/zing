@@ -49,7 +49,7 @@ pub fn init(
 ) !RenderPass {
     var self: RenderPass = undefined;
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     self.render_area = options.render_area;
     self.clear_flags = options.clear_flags;
@@ -138,7 +138,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *RenderPass) void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     if (self.handle != .null_handle) {
         ctx.device_api.destroyRenderPass(ctx.device, self.handle, null);
@@ -147,7 +147,7 @@ pub fn deinit(self: *RenderPass) void {
 }
 
 pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffer: vk.Framebuffer) void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     var clear_value_count: u32 = 0;
     var clear_values: [2]vk.ClearValue = undefined;
@@ -187,7 +187,7 @@ pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffe
 pub fn end(self: *RenderPass, command_buffer: *const CommandBuffer) void {
     _ = self;
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     ctx.device_api.cmdEndRenderPass(command_buffer.handle);
 }

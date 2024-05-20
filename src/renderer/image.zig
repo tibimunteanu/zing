@@ -27,7 +27,7 @@ pub fn init(
 
     errdefer self.deinit();
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     self.handle = try ctx.device_api.createImage(ctx.device, create_info, null);
 
@@ -44,7 +44,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Image) void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     if (self.view != .null_handle) {
         ctx.device_api.destroyImageView(ctx.device, self.view, null);
@@ -86,7 +86,7 @@ pub fn pipelineImageBarrier(
         .subresource_range = subresource_range,
     };
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     ctx.device_api.cmdPipelineBarrier(
         command_buffer.handle,

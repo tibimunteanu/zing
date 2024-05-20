@@ -148,8 +148,8 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     };
     material.generation = null; // NOTE: default material always has null generation
 
-    try Engine.instance.renderer.createMaterial(&material);
-    errdefer Engine.instance.renderer.destroyMaterial(&material);
+    try Engine.renderer.createMaterial(&material);
+    errdefer Engine.renderer.destroyMaterial(&material);
 
     self.default_material = try self.materials.add(.{
         .material = material,
@@ -179,10 +179,10 @@ fn createMaterial(self: *MaterialSystem, config: Material.Config, material: *Mat
 
     temp_material.generation = if (material.generation) |g| g +% 1 else 0;
 
-    try Engine.instance.renderer.createMaterial(&temp_material);
-    errdefer Engine.instance.renderer.destroyMaterial(&temp_material);
+    try Engine.renderer.createMaterial(&temp_material);
+    errdefer Engine.renderer.destroyMaterial(&temp_material);
 
-    Engine.instance.renderer.destroyMaterial(material);
+    Engine.renderer.destroyMaterial(material);
     material.* = temp_material;
 }
 
@@ -193,7 +193,7 @@ fn destroyMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
         const material_name = material.name; // NOTE: take a copy of the name
 
         Engine.instance.texture_system.releaseTextureByHandle(material.diffuse_map.texture);
-        Engine.instance.renderer.destroyMaterial(material);
+        Engine.renderer.destroyMaterial(material);
 
         self.materials.removeAssumeLive(handle); // NOTE: this calls material.deinit()
         _ = self.lookup.remove(material_name.slice());

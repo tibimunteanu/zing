@@ -553,7 +553,7 @@ fn setProjection(self: *Renderer, size: glfw.Window.Size) void {
 }
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
-    Engine.instance.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
+    Engine.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
 }
 
 fn initFramebuffers(self: *Renderer) !void {

@@ -102,7 +102,7 @@ pub fn init(
 
     try staging_buffer.loadData(0, image_size, .{}, pixels);
 
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(Engine.instance.renderer.graphics_command_pool);
+    var command_buffer = try CommandBuffer.initAndBeginSingleUse(Engine.renderer.graphics_command_pool);
 
     try self.image.pipelineImageBarrier(
         &command_buffer,
@@ -114,7 +114,7 @@ pub fn init(
         .transfer_dst_optimal,
     );
 
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     ctx.device_api.cmdCopyBufferToImage(
         command_buffer.handle,
@@ -176,7 +176,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Texture) void {
-    const ctx = Engine.instance.renderer.context;
+    const ctx = Engine.renderer.context;
 
     ctx.device_api.deviceWaitIdle(ctx.device) catch {};
 

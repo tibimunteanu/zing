@@ -588,7 +588,7 @@ const Queue = struct {
     family_index: u32,
 
     fn init(family_index: u32) Queue {
-        const ctx = Engine.instance.renderer.context;
+        const ctx = Engine.renderer.context;
 
         return .{
             .handle = ctx.device_api.getDeviceQueue(ctx.device, family_index, 0),
