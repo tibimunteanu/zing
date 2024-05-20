@@ -159,17 +159,6 @@ pub const Vertex2D = struct {
 
 pub const geometry_max_count: u32 = 4096;
 
-pub const GeometryData = struct {
-    id: ?u32,
-    generation: ?u32,
-    vertex_count: u32,
-    vertex_size: u64,
-    vertex_buffer_offset: u64,
-    index_count: u32,
-    index_size: u64,
-    index_buffer_offset: u64,
-};
-
 pub const GeometryRenderData = struct {
     model: math.Mat,
     geometry: GeometryHandle,
@@ -214,7 +203,7 @@ ui_shader: Shader,
 vertex_buffer: Buffer,
 index_buffer: Buffer,
 
-geometries: [geometry_max_count]GeometryData,
+geometries: [geometry_max_count]Geometry.GeometryData,
 
 projection: math.Mat,
 view: math.Mat,
@@ -547,89 +536,6 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
         try self.endFrame();
 
         self.frame_index += 1;
-    }
-}
-
-pub fn createGeometry(self: *Renderer, geometry: *Geometry, vertices: anytype, indices: anytype) !void {
-    if (vertices.len == 0) {
-        return error.VerticesCannotBeEmpty;
-    }
-
-    var prev_internal_data: GeometryData = undefined;
-    var internal_data: ?*GeometryData = null;
-
-    const is_reupload = geometry.internal_id != null;
-    if (is_reupload) {
-        internal_data = &self.geometries[geometry.internal_id.?];
-
-        // take a copy of the old region
-        prev_internal_data = internal_data.?.*;
-    } else {
-        for (&self.geometries, 0..) |*slot, i| {
-            if (slot.id == null) {
-                const id: u32 = @truncate(i);
-                geometry.internal_id = id;
-                slot.*.id = id;
-                internal_data = slot;
-                break;
-            }
-        }
-    }
-
-    if (internal_data) |data| {
-        data.vertex_count = @truncate(vertices.len);
-        data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(vertices)));
-        data.vertex_buffer_offset = try self.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(vertices));
-
-        if (indices.len > 0) {
-            data.index_count = @truncate(indices.len);
-            data.index_size = @sizeOf(std.meta.Elem(@TypeOf(indices)));
-            data.index_buffer_offset = try self.index_buffer.allocAndUpload(std.mem.sliceAsBytes(indices));
-        }
-
-        data.generation = if (geometry.generation) |g| g +% 1 else 0;
-
-        if (is_reupload) {
-            try self.vertex_buffer.free(
-                prev_internal_data.vertex_buffer_offset,
-                prev_internal_data.vertex_count * prev_internal_data.vertex_size,
-            );
-
-            if (prev_internal_data.index_count > 0) {
-                try self.index_buffer.free(
-                    prev_internal_data.index_buffer_offset,
-                    prev_internal_data.index_count * prev_internal_data.index_size,
-                );
-            }
-        }
-    } else {
-        return error.FaildToReserveInternalData;
-    }
-}
-
-pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {
-    if (geometry.internal_id != null) {
-        self.device_api.deviceWaitIdle(self.device) catch {
-            std.log.err("Could not destroy geometry {s}", .{geometry.name.slice()});
-        };
-
-        const internal_data = &self.geometries[geometry.internal_id.?];
-
-        self.vertex_buffer.free(
-            internal_data.vertex_buffer_offset,
-            internal_data.vertex_size,
-        ) catch unreachable;
-
-        if (internal_data.index_size > 0) {
-            self.index_buffer.free(
-                internal_data.index_buffer_offset,
-                internal_data.index_size,
-            ) catch unreachable;
-        }
-
-        internal_data.* = std.mem.zeroes(GeometryData);
-        internal_data.id = null;
-        internal_data.generation = null;
     }
 }
 

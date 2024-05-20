@@ -287,8 +287,8 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     geometry_3d.material = zing.sys.material.acquireDefaultMaterial();
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
 
-    try zing.renderer.createGeometry(&geometry_3d, &vertices_3d, &indices_3d);
-    errdefer zing.renderer.destroyGeometry(&geometry_3d);
+    try geometry_3d.createGeometry(&vertices_3d, &indices_3d);
+    errdefer geometry_3d.destroyGeometry();
 
     self.default_geometry = try self.geometries.add(.{
         .geometry = geometry_3d,
@@ -310,8 +310,8 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     geometry_2d.material = zing.sys.material.acquireDefaultMaterial();
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
 
-    try zing.renderer.createGeometry(&geometry_2d, &vertices_2d, &indices_2d);
-    errdefer zing.renderer.destroyGeometry(&geometry_2d);
+    try geometry_2d.createGeometry(&vertices_2d, &indices_2d);
+    errdefer geometry_2d.destroyGeometry();
 
     self.default_geometry_2d = try self.geometries.add(.{
         .geometry = geometry_2d,
@@ -332,10 +332,10 @@ fn createGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !
         catch zing.sys.material.acquireDefaultMaterial();
     }
 
-    try zing.renderer.createGeometry(&temp_geometry, config.vertices, config.indices);
-    errdefer zing.renderer.destroyGeometry(&temp_geometry);
+    try temp_geometry.createGeometry(config.vertices, config.indices);
+    errdefer temp_geometry.destroyGeometry();
 
-    zing.renderer.destroyGeometry(geometry);
+    geometry.destroyGeometry();
     geometry.* = temp_geometry;
 }
 
@@ -344,7 +344,7 @@ fn destroyGeometry(self: *GeometrySystem, handle: GeometryHandle) void {
         std.log.info("GeometrySystem: Destroy geometry '{s}'", .{geometry.name.slice()});
 
         zing.sys.material.releaseMaterialByHandle(geometry.material);
-        zing.renderer.destroyGeometry(geometry);
+        geometry.destroyGeometry();
 
         self.geometries.removeAssumeLive(handle); // NOTE: this calls geometry.deinit()
     }
