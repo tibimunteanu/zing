@@ -690,7 +690,7 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
 }
 
 pub fn bind(self: *const Shader) void {
-    ctx().device_api.cmdBindPipeline(ctx().getCurrentCommandBuffer().handle, .graphics, self.pipeline);
+    ctx().device_api.cmdBindPipeline(Engine.instance.renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
 }
 
 pub fn bindGlobal(self: *Shader) void {
@@ -737,7 +737,7 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
         switch (p_uniform.scope) {
             .local => {
                 ctx().device_api.cmdPushConstants(
-                    ctx().getCurrentCommandBuffer().handle,
+                    Engine.instance.renderer.getCurrentCommandBuffer().handle,
                     self.pipeline_layout,
                     .{ .vertex_bit = true, .fragment_bit = true },
                     p_uniform.offset,
@@ -758,7 +758,7 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
 
 pub fn applyGlobal(self: *Shader) !void {
     const image_index = ctx().swapchain.image_index;
-    const command_buffer = ctx().getCurrentCommandBuffer();
+    const command_buffer = Engine.instance.renderer.getCurrentCommandBuffer();
     const descriptor_set = self.global_state.descriptor_sets.get(image_index);
 
     const buffer_info = vk.DescriptorBufferInfo{
@@ -808,7 +808,7 @@ pub fn applyGlobal(self: *Shader) !void {
 
 pub fn applyInstance(self: *Shader) !void {
     const image_index = ctx().swapchain.image_index;
-    const command_buffer = ctx().getCurrentCommandBuffer();
+    const command_buffer = Engine.instance.renderer.getCurrentCommandBuffer();
 
     if (self.instance_state_pool.getColumnPtrIfLive(self.ubo_bound_instance_handle, .instance_state)) |instance_state| {
         const descriptor_set = instance_state.descriptor_sets.get(image_index);
@@ -974,8 +974,8 @@ inline fn parseVkShaderStageFlags(stage_type: []const u8) !vk.ShaderStageFlags {
 }
 
 inline fn parseVkRenderPass(render_pass_name: []const u8) !vk.RenderPass {
-    if (std.mem.eql(u8, render_pass_name, "world")) return ctx().world_render_pass.handle;
-    if (std.mem.eql(u8, render_pass_name, "ui")) return ctx().ui_render_pass.handle;
+    if (std.mem.eql(u8, render_pass_name, "world")) return Engine.instance.renderer.world_render_pass.handle;
+    if (std.mem.eql(u8, render_pass_name, "ui")) return Engine.instance.renderer.ui_render_pass.handle;
 
     return error.UnknownRenderPass;
 }

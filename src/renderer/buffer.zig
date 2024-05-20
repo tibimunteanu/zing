@@ -1,5 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
+const Engine = @import("../engine.zig");
 const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const FreeList = @import("../free_list.zig");
@@ -123,11 +124,16 @@ pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
 
     try staging_buffer.loadData(0, self.total_size, .{}, data);
 
-    try staging_buffer.copyTo(self, self.context.graphics_command_pool, self.context.graphics_queue.handle, vk.BufferCopy{
-        .src_offset = 0,
-        .dst_offset = offset,
-        .size = data.len,
-    });
+    try staging_buffer.copyTo(
+        self,
+        Engine.instance.renderer.graphics_command_pool,
+        Engine.instance.renderer.context.graphics_queue.handle,
+        vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = offset,
+            .size = data.len,
+        },
+    );
 }
 
 pub fn loadData(

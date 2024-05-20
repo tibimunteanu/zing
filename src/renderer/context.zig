@@ -5,13 +5,8 @@ const vk = @import("vk.zig");
 const math = @import("zmath");
 
 const Swapchain = @import("swapchain.zig");
-const RenderPass = @import("renderpass.zig");
-const CommandBuffer = @import("command_buffer.zig");
-
-const config = @import("../config.zig");
 
 const Allocator = std.mem.Allocator;
-const Array = std.BoundedArray;
 
 const Context = @This();
 
@@ -133,11 +128,6 @@ const desired_depth_formats: []const vk.Format = &[_]vk.Format{
     .d24_unorm_s8_uint,
 };
 
-// NOTE: used to:
-// - prep instance and device extensions
-// - enumerate physical devices
-// - passed to the swapchain to enumerate surface formats and presentation modes
-// - allocate internal data on createTexture calls
 allocator: Allocator,
 
 base_api: BaseAPI,
@@ -156,20 +146,8 @@ transfer_queue: Queue,
 
 swapchain: Swapchain,
 
-framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
-world_framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
-
-world_render_pass: RenderPass,
-ui_render_pass: RenderPass,
-
-graphics_command_pool: vk.CommandPool,
-graphics_command_buffers: Array(CommandBuffer, config.swapchain_max_images),
-
 desired_extent: glfw.Window.Size,
 desired_extent_generation: u32,
-
-frame_index: u64,
-delta_time: f32,
 
 // public
 pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !void {
@@ -213,77 +191,18 @@ pub fn init(self: *Context, allocator: Allocator, app_name: [*:0]const u8, windo
     self.swapchain = try Swapchain.init(allocator, self, .{});
     errdefer self.swapchain.deinit();
 
-    // create command pool
-    self.graphics_command_pool = try self.device_api.createCommandPool(
-        self.device,
-        &vk.CommandPoolCreateInfo{
-            .queue_family_index = self.graphics_queue.family_index,
-            .flags = .{ .reset_command_buffer_bit = true },
-        },
-        null,
-    );
-    errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
-
-    // create command buffers
-    try self.initCommandBuffers();
-    errdefer self.deinitCommandBuffers();
-
-    // create renderpasses
-    self.world_render_pass = try RenderPass.init(
-        self,
-        .{
-            .clear_flags = .{
-                .color = true,
-                .depth = true,
-                .stencil = true,
-            },
-            .clear_values = .{
-                .color = [_]f32{ 0.1, 0.2, 0.6, 1.0 },
-                .depth = 1.0,
-                .stencil = 0,
-            },
-            .has_prev = false,
-            .has_next = true,
-        },
-    );
-    errdefer self.world_render_pass.deinit();
-
-    self.ui_render_pass = try RenderPass.init(
-        self,
-        .{
-            .has_prev = true,
-            .has_next = false,
-        },
-    );
-    errdefer self.ui_render_pass.deinit();
-
-    // create framebuffers
-    try self.initFramebuffers();
-    errdefer self.deinitFramebuffers();
-
-    self.frame_index = 0;
-    self.delta_time = config.target_frame_seconds;
-
     std.log.info("Graphics device: {?s}", .{
-        self.context.physical_device.properties.device_name,
+        self.physical_device.properties.device_name,
     });
     std.log.info("GQ: {}, PQ: {}, CQ: {}, TQ: {}", .{
-        self.context.graphics_queue.family_index,
-        self.context.present_queue.family_index,
-        self.context.compute_queue.family_index,
-        self.context.transfer_queue.family_index,
+        self.graphics_queue.family_index,
+        self.present_queue.family_index,
+        self.compute_queue.family_index,
+        self.transfer_queue.family_index,
     });
 }
 
 pub fn deinit(self: *Context) void {
-    self.deinitFramebuffers();
-
-    self.ui_render_pass.deinit();
-    self.world_render_pass.deinit();
-
-    self.deinitCommandBuffers();
-    self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
-
     self.swapchain.deinit();
 
     self.device_api.destroyDevice(self.device, null);
@@ -314,94 +233,6 @@ pub fn allocate(self: *const Context, requirements: vk.MemoryRequirements, flags
         .allocation_size = requirements.size,
         .memory_type_index = try self.getMemoryIndex(requirements.memory_type_bits, flags),
     }, null);
-}
-
-pub fn beginFrame(self: *Context, delta_time: f32) !bool {
-    self.delta_time = delta_time;
-
-    if (self.desired_extent_generation != self.swapchain.extent_generation) {
-        // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
-        // which is handled by endFrame() by recreating resources, but this way we avoid a best practices warning
-        try self.reinitSwapchainFramebuffersAndCmdBuffers();
-        return false;
-    }
-
-    const current_image = self.swapchain.getCurrentImage();
-    const command_buffer = self.getCurrentCommandBuffer();
-
-    // make sure the current frame has finished rendering.
-    // NOTE: the fences start signaled so the first frame can get past them.
-    try current_image.waitForFrameFence(.{ .reset = true });
-
-    try command_buffer.begin(.{});
-
-    const viewport: vk.Viewport = .{
-        .x = 0.0,
-        .y = @floatFromInt(self.swapchain.extent.height),
-        .width = @floatFromInt(self.swapchain.extent.width),
-        .height = @floatFromInt(-@as(i32, @intCast(self.swapchain.extent.height))),
-        .min_depth = 0.0,
-        .max_depth = 1.0,
-    };
-
-    const scissor: vk.Rect2D = .{
-        .offset = .{ .x = 0, .y = 0 },
-        .extent = self.swapchain.extent,
-    };
-
-    self.device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
-    self.device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
-
-    return true;
-}
-
-pub fn endFrame(self: *Context) !void {
-    const current_image = self.swapchain.getCurrentImage();
-    var command_buffer = self.getCurrentCommandBuffer();
-
-    // end the command buffer
-    try command_buffer.end();
-
-    // submit the command buffer
-    try self.device_api.queueSubmit(
-        self.graphics_queue.handle,
-        1,
-        @ptrCast(&vk.SubmitInfo{
-            .wait_semaphore_count = 1,
-            .p_wait_semaphores = @ptrCast(&current_image.image_acquired_semaphore),
-            .p_wait_dst_stage_mask = @ptrCast(&vk.PipelineStageFlags{ .color_attachment_output_bit = true }),
-            .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast(&command_buffer.handle),
-            .signal_semaphore_count = 1,
-            .p_signal_semaphores = @ptrCast(&current_image.render_finished_semaphore),
-        }),
-        current_image.frame_fence,
-    );
-
-    const state = self.swapchain.present() catch |err| switch (err) {
-        error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
-        else => |narrow| return narrow,
-    };
-
-    // NOTE: we should always recreate resources when error.OutOfDateKHR, but here,
-    // we decided to also always recreate resources when the result is .suboptimal.
-    // this should be configurable, so that you can choose if you only want to recreate on error.
-    if (state == .suboptimal) {
-        std.log.info("endFrame() Present was suboptimal. Recreating resources.", .{});
-        try self.reinitSwapchainFramebuffersAndCmdBuffers();
-    }
-}
-
-pub fn getCurrentCommandBuffer(self: *const Context) *const CommandBuffer {
-    return &self.graphics_command_buffers.constSlice()[self.swapchain.image_index];
-}
-
-pub fn getCurrentFramebuffer(self: *const Context) vk.Framebuffer {
-    return self.framebuffers.constSlice()[self.swapchain.image_index];
-}
-
-pub fn getCurrentWorldFramebuffer(self: *const Context) vk.Framebuffer {
-    return self.world_framebuffers.constSlice()[self.swapchain.image_index];
 }
 
 // utils
@@ -551,112 +382,6 @@ fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_
     }, null);
 
     return device;
-}
-
-fn initCommandBuffers(self: *Context) !void {
-    errdefer self.deinitCommandBuffers();
-
-    try self.graphics_command_buffers.resize(0);
-    for (0..self.swapchain.images.len) |_| {
-        try self.graphics_command_buffers.append(
-            try CommandBuffer.init(self, self.graphics_command_pool, .{}),
-        );
-    }
-}
-
-fn deinitCommandBuffers(self: *Context) void {
-    for (self.graphics_command_buffers.slice()) |*buffer| {
-        if (buffer.handle != .null_handle) {
-            buffer.deinit();
-        }
-    }
-    self.graphics_command_buffers.len = 0;
-}
-
-fn initFramebuffers(self: *Context) !void {
-    errdefer self.deinitFramebuffers();
-
-    try self.world_framebuffers.resize(0);
-    for (self.swapchain.images.slice()) |image| {
-        const attachments = [_]vk.ImageView{
-            image.view,
-            self.swapchain.depth_image.view,
-        };
-
-        try self.world_framebuffers.append(
-            try self.device_api.createFramebuffer(
-                self.device,
-                &vk.FramebufferCreateInfo{
-                    .render_pass = self.world_render_pass.handle,
-                    .attachment_count = @intCast(attachments.len),
-                    .p_attachments = &attachments,
-                    .width = self.swapchain.extent.width,
-                    .height = self.swapchain.extent.height,
-                    .layers = 1,
-                },
-                null,
-            ),
-        );
-    }
-
-    try self.framebuffers.resize(0);
-    for (self.swapchain.images.slice()) |image| {
-        const attachments = [_]vk.ImageView{
-            image.view,
-        };
-
-        try self.framebuffers.append(
-            try self.device_api.createFramebuffer(
-                self.device,
-                &vk.FramebufferCreateInfo{
-                    .render_pass = self.ui_render_pass.handle,
-                    .attachment_count = @intCast(attachments.len),
-                    .p_attachments = &attachments,
-                    .width = self.swapchain.extent.width,
-                    .height = self.swapchain.extent.height,
-                    .layers = 1,
-                },
-                null,
-            ),
-        );
-    }
-}
-
-fn deinitFramebuffers(self: *Context) void {
-    for (self.framebuffers.slice()) |framebuffer| {
-        if (framebuffer != .null_handle) {
-            self.device_api.destroyFramebuffer(self.device, framebuffer, null);
-        }
-    }
-    self.framebuffers.len = 0;
-
-    for (self.world_framebuffers.slice()) |framebuffer| {
-        if (framebuffer != .null_handle) {
-            self.device_api.destroyFramebuffer(self.device, framebuffer, null);
-        }
-    }
-    self.world_framebuffers.len = 0;
-}
-
-fn reinitSwapchainFramebuffersAndCmdBuffers(self: *Context) !void {
-    if (self.desired_extent.width == 0 or self.desired_extent.height == 0) {
-        // NOTE: don't bother recreating resources if width or height are 0
-        return;
-    }
-
-    try self.device_api.deviceWaitIdle(self.device);
-
-    try self.swapchain.reinit();
-    errdefer self.swapchain.deinit();
-
-    self.deinitFramebuffers();
-    try self.initFramebuffers();
-    errdefer self.deinitFramebuffers();
-
-    self.deinitCommandBuffers();
-    try self.initCommandBuffers();
-
-    self.swapchain.extent_generation = self.desired_extent_generation;
 }
 
 const PhysicalDevice = struct {

@@ -105,7 +105,7 @@ pub fn init(
 
     try staging_buffer.loadData(0, image_size, .{}, pixels);
 
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(ctx, ctx.graphics_command_pool);
+    var command_buffer = try CommandBuffer.initAndBeginSingleUse(ctx, Engine.instance.renderer.graphics_command_pool);
 
     try self.image.pipelineImageBarrier(
         &command_buffer,
