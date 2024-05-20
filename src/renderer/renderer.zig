@@ -516,7 +516,14 @@ pub fn endFrame(self: *Renderer) !void {
 pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
     if (try self.beginFrame(packet.delta_time)) {
         try self.beginRenderPass(.world);
-        try self.updateGlobalWorldState(self.projection, self.view);
+
+        self.phong_shader.bindGlobal();
+
+        try self.phong_shader.setUniform("projection", self.projection);
+        try self.phong_shader.setUniform("view", self.view);
+
+        try self.phong_shader.applyGlobal();
+
         for (packet.geometries) |geometry| {
             try self.drawGeometry(geometry);
         }
@@ -524,7 +531,14 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
         try self.endRenderPass(.world);
 
         try self.beginRenderPass(.ui);
-        try self.updateGlobalUIState(self.ui_projection, self.ui_view);
+
+        self.ui_shader.bindGlobal();
+
+        try self.ui_shader.setUniform("projection", self.ui_projection);
+        try self.ui_shader.setUniform("view", self.ui_view);
+
+        try self.ui_shader.applyGlobal();
+
         for (packet.ui_geometries) |ui_geometry| {
             try self.drawGeometry(ui_geometry);
         }
@@ -716,24 +730,6 @@ pub fn endRenderPass(self: *Renderer, render_pass_type: RenderPass.Type) !void {
         .world => self.world_render_pass.end(command_buffer),
         .ui => self.ui_render_pass.end(command_buffer),
     }
-}
-
-pub fn updateGlobalWorldState(self: *Renderer, projection: math.Mat, view: math.Mat) !void {
-    self.phong_shader.bindGlobal();
-
-    try self.phong_shader.setUniform("projection", projection);
-    try self.phong_shader.setUniform("view", view);
-
-    try self.phong_shader.applyGlobal();
-}
-
-pub fn updateGlobalUIState(self: *Renderer, projection: math.Mat, view: math.Mat) !void {
-    self.ui_shader.bindGlobal();
-
-    try self.ui_shader.setUniform("projection", projection);
-    try self.ui_shader.setUniform("view", view);
-
-    try self.ui_shader.applyGlobal();
 }
 
 // utils
