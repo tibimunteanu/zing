@@ -28,8 +28,8 @@ const names = [_][]const u8{
     "paving",
     "paving2",
 };
-test_geometry: GeometryHandle,
-test_ui_geometry: GeometryHandle,
+var test_geometry = GeometryHandle.nil;
+var test_ui_geometry = GeometryHandle.nil;
 // TODO: end temporary
 
 allocator: Allocator,
@@ -62,7 +62,7 @@ pub fn init(allocator: Allocator) !void {
     };
     errdefer zing.engine.window.destroy();
 
-    try zing.renderer.init(allocator, zing.engine.window);
+    try zing.renderer.init(allocator);
     errdefer zing.renderer.deinit();
 
     try zing.sys.texture.init(allocator);
@@ -91,7 +91,7 @@ pub fn init(allocator: Allocator) !void {
     );
     defer test_plane_config.deinit();
 
-    zing.engine.test_geometry = try zing.sys.geometry.acquireGeometryByConfig(
+    test_geometry = try zing.sys.geometry.acquireGeometryByConfig(
         test_plane_config,
         .{ .auto_release = true },
     );
@@ -111,7 +111,7 @@ pub fn init(allocator: Allocator) !void {
     );
     defer test_ui_plane_config.deinit();
 
-    zing.engine.test_ui_geometry = try zing.sys.geometry.acquireGeometryByConfig(
+    test_ui_geometry = try zing.sys.geometry.acquireGeometryByConfig(
         test_ui_plane_config,
         .{ .auto_release = true },
     );
@@ -145,13 +145,13 @@ pub fn run() !void {
                 .geometries = &[_]GeometryRenderData{
                     GeometryRenderData{
                         .model = math.mul(math.translation(-5.0, 0.0, 0.0), math.rotationY(0.0)),
-                        .geometry = zing.engine.test_geometry,
+                        .geometry = test_geometry,
                     },
                 },
                 .ui_geometries = &[_]GeometryRenderData{
                     GeometryRenderData{
                         .model = math.translation(256.0, 256.0, 0.0),
-                        .geometry = zing.engine.test_ui_geometry,
+                        .geometry = test_ui_geometry,
                     },
                 },
             };
@@ -221,7 +221,7 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
         choice += 1;
         choice %= names.len;
 
-        if (zing.sys.geometry.getIfExists(self.test_geometry)) |geometry| {
+        if (zing.sys.geometry.getIfExists(test_geometry)) |geometry| {
             const material = try zing.sys.material.get(geometry.material);
 
             const prev_texture = material.diffuse_map.texture;

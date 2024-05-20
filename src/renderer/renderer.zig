@@ -218,10 +218,10 @@ desired_extent_generation: u32,
 frame_index: u64,
 delta_time: f32,
 
-pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
+pub fn init(self: *Renderer, allocator: Allocator) !void {
     self.allocator = allocator;
 
-    self.desired_extent = window.getFramebufferSize();
+    self.desired_extent = zing.engine.window.getFramebufferSize();
     self.desired_extent_generation = 0;
 
     // load base api
@@ -236,7 +236,7 @@ pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
     errdefer self.instance_api.destroyInstance(self.instance, null);
 
     // create surface
-    self.surface = try createSurface(self.instance, window);
+    self.surface = try createSurface(self.instance);
     errdefer self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
 
     // pick a suitable physical device
@@ -352,8 +352,8 @@ pub fn init(self: *Renderer, allocator: Allocator, window: glfw.Window) !void {
     self.near_clip = 0.1;
     self.far_clip = 1000.0;
 
-    window.setFramebufferSizeCallback(framebufferSizeCallback);
-    self.setProjection(window.getFramebufferSize());
+    zing.engine.window.setFramebufferSizeCallback(framebufferSizeCallback);
+    self.setProjection(zing.engine.window.getFramebufferSize());
 
     self.frame_index = 0;
     self.delta_time = config.target_frame_seconds;
@@ -674,9 +674,9 @@ fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const 
     return instance;
 }
 
-fn createSurface(instance: vk.Instance, window: glfw.Window) !vk.SurfaceKHR {
+fn createSurface(instance: vk.Instance) !vk.SurfaceKHR {
     var surface: vk.SurfaceKHR = undefined;
-    if (glfw.createWindowSurface(instance, window, null, &surface) != @intFromEnum(vk.Result.success)) {
+    if (glfw.createWindowSurface(instance, zing.engine.window, null, &surface) != @intFromEnum(vk.Result.success)) {
         return error.SurfaceCreationFailed;
     }
     return surface;
@@ -769,18 +769,6 @@ fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_
     }, null);
 
     return device;
-}
-
-fn setProjection(self: *Renderer, size: glfw.Window.Size) void {
-    const width = @as(f32, @floatFromInt(size.width));
-    const height = @as(f32, @floatFromInt(size.height));
-
-    self.projection = math.perspectiveFovLh(self.fov, width / height, self.near_clip, self.far_clip);
-    self.ui_projection = math.orthographicOffCenterLh(0, width, height, 0, -1.0, 1.0);
-}
-
-fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
-    zing.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
 }
 
 fn initFramebuffers(self: *Renderer) !void {
@@ -887,6 +875,18 @@ fn reinitSwapchainFramebuffersAndCmdBuffers(self: *Renderer) !void {
     try self.initCommandBuffers();
 
     self.swapchain.extent_generation = self.desired_extent_generation;
+}
+
+fn setProjection(self: *Renderer, size: glfw.Window.Size) void {
+    const width: f32 = @floatFromInt(size.width);
+    const height: f32 = @floatFromInt(size.height);
+
+    self.projection = math.perspectiveFovLh(self.fov, width / height, self.near_clip, self.far_clip);
+    self.ui_projection = math.orthographicOffCenterLh(0, width, height, 0, -1.0, 1.0);
+}
+
+fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
+    zing.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
 }
 
 const PhysicalDevice = struct {

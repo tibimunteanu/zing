@@ -196,9 +196,16 @@ pub fn acquireGeometryByConfig(
         auto_release: bool,
     },
 ) !GeometryHandle {
-    var geometry = Geometry.init();
+    const material_handle = zing.sys.material.acquireMaterialByName(config.material_name) //
+    catch zing.sys.material.acquireDefaultMaterial();
 
-    try self.createGeometry(config, &geometry);
+    var geometry = try Geometry.init(
+        config.name,
+        material_handle,
+        config.vertices,
+        config.indices,
+    );
+    geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
 
     const handle = try self.geometries.add(.{
         .geometry = geometry,
@@ -282,13 +289,13 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
 
     const indices_3d = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
-    var geometry_3d = Geometry.init();
-    geometry_3d.name = try Array(u8, 256).fromSlice(default_geometry_name);
-    geometry_3d.material = zing.sys.material.acquireDefaultMaterial();
+    var geometry_3d = try Geometry.init(
+        default_geometry_name,
+        zing.sys.material.acquireDefaultMaterial(),
+        &vertices_3d,
+        &indices_3d,
+    );
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
-
-    try geometry_3d.createGeometry(&vertices_3d, &indices_3d);
-    errdefer geometry_3d.destroyGeometry();
 
     self.default_geometry = try self.geometries.add(.{
         .geometry = geometry_3d,
@@ -305,13 +312,13 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
 
     const indices_2d = [_]u32{ 0, 1, 2, 0, 2, 3 };
 
-    var geometry_2d = Geometry.init();
-    geometry_2d.name = try Array(u8, 256).fromSlice(default_geometry_2d_name);
-    geometry_2d.material = zing.sys.material.acquireDefaultMaterial();
+    var geometry_2d = try Geometry.init(
+        default_geometry_2d_name,
+        zing.sys.material.acquireDefaultMaterial(),
+        &vertices_2d,
+        &indices_2d,
+    );
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
-
-    try geometry_2d.createGeometry(&vertices_2d, &indices_2d);
-    errdefer geometry_2d.destroyGeometry();
 
     self.default_geometry_2d = try self.geometries.add(.{
         .geometry = geometry_2d,
@@ -320,31 +327,11 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
     });
 }
 
-fn createGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !void {
-    _ = self;
-
-    var temp_geometry = Geometry.init();
-    temp_geometry.name = try Array(u8, 256).fromSlice(config.name);
-    temp_geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
-
-    if (config.material_name.len > 0) {
-        temp_geometry.material = zing.sys.material.acquireMaterialByName(config.material_name) //
-        catch zing.sys.material.acquireDefaultMaterial();
-    }
-
-    try temp_geometry.createGeometry(config.vertices, config.indices);
-    errdefer temp_geometry.destroyGeometry();
-
-    geometry.destroyGeometry();
-    geometry.* = temp_geometry;
-}
-
 fn destroyGeometry(self: *GeometrySystem, handle: GeometryHandle) void {
     if (self.geometries.getColumnPtrIfLive(handle, .geometry)) |geometry| {
         std.log.info("GeometrySystem: Destroy geometry '{s}'", .{geometry.name.slice()});
 
         zing.sys.material.releaseMaterialByHandle(geometry.material);
-        geometry.destroyGeometry();
 
         self.geometries.removeAssumeLive(handle); // NOTE: this calls geometry.deinit()
     }

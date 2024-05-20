@@ -17,42 +17,31 @@ pub const GeometryData = struct {
     index_buffer_offset: u64,
 };
 
-name: Array(u8, 256) = .{},
-material: MaterialHandle = MaterialHandle.nil,
-generation: ?u32 = null,
-internal_id: ?u32 = null,
+name: Array(u8, 256),
+material: MaterialHandle,
+generation: ?u32,
+internal_id: ?u32,
 
-pub fn init() Geometry {
-    return .{};
-}
+pub fn init(name: []const u8, material: MaterialHandle, vertices: anytype, indices: anytype) !Geometry {
+    var self: Geometry = undefined;
+    self.name = try Array(u8, 256).fromSlice(name);
+    self.material = material;
+    self.generation = null;
+    self.internal_id = null;
 
-pub fn deinit(self: *Geometry) void {
-    self.* = .{};
-}
-
-pub fn createGeometry(self: *Geometry, vertices: anytype, indices: anytype) !void {
     if (vertices.len == 0) {
         return error.VerticesCannotBeEmpty;
     }
 
-    var prev_internal_data: GeometryData = undefined;
     var internal_data: ?*GeometryData = null;
 
-    const is_reupload = self.internal_id != null;
-    if (is_reupload) {
-        internal_data = &zing.renderer.geometries[self.internal_id.?];
-
-        // take a copy of the old region
-        prev_internal_data = internal_data.?.*;
-    } else {
-        for (&zing.renderer.geometries, 0..) |*slot, i| {
-            if (slot.id == null) {
-                const id: u32 = @truncate(i);
-                self.internal_id = id;
-                slot.*.id = id;
-                internal_data = slot;
-                break;
-            }
+    for (&zing.renderer.geometries, 0..) |*slot, i| {
+        if (slot.id == null) {
+            const id: u32 = @truncate(i);
+            self.internal_id = id;
+            slot.*.id = id;
+            internal_data = slot;
+            break;
         }
     }
 
@@ -68,26 +57,14 @@ pub fn createGeometry(self: *Geometry, vertices: anytype, indices: anytype) !voi
         }
 
         data.generation = if (self.generation) |g| g +% 1 else 0;
-
-        if (is_reupload) {
-            try zing.renderer.vertex_buffer.free(
-                prev_internal_data.vertex_buffer_offset,
-                prev_internal_data.vertex_count * prev_internal_data.vertex_size,
-            );
-
-            if (prev_internal_data.index_count > 0) {
-                try zing.renderer.index_buffer.free(
-                    prev_internal_data.index_buffer_offset,
-                    prev_internal_data.index_count * prev_internal_data.index_size,
-                );
-            }
-        }
     } else {
         return error.FaildToReserveInternalData;
     }
+
+    return self;
 }
 
-pub fn destroyGeometry(self: *Geometry) void {
+pub fn deinit(self: *Geometry) void {
     if (self.internal_id != null) {
         zing.renderer.device_api.deviceWaitIdle(zing.renderer.device) catch {
             std.log.err("Could not destroy geometry {s}", .{self.name.slice()});
@@ -111,4 +88,6 @@ pub fn destroyGeometry(self: *Geometry) void {
         internal_data.id = null;
         internal_data.generation = null;
     }
+
+    self.* = undefined;
 }
