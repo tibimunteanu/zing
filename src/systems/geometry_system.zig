@@ -272,7 +272,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
 
     var geometry_3d = Geometry.init();
     geometry_3d.name = try Array(u8, 256).fromSlice(default_geometry_name);
-    geometry_3d.material = Engine.instance.material_system.acquireDefaultMaterial();
+    geometry_3d.material = Engine.sys.material.acquireDefaultMaterial();
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
 
     try Engine.renderer.createGeometry(&geometry_3d, &vertices_3d, &indices_3d);
@@ -295,7 +295,7 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
 
     var geometry_2d = Geometry.init();
     geometry_2d.name = try Array(u8, 256).fromSlice(default_geometry_2d_name);
-    geometry_2d.material = Engine.instance.material_system.acquireDefaultMaterial();
+    geometry_2d.material = Engine.sys.material.acquireDefaultMaterial();
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
 
     try Engine.renderer.createGeometry(&geometry_2d, &vertices_2d, &indices_2d);
@@ -316,8 +316,8 @@ fn createGeometry(self: *GeometrySystem, config: anytype, geometry: *Geometry) !
     temp_geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
 
     if (config.material_name.len > 0) {
-        temp_geometry.material = Engine.instance.material_system.acquireMaterialByName(config.material_name) //
-        catch Engine.instance.material_system.acquireDefaultMaterial();
+        temp_geometry.material = Engine.sys.material.acquireMaterialByName(config.material_name) //
+        catch Engine.sys.material.acquireDefaultMaterial();
     }
 
     try Engine.renderer.createGeometry(&temp_geometry, config.vertices, config.indices);
@@ -331,7 +331,7 @@ fn destroyGeometry(self: *GeometrySystem, handle: GeometryHandle) void {
     if (self.geometries.getColumnPtrIfLive(handle, .geometry)) |geometry| {
         std.log.info("GeometrySystem: Destroy geometry '{s}'", .{geometry.name.slice()});
 
-        Engine.instance.material_system.releaseMaterialByHandle(geometry.material);
+        Engine.sys.material.releaseMaterialByHandle(geometry.material);
         Engine.renderer.destroyGeometry(geometry);
 
         self.geometries.removeAssumeLive(handle); // NOTE: this calls geometry.deinit()

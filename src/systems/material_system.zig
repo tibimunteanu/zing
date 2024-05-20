@@ -144,7 +144,7 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     material.diffuse_color = math.Vec{ 1, 1, 1, 1 };
     material.diffuse_map = .{
         .use = .map_diffuse,
-        .texture = Engine.instance.texture_system.acquireDefaultTexture(),
+        .texture = Engine.sys.texture.acquireDefaultTexture(),
     };
     material.generation = null; // NOTE: default material always has null generation
 
@@ -170,10 +170,10 @@ fn createMaterial(self: *MaterialSystem, config: Material.Config, material: *Mat
     if (config.diffuse_map_name.len > 0) {
         temp_material.diffuse_map = TextureMap{
             .use = .map_diffuse,
-            .texture = Engine.instance.texture_system.acquireTextureByName(
+            .texture = Engine.sys.texture.acquireTextureByName(
                 config.diffuse_map_name,
                 .{ .auto_release = true },
-            ) catch Engine.instance.texture_system.acquireDefaultTexture(),
+            ) catch Engine.sys.texture.acquireDefaultTexture(),
         };
     }
 
@@ -192,7 +192,7 @@ fn destroyMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
 
         const material_name = material.name; // NOTE: take a copy of the name
 
-        Engine.instance.texture_system.releaseTextureByHandle(material.diffuse_map.texture);
+        Engine.sys.texture.releaseTextureByHandle(material.diffuse_map.texture);
         Engine.renderer.destroyMaterial(material);
 
         self.materials.removeAssumeLive(handle); // NOTE: this calls material.deinit()

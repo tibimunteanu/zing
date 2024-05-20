@@ -21,8 +21,13 @@ const Allocator = std.mem.Allocator;
 
 const Engine = @This();
 
-pub var instance: Engine = undefined;
+pub var engine: Engine = undefined;
 pub var renderer: Renderer = undefined;
+pub var sys: struct {
+    texture: TextureSystem,
+    material: MaterialSystem,
+    geometry: GeometrySystem,
+} = undefined;
 
 // TODO: temporary
 var choice: usize = 2;
@@ -37,9 +42,6 @@ test_ui_geometry: GeometryHandle,
 
 allocator: Allocator,
 window: glfw.Window,
-texture_system: *TextureSystem,
-material_system: *MaterialSystem,
-geometry_system: *GeometrySystem,
 last_time: f64,
 
 var camera_view: math.Mat = undefined;
@@ -50,7 +52,7 @@ var camera_euler: math.Vec = math.splat(math.Vec, 0.0); // pitch, yaw, roll
 var prevPressN: glfw.Action = .release;
 
 pub fn init(allocator: Allocator) !void {
-    instance.allocator = allocator;
+    engine.allocator = allocator;
 
     glfw.setErrorCallback(errorCallback);
 
@@ -60,37 +62,28 @@ pub fn init(allocator: Allocator) !void {
     }
     errdefer glfw.terminate();
 
-    instance.window = glfw.Window.create(960, 540, "Zing", null, null, .{
+    engine.window = glfw.Window.create(960, 540, "Zing", null, null, .{
         .client_api = .no_api,
     }) orelse return blk: {
         std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
         break :blk error.CreateWindowFailed;
     };
-    errdefer instance.window.destroy();
+    errdefer engine.window.destroy();
 
-    try renderer.init(allocator, instance.window);
+    try renderer.init(allocator, engine.window);
     errdefer renderer.deinit();
 
-    instance.texture_system = try allocator.create(TextureSystem);
-    errdefer allocator.destroy(instance.texture_system);
+    try sys.texture.init(allocator);
+    errdefer sys.texture.deinit();
 
-    try instance.texture_system.init(allocator);
-    errdefer instance.texture_system.deinit();
+    try sys.material.init(allocator);
+    errdefer sys.material.deinit();
 
-    instance.material_system = try allocator.create(MaterialSystem);
-    errdefer allocator.destroy(instance.material_system);
-
-    try instance.material_system.init(allocator);
-    errdefer instance.material_system.deinit();
-
-    instance.geometry_system = try allocator.create(GeometrySystem);
-    errdefer allocator.destroy(instance.geometry_system);
-
-    try instance.geometry_system.init(allocator);
-    errdefer instance.geometry_system.deinit();
+    try sys.geometry.init(allocator);
+    errdefer sys.geometry.deinit();
 
     // TODO: temporary
-    // instance.test_geometry = instance.geometry_system.getDefaultGeometry();
+    // instance.test_geometry = .getDefaultGeometry();
     var test_plane_config = try GeometrySystem.GeometryConfig(Vertex3D, u32).initPlane(
         allocator,
         .{
@@ -106,7 +99,7 @@ pub fn init(allocator: Allocator) !void {
     );
     defer test_plane_config.deinit();
 
-    instance.test_geometry = try instance.geometry_system.acquireGeometryByConfig(
+    engine.test_geometry = try sys.geometry.acquireGeometryByConfig(
         test_plane_config,
         .{ .auto_release = true },
     );
@@ -126,7 +119,7 @@ pub fn init(allocator: Allocator) !void {
     );
     defer test_ui_plane_config.deinit();
 
-    instance.test_ui_geometry = try instance.geometry_system.acquireGeometryByConfig(
+    engine.test_ui_geometry = try sys.geometry.acquireGeometryByConfig(
         test_ui_plane_config,
         .{ .auto_release = true },
     );
@@ -134,45 +127,39 @@ pub fn init(allocator: Allocator) !void {
 }
 
 pub fn deinit() void {
-    instance.geometry_system.deinit();
-    instance.allocator.destroy(instance.geometry_system);
-
-    instance.material_system.deinit();
-    instance.allocator.destroy(instance.material_system);
-
-    instance.texture_system.deinit();
-    instance.allocator.destroy(instance.texture_system);
-
+    sys.geometry.deinit();
+    sys.material.deinit();
+    sys.texture.deinit();
     renderer.deinit();
 
-    instance.window.destroy();
+    engine.window.destroy();
 
     glfw.terminate();
 }
 
 pub fn run() !void {
-    instance.last_time = glfw.getTime();
+    engine.last_time = glfw.getTime();
 
-    while (!instance.window.shouldClose()) {
-        if (instance.window.getAttrib(.iconified) == 0) {
+    while (!engine.window.shouldClose()) {
+        if (engine.window.getAttrib(.iconified) == 0) {
             const frame_start_time = glfw.getTime();
-            const precise_delta_time = frame_start_time - instance.last_time;
+            const precise_delta_time = frame_start_time - engine.last_time;
             const delta_time = @as(f32, @floatCast(precise_delta_time));
 
-            try instance.updateCamera(delta_time);
+            try engine.updateCamera(delta_time);
 
             const packet = RenderPacket{
                 .delta_time = delta_time,
                 .geometries = &[_]GeometryRenderData{
                     GeometryRenderData{
                         .model = math.mul(math.translation(-5.0, 0.0, 0.0), math.rotationY(0.0)),
-                        .geometry = instance.test_geometry,
+                        .geometry = engine.test_geometry,
                     },
                 },
                 .ui_geometries = &[_]GeometryRenderData{
                     GeometryRenderData{
                         .model = math.translation(256.0, 256.0, 0.0),
-                        .geometry = instance.test_ui_geometry,
+                        .geometry = engine.test_ui_geometry,
                     },
                 },
             };
@@ -184,7 +171,7 @@ pub fn run() !void {
             // const fps = 1.0 / frame_elapsed_time;
             // std.log.info("{d:.0}", .{fps});
 
-            instance.last_time = frame_start_time;
+            engine.last_time = frame_start_time;
         }
         glfw.pollEvents();
     }
@@ -242,15 +229,15 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
         choice += 1;
         choice %= names.len;
 
-        if (self.geometry_system.geometries.getColumnPtrIfLive(self.test_geometry, .geometry)) |geometry| {
-            const material = self.material_system.materials.getColumnPtrAssumeLive(geometry.material, .material);
+        if (sys.geometry.geometries.getColumnPtrIfLive(self.test_geometry, .geometry)) |geometry| {
+            const material = sys.material.materials.getColumnPtrAssumeLive(geometry.material, .material);
 
             const prev_texture = material.diffuse_map.texture;
-            material.diffuse_map.texture = try self.texture_system.acquireTextureByName(
+            material.diffuse_map.texture = try sys.texture.acquireTextureByName(
                 names[choice],
                 .{ .auto_release = true },
             );
-            self.texture_system.releaseTextureByHandle(prev_texture);
+            sys.texture.releaseTextureByHandle(prev_texture);
         }
     }
     prevPressN = pressN;

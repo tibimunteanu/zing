@@ -445,14 +445,14 @@ pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {
 pub fn drawGeometry(self: *Renderer, data: GeometryRenderData) !void {
     const command_buffer = self.getCurrentCommandBuffer();
 
-    const geometry: *Geometry = try Engine.instance.geometry_system.geometries.getColumnPtr(data.geometry, .geometry);
+    const geometry: *Geometry = try Engine.sys.geometry.geometries.getColumnPtr(data.geometry, .geometry);
 
-    const material_handle = if (Engine.instance.material_system.materials.isLiveHandle(geometry.material)) //
+    const material_handle = if (Engine.sys.material.materials.isLiveHandle(geometry.material)) //
         geometry.material
     else
-        Engine.instance.material_system.acquireDefaultMaterial();
+        Engine.sys.material.acquireDefaultMaterial();
 
-    const material: *Material = try Engine.instance.material_system.materials.getColumnPtr(material_handle, .material);
+    const material: *Material = try Engine.sys.material.materials.getColumnPtr(material_handle, .material);
 
     switch (material.material_type) {
         .world => {
