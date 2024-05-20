@@ -160,8 +160,7 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     };
     material.generation = null; // NOTE: default material always has null generation
 
-    try zing.renderer.createMaterial(&material);
-    errdefer zing.renderer.destroyMaterial(&material);
+    material.instance_handle = try zing.renderer.phong_shader.initInstance();
 
     self.default_material = try self.materials.add(.{
         .material = material,
@@ -174,6 +173,7 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
 
 fn createMaterial(self: *MaterialSystem, config: Material.Config, material: *Material) !void {
     _ = self;
+
     var temp_material = Material.init();
     temp_material.name = try Array(u8, 256).fromSlice(config.name);
     temp_material.material_type = if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world;
@@ -191,10 +191,18 @@ fn createMaterial(self: *MaterialSystem, config: Material.Config, material: *Mat
 
     temp_material.generation = if (material.generation) |g| g +% 1 else 0;
 
-    try zing.renderer.createMaterial(&temp_material);
-    errdefer zing.renderer.destroyMaterial(&temp_material);
+    switch (temp_material.material_type) {
+        .world => temp_material.instance_handle = try zing.renderer.phong_shader.initInstance(),
+        .ui => temp_material.instance_handle = try zing.renderer.ui_shader.initInstance(),
+    }
 
-    zing.renderer.destroyMaterial(material);
+    if (material.instance_handle) |instance_handle| {
+        switch (material.material_type) {
+            .world => zing.renderer.phong_shader.deinitInstance(instance_handle),
+            .ui => zing.renderer.ui_shader.deinitInstance(instance_handle),
+        }
+    }
+
     material.* = temp_material;
 }
 
@@ -205,7 +213,13 @@ fn destroyMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
         const material_name = material.name; // NOTE: take a copy of the name
 
         zing.sys.texture.releaseTextureByHandle(material.diffuse_map.texture);
-        zing.renderer.destroyMaterial(material);
+
+        if (material.instance_handle) |instance_handle| {
+            switch (material.material_type) {
+                .world => zing.renderer.phong_shader.deinitInstance(instance_handle),
+                .ui => zing.renderer.ui_shader.deinitInstance(instance_handle),
+            }
+        }
 
         self.materials.removeAssumeLive(handle); // NOTE: this calls material.deinit()
         _ = self.lookup.remove(material_name.slice());

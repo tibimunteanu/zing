@@ -550,22 +550,6 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
     }
 }
 
-pub fn createMaterial(self: *Renderer, material: *Material) !void {
-    switch (material.material_type) {
-        .world => material.instance_handle = try self.phong_shader.initInstance(),
-        .ui => material.instance_handle = try self.ui_shader.initInstance(),
-    }
-}
-
-pub fn destroyMaterial(self: *Renderer, material: *Material) void {
-    if (material.instance_handle) |instance_handle| {
-        switch (material.material_type) {
-            .world => self.phong_shader.deinitInstance(instance_handle),
-            .ui => self.ui_shader.deinitInstance(instance_handle),
-        }
-    }
-}
-
 pub fn createGeometry(self: *Renderer, geometry: *Geometry, vertices: anytype, indices: anytype) !void {
     if (vertices.len == 0) {
         return error.VerticesCannotBeEmpty;
