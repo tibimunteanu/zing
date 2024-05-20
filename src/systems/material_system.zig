@@ -2,7 +2,7 @@ const std = @import("std");
 const pool = @import("zpool");
 const math = @import("zmath");
 
-const Engine = @import("../engine.zig");
+const zing = @import("../zing.zig");
 const TextureSystem = @import("texture_system.zig");
 const Material = @import("../renderer/material.zig");
 const Texture = @import("../renderer/texture.zig");
@@ -144,12 +144,12 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     material.diffuse_color = math.Vec{ 1, 1, 1, 1 };
     material.diffuse_map = .{
         .use = .map_diffuse,
-        .texture = Engine.sys.texture.acquireDefaultTexture(),
+        .texture = zing.sys.texture.acquireDefaultTexture(),
     };
     material.generation = null; // NOTE: default material always has null generation
 
-    try Engine.renderer.createMaterial(&material);
-    errdefer Engine.renderer.destroyMaterial(&material);
+    try zing.renderer.createMaterial(&material);
+    errdefer zing.renderer.destroyMaterial(&material);
 
     self.default_material = try self.materials.add(.{
         .material = material,
@@ -170,19 +170,19 @@ fn createMaterial(self: *MaterialSystem, config: Material.Config, material: *Mat
     if (config.diffuse_map_name.len > 0) {
         temp_material.diffuse_map = TextureMap{
             .use = .map_diffuse,
-            .texture = Engine.sys.texture.acquireTextureByName(
+            .texture = zing.sys.texture.acquireTextureByName(
                 config.diffuse_map_name,
                 .{ .auto_release = true },
-            ) catch Engine.sys.texture.acquireDefaultTexture(),
+            ) catch zing.sys.texture.acquireDefaultTexture(),
         };
     }
 
     temp_material.generation = if (material.generation) |g| g +% 1 else 0;
 
-    try Engine.renderer.createMaterial(&temp_material);
-    errdefer Engine.renderer.destroyMaterial(&temp_material);
+    try zing.renderer.createMaterial(&temp_material);
+    errdefer zing.renderer.destroyMaterial(&temp_material);
 
-    Engine.renderer.destroyMaterial(material);
+    zing.renderer.destroyMaterial(material);
     material.* = temp_material;
 }
 
@@ -192,8 +192,8 @@ fn destroyMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
 
         const material_name = material.name; // NOTE: take a copy of the name
 
-        Engine.sys.texture.releaseTextureByHandle(material.diffuse_map.texture);
-        Engine.renderer.destroyMaterial(material);
+        zing.sys.texture.releaseTextureByHandle(material.diffuse_map.texture);
+        zing.renderer.destroyMaterial(material);
 
         self.materials.removeAssumeLive(handle); // NOTE: this calls material.deinit()
         _ = self.lookup.remove(material_name.slice());

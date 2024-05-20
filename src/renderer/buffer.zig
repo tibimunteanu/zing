@@ -1,6 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
-const Engine = @import("../engine.zig");
+const zing = @import("../zing.zig");
 const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const FreeList = @import("../free_list.zig");
@@ -36,7 +36,7 @@ pub fn init(
     self.total_size = size;
     self.memory_property_flags = memory_property_flags;
 
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     self.handle = try ctx.device_api.createBuffer(ctx.device, &vk.BufferCreateInfo{
         .flags = .{},
@@ -67,7 +67,7 @@ pub fn deinit(self: *Buffer) void {
         free_list.deinit();
     }
 
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     if (self.handle != .null_handle) {
         ctx.device_api.destroyBuffer(ctx.device, self.handle, null);
@@ -84,13 +84,13 @@ pub fn deinit(self: *Buffer) void {
 }
 
 pub fn bind(self: *const Buffer, offset: vk.DeviceSize) !void {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     try ctx.device_api.bindBufferMemory(ctx.device, self.handle, self.memory, offset);
 }
 
 pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     return @as([*]u8, @ptrCast(try ctx.device_api.mapMemory(
         ctx.device,
@@ -102,7 +102,7 @@ pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, fla
 }
 
 pub fn unlock(self: *const Buffer) void {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     ctx.device_api.unmapMemory(ctx.device, self.memory);
 }
@@ -124,7 +124,7 @@ pub fn allocAndUpload(self: *Buffer, data: []const u8) !u64 {
 }
 
 pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     var staging_buffer = try Buffer.init(
         null,
@@ -139,7 +139,7 @@ pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
 
     try staging_buffer.copyTo(
         self,
-        Engine.renderer.graphics_command_pool,
+        zing.renderer.graphics_command_pool,
         ctx.graphics_queue.handle,
         vk.BufferCopy{
             .src_offset = 0,
@@ -168,7 +168,7 @@ pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queu
         return error.CannotResizeBufferToSmallerSize;
     }
 
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     const new_buffer = try Buffer.init(
         ctx,
@@ -200,7 +200,7 @@ pub fn copyTo(
         try self.free_list.?.copyTo(&dst.free_list.?);
     }
 
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     try ctx.device_api.queueWaitIdle(queue);
 

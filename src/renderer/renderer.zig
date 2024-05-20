@@ -4,7 +4,7 @@ const math = @import("zmath");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 
-const Engine = @import("../engine.zig");
+const zing = @import("../zing.zig");
 const Context = @import("context.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
@@ -445,14 +445,14 @@ pub fn destroyGeometry(self: *Renderer, geometry: *Geometry) void {
 pub fn drawGeometry(self: *Renderer, data: GeometryRenderData) !void {
     const command_buffer = self.getCurrentCommandBuffer();
 
-    const geometry: *Geometry = try Engine.sys.geometry.geometries.getColumnPtr(data.geometry, .geometry);
+    const geometry: *Geometry = try zing.sys.geometry.geometries.getColumnPtr(data.geometry, .geometry);
 
-    const material_handle = if (Engine.sys.material.materials.isLiveHandle(geometry.material)) //
+    const material_handle = if (zing.sys.material.materials.isLiveHandle(geometry.material)) //
         geometry.material
     else
-        Engine.sys.material.acquireDefaultMaterial();
+        zing.sys.material.acquireDefaultMaterial();
 
-    const material: *Material = try Engine.sys.material.materials.getColumnPtr(material_handle, .material);
+    const material: *Material = try zing.sys.material.materials.getColumnPtr(material_handle, .material);
 
     switch (material.material_type) {
         .world => {
@@ -553,7 +553,7 @@ fn setProjection(self: *Renderer, size: glfw.Window.Size) void {
 }
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
-    Engine.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
+    zing.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
 }
 
 fn initFramebuffers(self: *Renderer) !void {

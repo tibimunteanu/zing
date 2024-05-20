@@ -4,7 +4,7 @@ const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const math = @import("zmath");
 
-const Engine = @import("../engine.zig");
+const zing = @import("../zing.zig");
 const Swapchain = @import("swapchain.zig");
 
 const Allocator = std.mem.Allocator;
@@ -588,7 +588,7 @@ const Queue = struct {
     family_index: u32,
 
     fn init(family_index: u32) Queue {
-        const ctx = Engine.renderer.context;
+        const ctx = zing.renderer.context;
 
         return .{
             .handle = ctx.device_api.getDeviceQueue(ctx.device, family_index, 0),

@@ -2,7 +2,7 @@ const std = @import("std");
 const pool = @import("zpool");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
-const Engine = @import("../engine.zig");
+const zing = @import("../zing.zig");
 const Context = @import("context.zig");
 const Buffer = @import("buffer.zig");
 const BinaryResource = @import("../resources/binary_resource.zig");
@@ -286,7 +286,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         );
     }
 
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     try self.descriptor_set_layouts.append(try ctx.device_api.createDescriptorSetLayout(
         ctx.device,
@@ -549,7 +549,7 @@ pub fn deinit(self: *Shader) void {
         self.ubo.deinit();
     }
 
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     if (self.global_state.descriptor_sets.len > 0) {
         ctx.device_api.freeDescriptorSets(
@@ -608,7 +608,7 @@ pub fn deinit(self: *Shader) void {
 }
 
 pub fn initInstance(self: *Shader) !InstanceHandle {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     var instance_state: InstanceState = undefined;
 
@@ -658,7 +658,7 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     }
 
     // clear textures to default texture handle
-    const default_texture_handle = Engine.sys.texture.acquireDefaultTexture();
+    const default_texture_handle = zing.sys.texture.acquireDefaultTexture();
     try instance_state.textures.resize(0);
     try instance_state.textures.appendNTimes(default_texture_handle, self.instance_scope.uniform_sampler_count);
 
@@ -676,7 +676,7 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
 
         self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
 
-        const ctx = Engine.renderer.context;
+        const ctx = zing.renderer.context;
 
         ctx.device_api.freeDescriptorSets(
             ctx.device,
@@ -691,9 +691,9 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
 }
 
 pub fn bind(self: *const Shader) void {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
-    ctx.device_api.cmdBindPipeline(Engine.renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
+    ctx.device_api.cmdBindPipeline(zing.renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
 }
 
 pub fn bindGlobal(self: *Shader) void {
@@ -739,10 +739,10 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
     } else {
         switch (p_uniform.scope) {
             .local => {
-                const ctx = Engine.renderer.context;
+                const ctx = zing.renderer.context;
 
                 ctx.device_api.cmdPushConstants(
-                    Engine.renderer.getCurrentCommandBuffer().handle,
+                    zing.renderer.getCurrentCommandBuffer().handle,
                     self.pipeline_layout,
                     .{ .vertex_bit = true, .fragment_bit = true },
                     p_uniform.offset,
@@ -762,10 +762,10 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
 }
 
 pub fn applyGlobal(self: *Shader) !void {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     const image_index = ctx.swapchain.image_index;
-    const command_buffer = Engine.renderer.getCurrentCommandBuffer();
+    const command_buffer = zing.renderer.getCurrentCommandBuffer();
     const descriptor_set = self.global_state.descriptor_sets.get(image_index);
 
     const buffer_info = vk.DescriptorBufferInfo{
@@ -814,10 +814,10 @@ pub fn applyGlobal(self: *Shader) !void {
 }
 
 pub fn applyInstance(self: *Shader) !void {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     const image_index = ctx.swapchain.image_index;
-    const command_buffer = Engine.renderer.getCurrentCommandBuffer();
+    const command_buffer = zing.renderer.getCurrentCommandBuffer();
 
     if (self.instance_state_pool.getColumnPtrIfLive(self.ubo_bound_instance_handle, .instance_state)) |instance_state| {
         const descriptor_set = instance_state.descriptor_sets.get(image_index);
@@ -851,7 +851,7 @@ pub fn applyInstance(self: *Shader) !void {
 
         for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
             const texture_handle = instance_state.textures.slice()[sampler_index];
-            const texture = Engine.sys.texture.textures.getColumnPtrAssumeLive(texture_handle, .texture);
+            const texture = zing.sys.texture.textures.getColumnPtrAssumeLive(texture_handle, .texture);
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,
@@ -948,7 +948,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
 }
 
 fn createShaderModule(allocator: Allocator, path: []const u8) !vk.ShaderModule {
-    const ctx = Engine.renderer.context;
+    const ctx = zing.renderer.context;
 
     var binary_resource = try BinaryResource.init(allocator, path);
     defer binary_resource.deinit();
@@ -985,8 +985,8 @@ inline fn parseVkShaderStageFlags(stage_type: []const u8) !vk.ShaderStageFlags {
 }
 
 inline fn parseVkRenderPass(render_pass_name: []const u8) !vk.RenderPass {
-    if (std.mem.eql(u8, render_pass_name, "world")) return Engine.renderer.world_render_pass.handle;
-    if (std.mem.eql(u8, render_pass_name, "ui")) return Engine.renderer.ui_render_pass.handle;
+    if (std.mem.eql(u8, render_pass_name, "world")) return zing.renderer.world_render_pass.handle;
+    if (std.mem.eql(u8, render_pass_name, "ui")) return zing.renderer.ui_render_pass.handle;
 
     return error.UnknownRenderPass;
 }

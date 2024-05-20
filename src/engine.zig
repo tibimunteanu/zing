@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const math = @import("zmath");
 const glfw = @import("glfw");
 
+const zing = @import("zing.zig");
 const utils = @import("utils.zig");
 const Renderer = @import("renderer/renderer.zig");
 const TextureSystem = @import("systems/texture_system.zig");
@@ -20,14 +21,6 @@ const Vertex2D = Renderer.Vertex2D;
 const Allocator = std.mem.Allocator;
 
 const Engine = @This();
-
-pub var engine: Engine = undefined;
-pub var renderer: Renderer = undefined;
-pub var sys: struct {
-    texture: TextureSystem,
-    material: MaterialSystem,
-    geometry: GeometrySystem,
-} = undefined;
 
 // TODO: temporary
 var choice: usize = 2;
@@ -52,7 +45,7 @@ var camera_euler: math.Vec = math.splat(math.Vec, 0.0); // pitch, yaw, roll
 var prevPressN: glfw.Action = .release;
 
 pub fn init(allocator: Allocator) !void {
-    engine.allocator = allocator;
+    zing.engine.allocator = allocator;
 
     glfw.setErrorCallback(errorCallback);
 
@@ -62,25 +55,25 @@ pub fn init(allocator: Allocator) !void {
     }
     errdefer glfw.terminate();
 
-    engine.window = glfw.Window.create(960, 540, "Zing", null, null, .{
+    zing.engine.window = glfw.Window.create(960, 540, "Zing", null, null, .{
         .client_api = .no_api,
     }) orelse return blk: {
         std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
         break :blk error.CreateWindowFailed;
     };
-    errdefer engine.window.destroy();
+    errdefer zing.engine.window.destroy();
 
-    try renderer.init(allocator, engine.window);
-    errdefer renderer.deinit();
+    try zing.renderer.init(allocator, zing.engine.window);
+    errdefer zing.renderer.deinit();
 
-    try sys.texture.init(allocator);
-    errdefer sys.texture.deinit();
+    try zing.sys.texture.init(allocator);
+    errdefer zing.sys.texture.deinit();
 
-    try sys.material.init(allocator);
-    errdefer sys.material.deinit();
+    try zing.sys.material.init(allocator);
+    errdefer zing.sys.material.deinit();
 
-    try sys.geometry.init(allocator);
-    errdefer sys.geometry.deinit();
+    try zing.sys.geometry.init(allocator);
+    errdefer zing.sys.geometry.deinit();
 
     // TODO: temporary
     // instance.test_geometry = .getDefaultGeometry();
@@ -99,7 +92,7 @@ pub fn init(allocator: Allocator) !void {
     );
     defer test_plane_config.deinit();
 
-    engine.test_geometry = try sys.geometry.acquireGeometryByConfig(
+    zing.engine.test_geometry = try zing.sys.geometry.acquireGeometryByConfig(
         test_plane_config,
         .{ .auto_release = true },
     );
@@ -119,7 +112,7 @@ pub fn init(allocator: Allocator) !void {
     );
     defer test_ui_plane_config.deinit();
 
-    engine.test_ui_geometry = try sys.geometry.acquireGeometryByConfig(
+    zing.engine.test_ui_geometry = try zing.sys.geometry.acquireGeometryByConfig(
         test_ui_plane_config,
         .{ .auto_release = true },
     );
@@ -127,56 +120,56 @@ pub fn init(allocator: Allocator) !void {
 }
 
 pub fn deinit() void {
-    sys.geometry.deinit();
-    sys.material.deinit();
-    sys.texture.deinit();
-    renderer.deinit();
+    zing.sys.geometry.deinit();
+    zing.sys.material.deinit();
+    zing.sys.texture.deinit();
+    zing.renderer.deinit();
 
-    engine.window.destroy();
+    zing.engine.window.destroy();
 
     glfw.terminate();
 }
 
 pub fn run() !void {
-    engine.last_time = glfw.getTime();
+    zing.engine.last_time = glfw.getTime();
 
-    while (!engine.window.shouldClose()) {
-        if (engine.window.getAttrib(.iconified) == 0) {
+    while (!zing.engine.window.shouldClose()) {
+        if (zing.engine.window.getAttrib(.iconified) == 0) {
             const frame_start_time = glfw.getTime();
-            const precise_delta_time = frame_start_time - engine.last_time;
+            const precise_delta_time = frame_start_time - zing.engine.last_time;
             const delta_time = @as(f32, @floatCast(precise_delta_time));
 
-            try engine.updateCamera(delta_time);
+            try zing.engine.updateCamera(delta_time);
 
             const packet = RenderPacket{
                 .delta_time = delta_time,
                 .geometries = &[_]GeometryRenderData{
                     GeometryRenderData{
                         .model = math.mul(math.translation(-5.0, 0.0, 0.0), math.rotationY(0.0)),
-                        .geometry = engine.test_geometry,
+                        .geometry = zing.engine.test_geometry,
                     },
                 },
                 .ui_geometries = &[_]GeometryRenderData{
                     GeometryRenderData{
                         .model = math.translation(256.0, 256.0, 0.0),
-                        .geometry = engine.test_ui_geometry,
+                        .geometry = zing.engine.test_ui_geometry,
                     },
                 },
             };
 
-            try renderer.drawFrame(packet);
+            try zing.renderer.drawFrame(packet);
 
             // const frame_end_time = glfw.getTime();
             // const frame_elapsed_time = frame_end_time - frame_start_time;
             // const fps = 1.0 / frame_elapsed_time;
             // std.log.info("{d:.0}", .{fps});
 
-            engine.last_time = frame_start_time;
+            zing.engine.last_time = frame_start_time;
         }
         glfw.pollEvents();
     }
 
-    try renderer.waitIdle();
+    try zing.renderer.waitIdle();
 }
 
 // utils
@@ -222,22 +215,22 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
     }
 
     recomputeCameraView();
-    renderer.view = camera_view;
+    zing.renderer.view = camera_view;
 
     const pressN = self.window.getKey(.n);
     if (pressN == .press and prevPressN == .release) {
         choice += 1;
         choice %= names.len;
 
-        if (sys.geometry.geometries.getColumnPtrIfLive(self.test_geometry, .geometry)) |geometry| {
-            const material = sys.material.materials.getColumnPtrAssumeLive(geometry.material, .material);
+        if (zing.sys.geometry.geometries.getColumnPtrIfLive(self.test_geometry, .geometry)) |geometry| {
+            const material = zing.sys.material.materials.getColumnPtrAssumeLive(geometry.material, .material);
 
             const prev_texture = material.diffuse_map.texture;
-            material.diffuse_map.texture = try sys.texture.acquireTextureByName(
+            material.diffuse_map.texture = try zing.sys.texture.acquireTextureByName(
                 names[choice],
                 .{ .auto_release = true },
             );
-            sys.texture.releaseTextureByHandle(prev_texture);
+            zing.sys.texture.releaseTextureByHandle(prev_texture);
         }
     }
     prevPressN = pressN;
