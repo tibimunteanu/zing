@@ -1,7 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
-const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 
 const Allocator = std.mem.Allocator;
@@ -27,33 +26,29 @@ pub fn init(
 
     errdefer self.deinit();
 
-    const ctx = zing.renderer.context;
+    self.handle = try zing.renderer.device_api.createImage(zing.renderer.device, create_info, null);
 
-    self.handle = try ctx.device_api.createImage(ctx.device, create_info, null);
-
-    const memory_requirements = ctx.device_api.getImageMemoryRequirements(ctx.device, self.handle);
-    self.memory = try ctx.allocate(memory_requirements, memory_flags);
-    try ctx.device_api.bindImageMemory(ctx.device, self.handle, self.memory, 0);
+    const memory_requirements = zing.renderer.device_api.getImageMemoryRequirements(zing.renderer.device, self.handle);
+    self.memory = try zing.renderer.allocate(memory_requirements, memory_flags);
+    try zing.renderer.device_api.bindImageMemory(zing.renderer.device, self.handle, self.memory, 0);
 
     if (view_create_info) |view_info| {
         view_info.image = self.handle;
-        self.view = try ctx.device_api.createImageView(ctx.device, view_info, null);
+        self.view = try zing.renderer.device_api.createImageView(zing.renderer.device, view_info, null);
     }
 
     return self;
 }
 
 pub fn deinit(self: *Image) void {
-    const ctx = zing.renderer.context;
-
     if (self.view != .null_handle) {
-        ctx.device_api.destroyImageView(ctx.device, self.view, null);
+        zing.renderer.device_api.destroyImageView(zing.renderer.device, self.view, null);
     }
     if (self.handle != .null_handle) {
-        ctx.device_api.destroyImage(ctx.device, self.handle, null);
+        zing.renderer.device_api.destroyImage(zing.renderer.device, self.handle, null);
     }
     if (self.memory != .null_handle) {
-        ctx.device_api.freeMemory(ctx.device, self.memory, null);
+        zing.renderer.device_api.freeMemory(zing.renderer.device, self.memory, null);
     }
 }
 
@@ -86,9 +81,7 @@ pub fn pipelineImageBarrier(
         .subresource_range = subresource_range,
     };
 
-    const ctx = zing.renderer.context;
-
-    ctx.device_api.cmdPipelineBarrier(
+    zing.renderer.device_api.cmdPipelineBarrier(
         command_buffer.handle,
         src_stage_mask,
         dst_stage_mask,

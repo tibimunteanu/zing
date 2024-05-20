@@ -1,7 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
-const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 
 const Allocator = std.mem.Allocator;
@@ -49,8 +48,6 @@ pub fn init(
 ) !RenderPass {
     var self: RenderPass = undefined;
 
-    const ctx = zing.renderer.context;
-
     self.render_area = options.render_area;
     self.clear_flags = options.clear_flags;
     self.clear_values = options.clear_values;
@@ -59,7 +56,7 @@ pub fn init(
 
     const attachment_descriptions = [_]vk.AttachmentDescription{
         .{
-            .format = ctx.swapchain.surface_format.format,
+            .format = zing.renderer.swapchain.surface_format.format,
             .samples = .{ .@"1_bit" = true },
             .load_op = if (options.clear_flags.color) .clear else .load,
             .store_op = .store,
@@ -69,7 +66,7 @@ pub fn init(
             .final_layout = if (options.has_next) .color_attachment_optimal else .present_src_khr,
         },
         .{
-            .format = ctx.physical_device.depth_format,
+            .format = zing.renderer.physical_device.depth_format,
             .samples = .{ .@"1_bit" = true },
             .load_op = if (options.clear_flags.depth) .clear else .load,
             .store_op = .dont_care,
@@ -120,8 +117,8 @@ pub fn init(
         },
     };
 
-    self.handle = try ctx.device_api.createRenderPass(
-        ctx.device,
+    self.handle = try zing.renderer.device_api.createRenderPass(
+        zing.renderer.device,
         &vk.RenderPassCreateInfo{
             .attachment_count = if (options.clear_flags.depth) attachment_descriptions.len else 1,
             .p_attachments = &attachment_descriptions,
@@ -132,23 +129,19 @@ pub fn init(
         },
         null,
     );
-    errdefer ctx.device_api.destroyRenderPass(ctx.device, self.handle, null);
+    errdefer zing.renderer.device_api.destroyRenderPass(zing.renderer.device, self.handle, null);
 
     return self;
 }
 
 pub fn deinit(self: *RenderPass) void {
-    const ctx = zing.renderer.context;
-
     if (self.handle != .null_handle) {
-        ctx.device_api.destroyRenderPass(ctx.device, self.handle, null);
+        zing.renderer.device_api.destroyRenderPass(zing.renderer.device, self.handle, null);
     }
     self.handle = .null_handle;
 }
 
 pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffer: vk.Framebuffer) void {
-    const ctx = zing.renderer.context;
-
     var clear_value_count: u32 = 0;
     var clear_values: [2]vk.ClearValue = undefined;
 
@@ -169,14 +162,14 @@ pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffe
         clear_value_count += 1;
     }
 
-    ctx.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
+    zing.renderer.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
         .render_pass = self.handle,
         .framebuffer = framebuffer,
         .render_area = switch (self.render_area) {
             .fixed => |area| area,
             .swapchain => .{
                 .offset = .{ .x = 0, .y = 0 },
-                .extent = ctx.swapchain.extent,
+                .extent = zing.renderer.swapchain.extent,
             },
         },
         .clear_value_count = clear_value_count,
@@ -187,7 +180,5 @@ pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffe
 pub fn end(self: *RenderPass, command_buffer: *const CommandBuffer) void {
     _ = self;
 
-    const ctx = zing.renderer.context;
-
-    ctx.device_api.cmdEndRenderPass(command_buffer.handle);
+    zing.renderer.device_api.cmdEndRenderPass(command_buffer.handle);
 }

@@ -1,7 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
-const Context = @import("context.zig");
 const Image = @import("image.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
@@ -114,9 +113,7 @@ pub fn init(
         .transfer_dst_optimal,
     );
 
-    const ctx = zing.renderer.context;
-
-    ctx.device_api.cmdCopyBufferToImage(
+    zing.renderer.device_api.cmdCopyBufferToImage(
         command_buffer.handle,
         staging_buffer.handle,
         self.image.handle,
@@ -151,10 +148,10 @@ pub fn init(
         .shader_read_only_optimal,
     );
 
-    try command_buffer.endSingleUseAndDeinit(ctx.graphics_queue.handle);
+    try command_buffer.endSingleUseAndDeinit(zing.renderer.graphics_queue.handle);
 
     // create the sampler
-    self.sampler = try ctx.device_api.createSampler(ctx.device, &vk.SamplerCreateInfo{
+    self.sampler = try zing.renderer.device_api.createSampler(zing.renderer.device, &vk.SamplerCreateInfo{
         .mag_filter = .linear,
         .min_filter = .linear,
         .address_mode_u = .repeat,
@@ -176,13 +173,11 @@ pub fn init(
 }
 
 pub fn deinit(self: *Texture) void {
-    const ctx = zing.renderer.context;
-
-    ctx.device_api.deviceWaitIdle(ctx.device) catch {};
+    zing.renderer.device_api.deviceWaitIdle(zing.renderer.device) catch {};
 
     self.image.deinit();
 
-    ctx.device_api.destroySampler(ctx.device, self.sampler, null);
+    zing.renderer.device_api.destroySampler(zing.renderer.device, self.sampler, null);
 
     self.* = undefined;
 }

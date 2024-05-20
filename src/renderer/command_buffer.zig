@@ -1,7 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
-const Context = @import("context.zig");
 
 const CommandBuffer = @This();
 
@@ -13,10 +12,8 @@ pub fn init(pool: vk.CommandPool, options: struct { is_primary: bool = true }) !
     var self: CommandBuffer = undefined;
     self.pool = pool;
 
-    const ctx = zing.renderer.context;
-
-    try ctx.device_api.allocateCommandBuffers(
-        ctx.device,
+    try zing.renderer.device_api.allocateCommandBuffers(
+        zing.renderer.device,
         &vk.CommandBufferAllocateInfo{
             .command_pool = pool,
             .command_buffer_count = 1,
@@ -29,25 +26,19 @@ pub fn init(pool: vk.CommandPool, options: struct { is_primary: bool = true }) !
 }
 
 pub fn deinit(self: *CommandBuffer) void {
-    const ctx = zing.renderer.context;
-
     if (self.handle != .null_handle) {
-        ctx.device_api.freeCommandBuffers(ctx.device, self.pool, 1, @ptrCast(&self.handle));
+        zing.renderer.device_api.freeCommandBuffers(zing.renderer.device, self.pool, 1, @ptrCast(&self.handle));
     }
     self.handle = .null_handle;
     self.pool = .null_handle;
 }
 
 pub fn begin(self: *const CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
-    const ctx = zing.renderer.context;
-
-    try ctx.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
+    try zing.renderer.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
 }
 
 pub fn end(self: *const CommandBuffer) !void {
-    const ctx = zing.renderer.context;
-
-    try ctx.device_api.endCommandBuffer(self.handle);
+    try zing.renderer.device_api.endCommandBuffer(self.handle);
 }
 
 pub fn initAndBeginSingleUse(pool: vk.CommandPool) !CommandBuffer {
@@ -63,9 +54,7 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
 
     try self.end();
 
-    const ctx = zing.renderer.context;
-
-    try ctx.device_api.queueSubmit(
+    try zing.renderer.device_api.queueSubmit(
         queue,
         1,
         @ptrCast(&vk.SubmitInfo{
@@ -75,5 +64,5 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
         .null_handle,
     );
 
-    try ctx.device_api.queueWaitIdle(queue);
+    try zing.renderer.device_api.queueWaitIdle(queue);
 }

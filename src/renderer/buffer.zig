@@ -1,7 +1,6 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
-const Context = @import("context.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const FreeList = @import("../free_list.zig");
 
@@ -36,9 +35,7 @@ pub fn init(
     self.total_size = size;
     self.memory_property_flags = memory_property_flags;
 
-    const ctx = zing.renderer.context;
-
-    self.handle = try ctx.device_api.createBuffer(ctx.device, &vk.BufferCreateInfo{
+    self.handle = try zing.renderer.device_api.createBuffer(zing.renderer.device, &vk.BufferCreateInfo{
         .flags = .{},
         .usage = usage,
         .size = size,
@@ -46,12 +43,12 @@ pub fn init(
         .queue_family_index_count = 0,
         .p_queue_family_indices = null,
     }, null);
-    errdefer ctx.device_api.destroyBuffer(ctx.device, self.handle, null);
+    errdefer zing.renderer.device_api.destroyBuffer(zing.renderer.device, self.handle, null);
 
-    const memory_requirements = ctx.device_api.getBufferMemoryRequirements(ctx.device, self.handle);
+    const memory_requirements = zing.renderer.device_api.getBufferMemoryRequirements(zing.renderer.device, self.handle);
 
-    self.memory = try ctx.allocate(memory_requirements, memory_property_flags);
-    errdefer ctx.device_api.freeMemory(ctx.device, self.memory, null);
+    self.memory = try zing.renderer.allocate(memory_requirements, memory_property_flags);
+    errdefer zing.renderer.device_api.freeMemory(zing.renderer.device, self.memory, null);
 
     if (options.bind_on_create) {
         try self.bind(0);
@@ -67,15 +64,13 @@ pub fn deinit(self: *Buffer) void {
         free_list.deinit();
     }
 
-    const ctx = zing.renderer.context;
-
     if (self.handle != .null_handle) {
-        ctx.device_api.destroyBuffer(ctx.device, self.handle, null);
+        zing.renderer.device_api.destroyBuffer(zing.renderer.device, self.handle, null);
         self.handle = .null_handle;
     }
 
     if (self.memory != .null_handle) {
-        ctx.device_api.freeMemory(ctx.device, self.memory, null);
+        zing.renderer.device_api.freeMemory(zing.renderer.device, self.memory, null);
         self.memory = .null_handle;
     }
 
@@ -84,16 +79,12 @@ pub fn deinit(self: *Buffer) void {
 }
 
 pub fn bind(self: *const Buffer, offset: vk.DeviceSize) !void {
-    const ctx = zing.renderer.context;
-
-    try ctx.device_api.bindBufferMemory(ctx.device, self.handle, self.memory, offset);
+    try zing.renderer.device_api.bindBufferMemory(zing.renderer.device, self.handle, self.memory, offset);
 }
 
 pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
-    const ctx = zing.renderer.context;
-
-    return @as([*]u8, @ptrCast(try ctx.device_api.mapMemory(
-        ctx.device,
+    return @as([*]u8, @ptrCast(try zing.renderer.device_api.mapMemory(
+        zing.renderer.device,
         self.memory,
         offset,
         size,
@@ -102,9 +93,7 @@ pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, fla
 }
 
 pub fn unlock(self: *const Buffer) void {
-    const ctx = zing.renderer.context;
-
-    ctx.device_api.unmapMemory(ctx.device, self.memory);
+    zing.renderer.device_api.unmapMemory(zing.renderer.device, self.memory);
 }
 
 pub fn alloc(self: *Buffer, size: u64) !u64 {
@@ -124,8 +113,6 @@ pub fn allocAndUpload(self: *Buffer, data: []const u8) !u64 {
 }
 
 pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
-    const ctx = zing.renderer.context;
-
     var staging_buffer = try Buffer.init(
         null,
         self.total_size,
@@ -140,7 +127,7 @@ pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
     try staging_buffer.copyTo(
         self,
         zing.renderer.graphics_command_pool,
-        ctx.graphics_queue.handle,
+        zing.renderer.graphics_queue.handle,
         vk.BufferCopy{
             .src_offset = 0,
             .dst_offset = offset,
@@ -168,10 +155,8 @@ pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queu
         return error.CannotResizeBufferToSmallerSize;
     }
 
-    const ctx = zing.renderer.context;
-
     const new_buffer = try Buffer.init(
-        ctx,
+        zing.renderer,
         new_size,
         self.usage,
         self.memory_property_flags,
@@ -200,13 +185,11 @@ pub fn copyTo(
         try self.free_list.?.copyTo(&dst.free_list.?);
     }
 
-    const ctx = zing.renderer.context;
-
-    try ctx.device_api.queueWaitIdle(queue);
+    try zing.renderer.device_api.queueWaitIdle(queue);
 
     var command_buffer = try CommandBuffer.initAndBeginSingleUse(command_pool);
 
-    ctx.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
+    zing.renderer.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
 
     try command_buffer.endSingleUseAndDeinit(queue);
 }
