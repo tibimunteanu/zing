@@ -42,11 +42,6 @@ material_system: *MaterialSystem,
 geometry_system: *GeometrySystem,
 last_time: f64,
 
-// TODO: temporary
-shader: Shader,
-shader_instance: Shader.InstanceHandle,
-// TODO: end temporary
-
 var camera_view: math.Mat = undefined;
 var camera_view_dirty: bool = true;
 var camera_position: math.Vec = math.Vec{ 0.0, 0.0, -30.0, 0.0 };
@@ -139,22 +134,9 @@ pub fn init(allocator: Allocator) !void {
         .{ .auto_release = true },
     );
     // TODO: end temporary
-
-    // TODO: temporary
-    var shader_resource = try ShaderResource.init(allocator, "phong");
-    defer shader_resource.deinit();
-
-    instance.shader = try Shader.init(allocator, shader_resource.config.value);
-    instance.shader_instance = try instance.shader.initInstance();
-    // TODO: end temporary
 }
 
 pub fn deinit() void {
-    // TODO: temporary
-    instance.shader.deinitInstance(instance.shader_instance);
-    instance.shader.deinit();
-    // TODO: end temporary
-
     instance.geometry_system.deinit();
     instance.allocator.destroy(instance.geometry_system);
 
