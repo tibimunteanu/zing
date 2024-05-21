@@ -5,7 +5,6 @@ const math = @import("zmath");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 
-const Engine = @import("../engine.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const RenderPass = @import("renderpass.zig");
@@ -219,10 +218,10 @@ pub var desired_extent_generation: u32 = undefined;
 pub var frame_index: u64 = undefined;
 pub var delta_time: f32 = undefined;
 
-pub fn init(ally: Allocator) !void {
+pub fn init(ally: Allocator, window: glfw.Window) !void {
     allocator = ally;
 
-    desired_extent = Engine.window.getFramebufferSize();
+    desired_extent = window.getFramebufferSize();
     desired_extent_generation = 0;
 
     // load base api
@@ -237,7 +236,7 @@ pub fn init(ally: Allocator) !void {
     errdefer instance_api.destroyInstance(instance, null);
 
     // create surface
-    surface = try createSurface();
+    surface = try createSurface(window);
     errdefer instance_api.destroySurfaceKHR(instance, surface, null);
 
     // pick a suitable physical device
@@ -353,8 +352,8 @@ pub fn init(ally: Allocator) !void {
     near_clip = 0.1;
     far_clip = 1000.0;
 
-    Engine.window.setFramebufferSizeCallback(framebufferSizeCallback);
-    setProjection(Engine.window.getFramebufferSize());
+    window.setFramebufferSizeCallback(framebufferSizeCallback);
+    setProjection(window.getFramebufferSize());
 
     frame_index = 0;
     delta_time = config.target_frame_seconds;
@@ -544,13 +543,7 @@ pub fn drawGeometry(data: GeometryRenderData) !void {
     const command_buffer = getCurrentCommandBuffer();
 
     const geometry = try Geometry.get(data.geometry);
-
-    const material_handle = if (Material.exists(geometry.material)) //
-        geometry.material
-    else
-        Material.acquireDefault();
-
-    const material = try Material.get(material_handle);
+    const material = Material.getOrDefault(geometry.material);
 
     switch (material.material_type) {
         .world => {
@@ -673,9 +666,9 @@ fn createInstance(app_name: [*:0]const u8) !vk.Instance {
     }, null);
 }
 
-fn createSurface() !vk.SurfaceKHR {
+fn createSurface(window: glfw.Window) !vk.SurfaceKHR {
     var window_surface: vk.SurfaceKHR = undefined;
-    if (glfw.createWindowSurface(instance, Engine.window, null, &window_surface) != @intFromEnum(vk.Result.success)) {
+    if (glfw.createWindowSurface(instance, window, null, &window_surface) != @intFromEnum(vk.Result.success)) {
         return error.SurfaceCreationFailed;
     }
     return window_surface;

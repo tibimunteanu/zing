@@ -834,7 +834,7 @@ pub fn applyInstance(self: *Shader) !void {
 
         for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
             const texture_handle = instance_state.textures.slice()[sampler_index];
-            const texture = try Texture.get(texture_handle);
+            const texture = Texture.getOrDefault(texture_handle);
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,

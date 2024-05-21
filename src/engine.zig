@@ -60,7 +60,7 @@ pub fn init(allocator: Allocator) !void {
     };
     errdefer window.destroy();
 
-    try Renderer.init(allocator);
+    try Renderer.init(allocator, window);
     errdefer Renderer.deinit();
 
     try Texture.initSystem(allocator);

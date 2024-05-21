@@ -170,6 +170,11 @@ pub inline fn getIfExists(handle: TextureHandle) ?*Texture {
     return textures.getColumnPtrIfLive(handle, .texture);
 }
 
+pub inline fn getOrDefault(handle: TextureHandle) *Texture {
+    return textures.getColumnPtrIfLive(handle, .texture) //
+    orelse textures.getColumnPtrAssumeLive(default_texture, .texture);
+}
+
 // utils
 fn create(
     name: []const u8,

@@ -186,6 +186,11 @@ pub inline fn getIfExists(handle: MaterialHandle) ?*Material {
     return materials.getColumnPtrIfLive(handle, .material);
 }
 
+pub inline fn getOrDefault(handle: MaterialHandle) *Material {
+    return materials.getColumnPtrIfLive(handle, .material) //
+    orelse materials.getColumnPtrAssumeLive(default_material, .material);
+}
+
 // utils
 fn create(config: Config) !Material {
     var self: Material = undefined;
