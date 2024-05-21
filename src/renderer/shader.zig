@@ -5,9 +5,9 @@ const config = @import("../config.zig");
 const zing = @import("../zing.zig");
 const Buffer = @import("buffer.zig");
 const BinaryResource = @import("../resources/binary_resource.zig");
-const TextureSystem = @import("../systems/texture_system.zig");
+const Texture = @import("texture.zig");
 
-const TextureHandle = TextureSystem.TextureHandle;
+const TextureHandle = Texture.TextureHandle;
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
@@ -651,7 +651,7 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     }
 
     // clear textures to default texture handle
-    const default_texture_handle = zing.sys.texture.acquireDefaultTexture();
+    const default_texture_handle = Texture.acquireDefault();
     try instance_state.textures.resize(0);
     try instance_state.textures.appendNTimes(default_texture_handle, self.instance_scope.uniform_sampler_count);
 
@@ -834,7 +834,7 @@ pub fn applyInstance(self: *Shader) !void {
 
         for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
             const texture_handle = instance_state.textures.slice()[sampler_index];
-            const texture = try zing.sys.texture.get(texture_handle);
+            const texture = try Texture.get(texture_handle);
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,

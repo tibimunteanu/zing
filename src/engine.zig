@@ -6,12 +6,13 @@ const glfw = @import("glfw");
 const zing = @import("zing.zig");
 const utils = @import("utils.zig");
 const Renderer = @import("renderer/renderer.zig");
-const TextureSystem = @import("systems/texture_system.zig");
-const GeometrySystem = @import("systems/geometry_system.zig");
+const Texture = @import("renderer/texture.zig");
+const Material = @import("renderer/material.zig");
+const Geometry = @import("renderer/geometry.zig");
 const Shader = @import("renderer/shader.zig");
 const ShaderResource = @import("resources/shader_resource.zig");
 
-const GeometryHandle = GeometrySystem.GeometryHandle;
+const GeometryHandle = Geometry.GeometryHandle;
 const RenderPacket = Renderer.RenderPacket;
 const GeometryRenderData = Renderer.GeometryRenderData;
 const Vertex3D = Renderer.Vertex3D;
@@ -65,53 +66,47 @@ pub fn init(allocator: Allocator) !void {
     try zing.renderer.init(allocator);
     errdefer zing.renderer.deinit();
 
-    try zing.sys.texture.init(allocator);
-    errdefer zing.sys.texture.deinit();
+    try Texture.initSystem(allocator);
+    errdefer Texture.deinitSystem();
 
-    try zing.sys.material.init(allocator);
-    errdefer zing.sys.material.deinit();
+    try Material.initSystem(allocator);
+    errdefer Material.deinitSystem();
 
-    try zing.sys.geometry.init(allocator);
-    errdefer zing.sys.geometry.deinit();
+    try Geometry.initSystem(allocator);
+    errdefer Geometry.deinitSystem();
 
     // TODO: temporary
     // instance.test_geometry = .getDefaultGeometry();
-    var test_plane_config = try GeometrySystem.GeometryConfig(Vertex3D, u32).initPlane(
-        allocator,
-        .{
-            .name = "plane",
-            .material_name = "diffuse",
-            .width = 20,
-            .height = 20,
-            .segment_count_x = 4,
-            .segment_count_y = 4,
-            .tile_x = 2,
-            .tile_y = 2,
-        },
-    );
+    var test_plane_config = try Geometry.GeometryConfig(Vertex3D, u32).initPlane(.{
+        .name = "plane",
+        .material_name = "diffuse",
+        .width = 20,
+        .height = 20,
+        .segment_count_x = 4,
+        .segment_count_y = 4,
+        .tile_x = 2,
+        .tile_y = 2,
+    });
     defer test_plane_config.deinit();
 
-    test_geometry = try zing.sys.geometry.acquireGeometryByConfig(
+    test_geometry = try Geometry.acquireByConfig(
         test_plane_config,
         .{ .auto_release = true },
     );
 
-    var test_ui_plane_config = try GeometrySystem.GeometryConfig(Vertex2D, u32).initPlane(
-        allocator,
-        .{
-            .name = "ui_plane",
-            .material_name = "ui",
-            .width = 512,
-            .height = 512,
-            .segment_count_x = 1,
-            .segment_count_y = 1,
-            .tile_x = 1,
-            .tile_y = 1,
-        },
-    );
+    var test_ui_plane_config = try Geometry.GeometryConfig(Vertex2D, u32).initPlane(.{
+        .name = "ui_plane",
+        .material_name = "ui",
+        .width = 512,
+        .height = 512,
+        .segment_count_x = 1,
+        .segment_count_y = 1,
+        .tile_x = 1,
+        .tile_y = 1,
+    });
     defer test_ui_plane_config.deinit();
 
-    test_ui_geometry = try zing.sys.geometry.acquireGeometryByConfig(
+    test_ui_geometry = try Geometry.acquireByConfig(
         test_ui_plane_config,
         .{ .auto_release = true },
     );
@@ -119,9 +114,9 @@ pub fn init(allocator: Allocator) !void {
 }
 
 pub fn deinit() void {
-    zing.sys.geometry.deinit();
-    zing.sys.material.deinit();
-    zing.sys.texture.deinit();
+    Geometry.deinitSystem();
+    Material.deinitSystem();
+    Texture.deinitSystem();
     zing.renderer.deinit();
 
     zing.engine.window.destroy();
@@ -221,15 +216,15 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
         choice += 1;
         choice %= names.len;
 
-        if (zing.sys.geometry.getIfExists(test_geometry)) |geometry| {
-            const material = try zing.sys.material.get(geometry.material);
+        if (Geometry.getIfExists(test_geometry)) |geometry| {
+            const material = try Material.get(geometry.material);
 
             const prev_texture = material.diffuse_map.texture;
-            material.diffuse_map.texture = try zing.sys.texture.acquireTextureByName(
+            material.diffuse_map.texture = try Texture.acquireByName(
                 names[choice],
                 .{ .auto_release = true },
             );
-            zing.sys.texture.releaseTextureByHandle(prev_texture);
+            Texture.releaseByHandle(prev_texture);
         }
     }
     prevPressN = pressN;

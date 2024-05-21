@@ -8,13 +8,14 @@ const config = @import("../config.zig");
 
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const Material = @import("material.zig");
-const Geometry = @import("geometry.zig");
 const RenderPass = @import("renderpass.zig");
 const Swapchain = @import("swapchain.zig");
 
-const MaterialHandle = @import("../systems/material_system.zig").MaterialHandle;
-const GeometryHandle = @import("../systems/geometry_system.zig").GeometryHandle;
+const Material = @import("material.zig");
+const MaterialHandle = Material.MaterialHandle;
+
+const Geometry = @import("geometry.zig");
+const GeometryHandle = Geometry.GeometryHandle;
 
 const Shader = @import("shader.zig");
 const ShaderResource = @import("../resources/shader_resource.zig");
@@ -542,14 +543,14 @@ pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
 pub fn drawGeometry(self: *Renderer, data: GeometryRenderData) !void {
     const command_buffer = self.getCurrentCommandBuffer();
 
-    const geometry: *Geometry = try zing.sys.geometry.get(data.geometry);
+    const geometry = try Geometry.get(data.geometry);
 
-    const material_handle = if (zing.sys.material.exists(geometry.material)) //
+    const material_handle = if (Material.exists(geometry.material)) //
         geometry.material
     else
-        zing.sys.material.acquireDefaultMaterial();
+        Material.acquireDefault();
 
-    const material: *Material = try zing.sys.material.get(material_handle);
+    const material = try Material.get(material_handle);
 
     switch (material.material_type) {
         .world => {
