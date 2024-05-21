@@ -53,8 +53,18 @@ pub fn acquireDefaultMaterial(self: *const MaterialSystem) MaterialHandle {
 }
 
 pub fn acquireMaterialByConfig(self: *MaterialSystem, config: Material.Config) !MaterialHandle {
-    var material = Material.init();
-    try self.createMaterial(config, &material);
+    const diffuse_texture = zing.sys.texture.acquireTextureByName(config.diffuse_map_name, .{ .auto_release = true }) //
+    catch zing.sys.texture.acquireDefaultTexture();
+
+    var material = try Material.init(
+        config.name,
+        if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world,
+        config.diffuse_color,
+        diffuse_texture,
+    );
+    errdefer material.deinit();
+
+    material.generation = if (material.generation) |g| g +% 1 else 0;
 
     const handle = try self.materials.add(.{
         .material = material,
@@ -64,7 +74,6 @@ pub fn acquireMaterialByConfig(self: *MaterialSystem, config: Material.Config) !
     errdefer self.materials.removeAssumeLive(handle);
 
     try self.lookup.put(material.name.slice(), handle);
-    errdefer self.lookup.remove(material.name.slice());
 
     std.log.info("MaterialSystem: Create material '{s}'. Ref count: 1", .{material.name.slice()});
 
@@ -151,16 +160,12 @@ pub inline fn getIfExists(self: *MaterialSystem, handle: MaterialHandle) ?*Mater
 
 // utils
 fn createDefaultMaterial(self: *MaterialSystem) !void {
-    var material = Material.init();
-    material.name = try Array(u8, 256).fromSlice(default_material_name);
-    material.diffuse_color = math.Vec{ 1, 1, 1, 1 };
-    material.diffuse_map = .{
-        .use = .map_diffuse,
-        .texture = zing.sys.texture.acquireDefaultTexture(),
-    };
-    material.generation = null; // NOTE: default material always has null generation
-
-    material.instance_handle = try zing.renderer.phong_shader.initInstance();
+    const material = try Material.init(
+        default_material_name,
+        .world,
+        math.Vec{ 1, 1, 1, 1 },
+        zing.sys.texture.acquireDefaultTexture(),
+    );
 
     self.default_material = try self.materials.add(.{
         .material = material,
@@ -169,60 +174,16 @@ fn createDefaultMaterial(self: *MaterialSystem) !void {
     });
 
     try self.lookup.put(default_material_name, self.default_material);
-}
 
-fn createMaterial(self: *MaterialSystem, config: Material.Config, material: *Material) !void {
-    _ = self;
-
-    var temp_material = Material.init();
-    temp_material.name = try Array(u8, 256).fromSlice(config.name);
-    temp_material.material_type = if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world;
-    temp_material.diffuse_color = config.diffuse_color;
-
-    if (config.diffuse_map_name.len > 0) {
-        temp_material.diffuse_map = TextureMap{
-            .use = .map_diffuse,
-            .texture = zing.sys.texture.acquireTextureByName(
-                config.diffuse_map_name,
-                .{ .auto_release = true },
-            ) catch zing.sys.texture.acquireDefaultTexture(),
-        };
-    }
-
-    temp_material.generation = if (material.generation) |g| g +% 1 else 0;
-
-    switch (temp_material.material_type) {
-        .world => temp_material.instance_handle = try zing.renderer.phong_shader.initInstance(),
-        .ui => temp_material.instance_handle = try zing.renderer.ui_shader.initInstance(),
-    }
-
-    if (material.instance_handle) |instance_handle| {
-        switch (material.material_type) {
-            .world => zing.renderer.phong_shader.deinitInstance(instance_handle),
-            .ui => zing.renderer.ui_shader.deinitInstance(instance_handle),
-        }
-    }
-
-    material.* = temp_material;
+    std.log.info("MaterialSystem: Create default material '{s}'. Ref count: 1", .{material.name.slice()});
 }
 
 fn destroyMaterial(self: *MaterialSystem, handle: MaterialHandle) void {
     if (self.materials.getColumnPtrIfLive(handle, .material)) |material| {
         std.log.info("MaterialSystem: Destroy material '{s}'", .{material.name.slice()});
 
-        const material_name = material.name; // NOTE: take a copy of the name
-
-        zing.sys.texture.releaseTextureByHandle(material.diffuse_map.texture);
-
-        if (material.instance_handle) |instance_handle| {
-            switch (material.material_type) {
-                .world => zing.renderer.phong_shader.deinitInstance(instance_handle),
-                .ui => zing.renderer.ui_shader.deinitInstance(instance_handle),
-            }
-        }
-
+        _ = self.lookup.remove(material.name.slice());
         self.materials.removeAssumeLive(handle); // NOTE: this calls material.deinit()
-        _ = self.lookup.remove(material_name.slice());
     }
 }
 

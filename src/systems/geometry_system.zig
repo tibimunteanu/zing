@@ -206,6 +206,7 @@ pub fn acquireGeometryByConfig(
         config.indices,
     );
     geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
+    errdefer geometry.deinit();
 
     const handle = try self.geometries.add(.{
         .geometry = geometry,
@@ -296,12 +297,15 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
         &indices_3d,
     );
     geometry_3d.generation = null; // NOTE: default geometry always has null generation
+    errdefer geometry_3d.deinit();
 
     self.default_geometry = try self.geometries.add(.{
         .geometry = geometry_3d,
         .reference_count = 1,
         .auto_release = false,
     });
+
+    std.log.info("GeometrySystem: Create default 3D geometry '{s}'. Ref count: 1", .{geometry_3d.name.slice()});
 
     const vertices_2d = [_]Vertex2D{
         .{ .position = .{ -5.0, -5.0 }, .texcoord = .{ 0.0, 0.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
@@ -319,12 +323,15 @@ fn createDefaultGeometries(self: *GeometrySystem) !void {
         &indices_2d,
     );
     geometry_2d.generation = null; // NOTE: default geometry always has null generation
+    errdefer geometry_2d.deinit();
 
     self.default_geometry_2d = try self.geometries.add(.{
         .geometry = geometry_2d,
         .reference_count = 1,
         .auto_release = false,
     });
+
+    std.log.info("GeometrySystem: Create default 2D geometry '{s}'. Ref count: 1", .{geometry_2d.name.slice()});
 }
 
 fn destroyGeometry(self: *GeometrySystem, handle: GeometryHandle) void {

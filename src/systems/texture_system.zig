@@ -61,7 +61,32 @@ pub fn acquireTextureByName(self: *TextureSystem, name: []const u8, options: str
     if (self.lookup.get(name)) |handle| {
         return self.acquireTextureByHandle(handle);
     } else {
-        return try self.createTexture(name, .{ .auto_release = options.auto_release });
+        var resource = try ImageResource.init(self.allocator, name);
+        defer resource.deinit();
+
+        var texture = try Texture.init(
+            name,
+            .r8g8b8a8_srgb,
+            resource.image.width,
+            resource.image.height,
+            resource.image.num_components,
+            resource.image.data,
+        );
+        texture.generation = if (texture.generation) |g| g +% 1 else 0;
+        errdefer texture.deinit();
+
+        const handle = try self.textures.add(.{
+            .texture = texture,
+            .reference_count = 1,
+            .auto_release = options.auto_release,
+        });
+        errdefer self.textures.removeAssumeLive(handle);
+
+        try self.lookup.put(texture.name.constSlice(), handle);
+
+        std.log.info("TextureSystem: Create texture '{s}'. Ref count: 1", .{name});
+
+        return handle;
     }
 }
 
@@ -153,7 +178,14 @@ fn createDefaultTextures(self: *TextureSystem) !void {
         }
     }
 
-    var texture = try Texture.init(default_texture_name, .r8g8b8a8_srgb, size, size, num_components, &pixels);
+    var texture = try Texture.init(
+        default_texture_name,
+        .r8g8b8a8_srgb,
+        size,
+        size,
+        num_components,
+        &pixels,
+    );
     errdefer texture.deinit();
 
     self.default_texture = try self.textures.add(.{
@@ -164,36 +196,7 @@ fn createDefaultTextures(self: *TextureSystem) !void {
 
     try self.lookup.put(default_texture_name, self.default_texture);
 
-    std.log.info("TextureSystem: Create default texture '{s}'. Ref count: 1", .{default_texture_name});
-}
-
-fn createTexture(self: *TextureSystem, name: []const u8, options: struct { auto_release: bool }) !TextureHandle {
-    var resource = try ImageResource.init(self.allocator, name);
-    defer resource.deinit();
-
-    var texture = try Texture.init(
-        name,
-        .r8g8b8a8_srgb,
-        resource.image.width,
-        resource.image.height,
-        resource.image.num_components,
-        resource.image.data,
-    );
-    texture.generation = if (texture.generation) |g| g +% 1 else 0;
-
-    const handle = try self.textures.add(.{
-        .texture = texture,
-        .reference_count = 1,
-        .auto_release = options.auto_release,
-    });
-    errdefer self.textures.removeAssumeLive(handle);
-
-    try self.lookup.put(texture.name.constSlice(), handle);
-    errdefer self.lookup.remove(texture.name.constSlice());
-
-    std.log.info("TextureSystem: Create texture '{s}'. Ref count: 1", .{name});
-
-    return handle;
+    std.log.info("TextureSystem: Create default texture '{s}'. Ref count: 1", .{texture.name.slice()});
 }
 
 fn destroyTexture(self: *TextureSystem, handle: TextureHandle) void {

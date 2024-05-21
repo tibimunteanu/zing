@@ -22,7 +22,12 @@ material: MaterialHandle,
 generation: ?u32,
 internal_id: ?u32,
 
-pub fn init(name: []const u8, material: MaterialHandle, vertices: anytype, indices: anytype) !Geometry {
+pub fn init(
+    name: []const u8,
+    material: MaterialHandle,
+    vertices: anytype,
+    indices: anytype,
+) !Geometry {
     var self: Geometry = undefined;
     self.name = try Array(u8, 256).fromSlice(name);
     self.material = material;
