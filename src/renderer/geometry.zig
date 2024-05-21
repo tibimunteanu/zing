@@ -2,7 +2,6 @@ const std = @import("std");
 const pool = @import("zpool");
 const math = @import("zmath");
 
-const zing = @import("../zing.zig");
 const Renderer = @import("renderer.zig");
 const Material = @import("material.zig");
 

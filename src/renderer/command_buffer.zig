@@ -1,6 +1,5 @@
 const std = @import("std");
 const vk = @import("vk.zig");
-const zing = @import("../zing.zig");
 const Renderer = @import("renderer.zig");
 
 const CommandBuffer = @This();

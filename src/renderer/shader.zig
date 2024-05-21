@@ -2,7 +2,6 @@ const std = @import("std");
 const pool = @import("zpool");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
-const zing = @import("../zing.zig");
 const Renderer = @import("renderer.zig");
 const Buffer = @import("buffer.zig");
 const BinaryResource = @import("../resources/binary_resource.zig");

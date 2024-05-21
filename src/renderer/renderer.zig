@@ -3,9 +3,9 @@ const builtin = @import("builtin");
 const glfw = @import("glfw");
 const math = @import("zmath");
 const vk = @import("vk.zig");
-const zing = @import("../zing.zig");
 const config = @import("../config.zig");
 
+const Engine = @import("../engine.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const RenderPass = @import("renderpass.zig");
@@ -222,7 +222,7 @@ pub var delta_time: f32 = undefined;
 pub fn init(ally: Allocator) !void {
     allocator = ally;
 
-    desired_extent = zing.engine.window.getFramebufferSize();
+    desired_extent = Engine.window.getFramebufferSize();
     desired_extent_generation = 0;
 
     // load base api
@@ -353,8 +353,8 @@ pub fn init(ally: Allocator) !void {
     near_clip = 0.1;
     far_clip = 1000.0;
 
-    zing.engine.window.setFramebufferSizeCallback(framebufferSizeCallback);
-    setProjection(zing.engine.window.getFramebufferSize());
+    Engine.window.setFramebufferSizeCallback(framebufferSizeCallback);
+    setProjection(Engine.window.getFramebufferSize());
 
     frame_index = 0;
     delta_time = config.target_frame_seconds;
@@ -675,7 +675,7 @@ fn createInstance(app_name: [*:0]const u8) !vk.Instance {
 
 fn createSurface() !vk.SurfaceKHR {
     var window_surface: vk.SurfaceKHR = undefined;
-    if (glfw.createWindowSurface(instance, zing.engine.window, null, &window_surface) != @intFromEnum(vk.Result.success)) {
+    if (glfw.createWindowSurface(instance, Engine.window, null, &window_surface) != @intFromEnum(vk.Result.success)) {
         return error.SurfaceCreationFailed;
     }
     return window_surface;

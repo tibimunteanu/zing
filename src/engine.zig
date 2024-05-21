@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 const math = @import("zmath");
 const glfw = @import("glfw");
 
-const zing = @import("zing.zig");
 const utils = @import("utils.zig");
 const Renderer = @import("renderer/renderer.zig");
 const Texture = @import("renderer/texture.zig");
@@ -33,9 +32,9 @@ var test_geometry = GeometryHandle.nil;
 var test_ui_geometry = GeometryHandle.nil;
 // TODO: end temporary
 
-allocator: Allocator,
-window: glfw.Window,
-last_time: f64,
+pub var window: glfw.Window = undefined;
+
+var last_time: f64 = 0;
 
 var camera_view: math.Mat = undefined;
 var camera_view_dirty: bool = true;
@@ -45,8 +44,6 @@ var camera_euler: math.Vec = math.splat(math.Vec, 0.0); // pitch, yaw, roll
 var prevPressN: glfw.Action = .release;
 
 pub fn init(allocator: Allocator) !void {
-    zing.engine.allocator = allocator;
-
     glfw.setErrorCallback(errorCallback);
 
     if (!glfw.init(.{})) {
@@ -55,13 +52,13 @@ pub fn init(allocator: Allocator) !void {
     }
     errdefer glfw.terminate();
 
-    zing.engine.window = glfw.Window.create(960, 540, "Zing", null, null, .{
+    window = glfw.Window.create(960, 540, "Zing", null, null, .{
         .client_api = .no_api,
     }) orelse return blk: {
         std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
         break :blk error.CreateWindowFailed;
     };
-    errdefer zing.engine.window.destroy();
+    errdefer window.destroy();
 
     try Renderer.init(allocator);
     errdefer Renderer.deinit();
@@ -119,21 +116,21 @@ pub fn deinit() void {
     Texture.deinitSystem();
     Renderer.deinit();
 
-    zing.engine.window.destroy();
+    window.destroy();
 
     glfw.terminate();
 }
 
 pub fn run() !void {
-    zing.engine.last_time = glfw.getTime();
+    last_time = glfw.getTime();
 
-    while (!zing.engine.window.shouldClose()) {
-        if (zing.engine.window.getAttrib(.iconified) == 0) {
+    while (!window.shouldClose()) {
+        if (window.getAttrib(.iconified) == 0) {
             const frame_start_time = glfw.getTime();
-            const precise_delta_time = frame_start_time - zing.engine.last_time;
+            const precise_delta_time = frame_start_time - last_time;
             const delta_time = @as(f32, @floatCast(precise_delta_time));
 
-            try zing.engine.updateCamera(delta_time);
+            try updateCamera(delta_time);
 
             const packet = RenderPacket{
                 .delta_time = delta_time,
@@ -158,7 +155,7 @@ pub fn run() !void {
             // const fps = 1.0 / frame_elapsed_time;
             // std.log.info("{d:.0}", .{fps});
 
-            zing.engine.last_time = frame_start_time;
+            last_time = frame_start_time;
         }
         glfw.pollEvents();
     }
@@ -167,35 +164,35 @@ pub fn run() !void {
 }
 
 // utils
-fn updateCamera(self: *const Engine, delta_time: f32) !void {
-    if (self.window.getKey(.d) == .press) {
+fn updateCamera(delta_time: f32) !void {
+    if (window.getKey(.d) == .press) {
         cameraYaw(1.0 * delta_time);
     }
-    if (self.window.getKey(.a) == .press) {
+    if (window.getKey(.a) == .press) {
         cameraYaw(-1.0 * delta_time);
     }
-    if (self.window.getKey(.j) == .press) {
+    if (window.getKey(.j) == .press) {
         cameraPitch(1.0 * delta_time);
     }
-    if (self.window.getKey(.k) == .press) {
+    if (window.getKey(.k) == .press) {
         cameraPitch(-1.0 * delta_time);
     }
 
     var velocity: math.Vec = math.splat(math.Vec, 0.0);
 
-    if (self.window.getKey(.s) == .press) {
+    if (window.getKey(.s) == .press) {
         const forward = utils.getForwardVec(camera_view);
         velocity += forward;
     }
-    if (self.window.getKey(.w) == .press) {
+    if (window.getKey(.w) == .press) {
         const backward = utils.getBackwardVec(camera_view);
         velocity += backward;
     }
-    if (self.window.getKey(.h) == .press) {
+    if (window.getKey(.h) == .press) {
         const left = utils.getLeftVec(camera_view);
         velocity += left;
     }
-    if (self.window.getKey(.l) == .press) {
+    if (window.getKey(.l) == .press) {
         const right = utils.getRightVec(camera_view);
         velocity += right;
     }
@@ -211,7 +208,7 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
     recomputeCameraView();
     Renderer.view = camera_view;
 
-    const pressN = self.window.getKey(.n);
+    const pressN = window.getKey(.n);
     if (pressN == .press and prevPressN == .release) {
         choice += 1;
         choice %= names.len;
