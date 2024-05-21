@@ -1,6 +1,7 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
+const Renderer = @import("renderer.zig");
 
 const CommandBuffer = @This();
 
@@ -12,8 +13,8 @@ pub fn init(pool: vk.CommandPool, options: struct { is_primary: bool = true }) !
     var self: CommandBuffer = undefined;
     self.pool = pool;
 
-    try zing.renderer.device_api.allocateCommandBuffers(
-        zing.renderer.device,
+    try Renderer.device_api.allocateCommandBuffers(
+        Renderer.device,
         &vk.CommandBufferAllocateInfo{
             .command_pool = pool,
             .command_buffer_count = 1,
@@ -27,18 +28,18 @@ pub fn init(pool: vk.CommandPool, options: struct { is_primary: bool = true }) !
 
 pub fn deinit(self: *CommandBuffer) void {
     if (self.handle != .null_handle) {
-        zing.renderer.device_api.freeCommandBuffers(zing.renderer.device, self.pool, 1, @ptrCast(&self.handle));
+        Renderer.device_api.freeCommandBuffers(Renderer.device, self.pool, 1, @ptrCast(&self.handle));
     }
     self.handle = .null_handle;
     self.pool = .null_handle;
 }
 
 pub fn begin(self: *const CommandBuffer, flags: vk.CommandBufferUsageFlags) !void {
-    try zing.renderer.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
+    try Renderer.device_api.beginCommandBuffer(self.handle, &vk.CommandBufferBeginInfo{ .flags = flags });
 }
 
 pub fn end(self: *const CommandBuffer) !void {
-    try zing.renderer.device_api.endCommandBuffer(self.handle);
+    try Renderer.device_api.endCommandBuffer(self.handle);
 }
 
 pub fn initAndBeginSingleUse(pool: vk.CommandPool) !CommandBuffer {
@@ -54,7 +55,7 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
 
     try self.end();
 
-    try zing.renderer.device_api.queueSubmit(
+    try Renderer.device_api.queueSubmit(
         queue,
         1,
         @ptrCast(&vk.SubmitInfo{
@@ -64,5 +65,5 @@ pub fn endSingleUseAndDeinit(self: *CommandBuffer, queue: vk.Queue) !void {
         .null_handle,
     );
 
-    try zing.renderer.device_api.queueWaitIdle(queue);
+    try Renderer.device_api.queueWaitIdle(queue);
 }

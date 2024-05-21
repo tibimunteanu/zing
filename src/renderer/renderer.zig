@@ -171,99 +171,99 @@ pub const RenderPacket = struct {
     ui_geometries: []const GeometryRenderData,
 };
 
-allocator: Allocator,
+pub var allocator: Allocator = undefined;
 
-base_api: BaseAPI,
-instance_api: InstanceAPI,
-device_api: DeviceAPI,
+pub var base_api: BaseAPI = undefined;
+pub var instance_api: InstanceAPI = undefined;
+pub var device_api: DeviceAPI = undefined;
 
-instance: vk.Instance,
-surface: vk.SurfaceKHR,
-physical_device: PhysicalDevice,
-device: vk.Device,
+pub var instance: vk.Instance = undefined;
+pub var surface: vk.SurfaceKHR = undefined;
+pub var physical_device: PhysicalDevice = undefined;
+pub var device: vk.Device = undefined;
 
-graphics_queue: Queue,
-present_queue: Queue,
-compute_queue: Queue,
-transfer_queue: Queue,
+pub var graphics_queue: Queue = undefined;
+pub var present_queue: Queue = undefined;
+pub var compute_queue: Queue = undefined;
+pub var transfer_queue: Queue = undefined;
 
-swapchain: Swapchain,
+pub var swapchain: Swapchain = undefined;
 
-framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
-world_framebuffers: Array(vk.Framebuffer, config.swapchain_max_images),
+pub var framebuffers: Array(vk.Framebuffer, config.swapchain_max_images) = undefined;
+pub var world_framebuffers: Array(vk.Framebuffer, config.swapchain_max_images) = undefined;
 
-graphics_command_pool: vk.CommandPool,
-graphics_command_buffers: Array(CommandBuffer, config.swapchain_max_images),
+pub var graphics_command_pool: vk.CommandPool = undefined;
+pub var graphics_command_buffers: Array(CommandBuffer, config.swapchain_max_images) = undefined;
 
-world_render_pass: RenderPass,
-ui_render_pass: RenderPass,
+pub var world_render_pass: RenderPass = undefined;
+pub var ui_render_pass: RenderPass = undefined;
 
-phong_shader: Shader,
-ui_shader: Shader,
+pub var phong_shader: Shader = undefined;
+pub var ui_shader: Shader = undefined;
 
-vertex_buffer: Buffer,
-index_buffer: Buffer,
+pub var vertex_buffer: Buffer = undefined;
+pub var index_buffer: Buffer = undefined;
 
-geometries: [geometry_max_count]Geometry.GeometryData,
+pub var geometries: [geometry_max_count]Geometry.GeometryData = undefined;
 
-projection: math.Mat,
-view: math.Mat,
-ui_projection: math.Mat,
-ui_view: math.Mat,
-fov: f32,
-near_clip: f32,
-far_clip: f32,
+pub var projection: math.Mat = undefined;
+pub var view: math.Mat = undefined;
+pub var ui_projection: math.Mat = undefined;
+pub var ui_view: math.Mat = undefined;
+pub var fov: f32 = undefined;
+pub var near_clip: f32 = undefined;
+pub var far_clip: f32 = undefined;
 
-desired_extent: glfw.Window.Size,
-desired_extent_generation: u32,
-frame_index: u64,
-delta_time: f32,
+pub var desired_extent: glfw.Window.Size = undefined;
+pub var desired_extent_generation: u32 = undefined;
+pub var frame_index: u64 = undefined;
+pub var delta_time: f32 = undefined;
 
-pub fn init(self: *Renderer, allocator: Allocator) !void {
-    self.allocator = allocator;
+pub fn init(ally: Allocator) !void {
+    allocator = ally;
 
-    self.desired_extent = zing.engine.window.getFramebufferSize();
-    self.desired_extent_generation = 0;
+    desired_extent = zing.engine.window.getFramebufferSize();
+    desired_extent_generation = 0;
 
     // load base api
     const base_loader = @as(vk.PfnGetInstanceProcAddr, @ptrCast(&glfw.getInstanceProcAddress));
-    self.base_api = try BaseAPI.load(base_loader);
+    base_api = try BaseAPI.load(base_loader);
 
     // create instance and load instance api
-    self.instance = try createInstance(allocator, self.base_api, "Zing engine");
+    instance = try createInstance("Zing engine");
 
-    const instance_loader = self.base_api.dispatch.vkGetInstanceProcAddr;
-    self.instance_api = try InstanceAPI.load(self.instance, instance_loader);
-    errdefer self.instance_api.destroyInstance(self.instance, null);
+    const instance_loader = base_api.dispatch.vkGetInstanceProcAddr;
+    instance_api = try InstanceAPI.load(instance, instance_loader);
+    errdefer instance_api.destroyInstance(instance, null);
 
     // create surface
-    self.surface = try createSurface(self.instance);
-    errdefer self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
+    surface = try createSurface();
+    errdefer instance_api.destroySurfaceKHR(instance, surface, null);
 
     // pick a suitable physical device
-    self.physical_device = try pickPhysicalDevice(allocator, self.instance, self.instance_api, self.surface);
+    physical_device = try pickPhysicalDevice();
 
-    std.log.info("Graphics device: {?s}", .{self.physical_device.properties.device_name});
+    std.log.info("Graphics device: {?s}", .{physical_device.properties.device_name});
 
     // create logical device and load device api
-    self.device = try createDevice(allocator, self.physical_device, self.instance_api);
+    device = try createDevice();
 
-    const device_loader = self.instance_api.dispatch.vkGetDeviceProcAddr;
-    self.device_api = try DeviceAPI.load(self.device, device_loader);
-    errdefer self.device_api.destroyDevice(self.device, null);
+    const device_loader = instance_api.dispatch.vkGetDeviceProcAddr;
+    device_api = try DeviceAPI.load(device, device_loader);
+    errdefer device_api.destroyDevice(device, null);
 
     // get queues
-    self.graphics_queue = Queue.init(self.physical_device.graphics_family_index);
-    self.present_queue = Queue.init(self.physical_device.present_family_index);
-    self.compute_queue = Queue.init(self.physical_device.compute_family_index);
-    self.transfer_queue = Queue.init(self.physical_device.transfer_family_index);
+    graphics_queue = Queue.init(physical_device.graphics_family_index);
+    present_queue = Queue.init(physical_device.present_family_index);
+    compute_queue = Queue.init(physical_device.compute_family_index);
+    transfer_queue = Queue.init(physical_device.transfer_family_index);
 
     // create swapchain
-    self.swapchain = try Swapchain.init(allocator, .{});
-    errdefer self.swapchain.deinit();
+    swapchain = try Swapchain.init(allocator, .{});
+    errdefer swapchain.deinit();
 
     // create renderpasses
-    self.world_render_pass = try RenderPass.init(
+    world_render_pass = try RenderPass.init(
         .{
             .clear_flags = .{
                 .color = true,
@@ -279,117 +279,117 @@ pub fn init(self: *Renderer, allocator: Allocator) !void {
             .has_next = true,
         },
     );
-    errdefer self.world_render_pass.deinit();
+    errdefer world_render_pass.deinit();
 
-    self.ui_render_pass = try RenderPass.init(
+    ui_render_pass = try RenderPass.init(
         .{
             .has_prev = true,
             .has_next = false,
         },
     );
-    errdefer self.ui_render_pass.deinit();
+    errdefer ui_render_pass.deinit();
 
     // create framebuffers
-    try self.initFramebuffers();
-    errdefer self.deinitFramebuffers();
+    try initFramebuffers();
+    errdefer deinitFramebuffers();
 
     // create command pool
-    self.graphics_command_pool = try self.device_api.createCommandPool(
-        self.device,
+    graphics_command_pool = try device_api.createCommandPool(
+        device,
         &vk.CommandPoolCreateInfo{
-            .queue_family_index = self.graphics_queue.family_index,
+            .queue_family_index = graphics_queue.family_index,
             .flags = .{ .reset_command_buffer_bit = true },
         },
         null,
     );
-    errdefer self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
+    errdefer device_api.destroyCommandPool(device, graphics_command_pool, null);
 
     // create command buffers
-    try self.initCommandBuffers();
-    errdefer self.deinitCommandBuffers();
+    try initCommandBuffers();
+    errdefer deinitCommandBuffers();
 
     // create shaders
     var phong_shader_resource = try ShaderResource.init(allocator, "phong");
     defer phong_shader_resource.deinit();
 
-    self.phong_shader = try Shader.init(allocator, phong_shader_resource.config.value);
-    errdefer self.phong_shader.deinit();
+    phong_shader = try Shader.init(allocator, phong_shader_resource.config.value);
+    errdefer phong_shader.deinit();
 
     var ui_shader_resource = try ShaderResource.init(allocator, "ui");
     defer ui_shader_resource.deinit();
 
-    self.ui_shader = try Shader.init(allocator, ui_shader_resource.config.value);
-    errdefer self.ui_shader.deinit();
+    ui_shader = try Shader.init(allocator, ui_shader_resource.config.value);
+    errdefer ui_shader.deinit();
 
     // create buffers
-    self.vertex_buffer = try Buffer.init(
+    vertex_buffer = try Buffer.init(
         allocator,
         100 * 1024 * 1024,
         .{ .vertex_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
         .{ .device_local_bit = true },
         .{ .managed = true, .bind_on_create = true },
     );
-    errdefer self.vertex_buffer.deinit();
+    errdefer vertex_buffer.deinit();
 
-    self.index_buffer = try Buffer.init(
+    index_buffer = try Buffer.init(
         allocator,
         10 * 1024 * 1024,
         .{ .index_buffer_bit = true, .transfer_dst_bit = true, .transfer_src_bit = true },
         .{ .device_local_bit = true },
         .{ .managed = true, .bind_on_create = true },
     );
-    errdefer self.index_buffer.deinit();
+    errdefer index_buffer.deinit();
 
     // reset geometry storage
-    for (&self.geometries) |*geometry| {
+    for (&geometries) |*geometry| {
         geometry.*.id = null;
         geometry.*.generation = null;
     }
 
-    self.view = math.inverse(math.translation(0.0, 0.0, -30.0));
-    self.ui_view = math.inverse(math.identity());
+    view = math.inverse(math.translation(0.0, 0.0, -30.0));
+    ui_view = math.inverse(math.identity());
 
-    self.fov = std.math.degreesToRadians(45.0);
-    self.near_clip = 0.1;
-    self.far_clip = 1000.0;
+    fov = std.math.degreesToRadians(45.0);
+    near_clip = 0.1;
+    far_clip = 1000.0;
 
     zing.engine.window.setFramebufferSizeCallback(framebufferSizeCallback);
-    self.setProjection(zing.engine.window.getFramebufferSize());
+    setProjection(zing.engine.window.getFramebufferSize());
 
-    self.frame_index = 0;
-    self.delta_time = config.target_frame_seconds;
+    frame_index = 0;
+    delta_time = config.target_frame_seconds;
 }
 
-pub fn deinit(self: *Renderer) void {
-    self.device_api.deviceWaitIdle(self.device) catch {};
+pub fn deinit() void {
+    device_api.deviceWaitIdle(device) catch {};
 
-    self.deinitCommandBuffers();
-    self.device_api.destroyCommandPool(self.device, self.graphics_command_pool, null);
+    deinitCommandBuffers();
+    device_api.destroyCommandPool(device, graphics_command_pool, null);
 
-    self.deinitFramebuffers();
+    deinitFramebuffers();
 
-    self.ui_render_pass.deinit();
-    self.world_render_pass.deinit();
+    ui_render_pass.deinit();
+    world_render_pass.deinit();
 
-    self.vertex_buffer.deinit();
-    self.index_buffer.deinit();
+    vertex_buffer.deinit();
+    index_buffer.deinit();
 
-    self.ui_shader.deinit();
-    self.phong_shader.deinit();
+    ui_shader.deinit();
+    phong_shader.deinit();
 
-    self.swapchain.deinit();
+    swapchain.deinit();
 
-    self.device_api.destroyDevice(self.device, null);
-    self.instance_api.destroySurfaceKHR(self.instance, self.surface, null);
-    self.instance_api.destroyInstance(self.instance, null);
+    device_api.destroyDevice(device, null);
+    instance_api.destroySurfaceKHR(instance, surface, null);
+    instance_api.destroyInstance(instance, null);
 }
 
-pub fn getMemoryIndex(self: *const Renderer, type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
+pub fn getMemoryIndex(type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
     // TODO: should we always get fresh memory properties from the device?
     // const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
 
-    for (0..self.physical_device.memory_properties.memory_type_count) |i| {
-        if ((type_bits & std.math.shl(u32, 1, i) != 0) and self.physical_device.memory_properties.memory_types[i].property_flags.contains(flags)) {
+    for (0..physical_device.memory_properties.memory_type_count) |i| {
+        if ((type_bits & std.math.shl(u32, 1, i) != 0) and physical_device.memory_properties.memory_types[i].property_flags.contains(flags)) {
             return @intCast(i);
         }
     }
@@ -397,48 +397,48 @@ pub fn getMemoryIndex(self: *const Renderer, type_bits: u32, flags: vk.MemoryPro
     return error.GetMemoryIndexFailed;
 }
 
-pub fn allocate(self: *const Renderer, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
-    return try self.device_api.allocateMemory(self.device, &.{
+pub fn allocate(requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
+    return try device_api.allocateMemory(device, &.{
         .allocation_size = requirements.size,
-        .memory_type_index = try self.getMemoryIndex(requirements.memory_type_bits, flags),
+        .memory_type_index = try getMemoryIndex(requirements.memory_type_bits, flags),
     }, null);
 }
 
-pub fn onResized(self: *Renderer, new_desired_extent: glfw.Window.Size) void {
-    self.setProjection(new_desired_extent);
+pub fn onResized(new_desired_extent: glfw.Window.Size) void {
+    setProjection(new_desired_extent);
 
-    self.desired_extent = new_desired_extent;
-    self.desired_extent_generation += 1;
+    desired_extent = new_desired_extent;
+    desired_extent_generation += 1;
 }
 
-pub fn waitIdle(self: *const Renderer) !void {
-    try self.swapchain.waitForAllFences();
+pub fn waitIdle() !void {
+    try swapchain.waitForAllFences();
 }
 
-pub fn getCurrentCommandBuffer(self: *const Renderer) *const CommandBuffer {
-    return &self.graphics_command_buffers.constSlice()[self.swapchain.image_index];
+pub fn getCurrentCommandBuffer() *const CommandBuffer {
+    return &graphics_command_buffers.constSlice()[swapchain.image_index];
 }
 
-pub fn getCurrentFramebuffer(self: *const Renderer) vk.Framebuffer {
-    return self.framebuffers.constSlice()[self.swapchain.image_index];
+pub fn getCurrentFramebuffer() vk.Framebuffer {
+    return framebuffers.constSlice()[swapchain.image_index];
 }
 
-pub fn getCurrentWorldFramebuffer(self: *const Renderer) vk.Framebuffer {
-    return self.world_framebuffers.constSlice()[self.swapchain.image_index];
+pub fn getCurrentWorldFramebuffer() vk.Framebuffer {
+    return world_framebuffers.constSlice()[swapchain.image_index];
 }
 
-pub fn beginFrame(self: *Renderer, delta_time: f32) !bool {
-    self.delta_time = delta_time;
+pub fn beginFrame(dt: f32) !bool {
+    delta_time = dt;
 
-    if (self.desired_extent_generation != self.swapchain.extent_generation) {
+    if (desired_extent_generation != swapchain.extent_generation) {
         // NOTE: we could skip this and let the frame render and present will throw error.OutOfDateKHR
         // which is handled by endFrame() by recreating resources, but this way we avoid a best practices warning
-        try self.reinitSwapchainFramebuffersAndCmdBuffers();
+        try reinitSwapchainFramebuffersAndCmdBuffers();
         return false;
     }
 
-    const current_image = self.swapchain.getCurrentImage();
-    const command_buffer = self.getCurrentCommandBuffer();
+    const current_image = swapchain.getCurrentImage();
+    const command_buffer = getCurrentCommandBuffer();
 
     // make sure the current frame has finished rendering.
     // NOTE: the fences start signaled so the first frame can get past them.
@@ -448,34 +448,34 @@ pub fn beginFrame(self: *Renderer, delta_time: f32) !bool {
 
     const viewport: vk.Viewport = .{
         .x = 0.0,
-        .y = @floatFromInt(self.swapchain.extent.height),
-        .width = @floatFromInt(self.swapchain.extent.width),
-        .height = @floatFromInt(-@as(i32, @intCast(self.swapchain.extent.height))),
+        .y = @floatFromInt(swapchain.extent.height),
+        .width = @floatFromInt(swapchain.extent.width),
+        .height = @floatFromInt(-@as(i32, @intCast(swapchain.extent.height))),
         .min_depth = 0.0,
         .max_depth = 1.0,
     };
 
     const scissor: vk.Rect2D = .{
         .offset = .{ .x = 0, .y = 0 },
-        .extent = self.swapchain.extent,
+        .extent = swapchain.extent,
     };
 
-    self.device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
-    self.device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
+    device_api.cmdSetViewport(command_buffer.handle, 0, 1, @ptrCast(&viewport));
+    device_api.cmdSetScissor(command_buffer.handle, 0, 1, @ptrCast(&scissor));
 
     return true;
 }
 
-pub fn endFrame(self: *Renderer) !void {
-    const current_image = self.swapchain.getCurrentImage();
-    var command_buffer = self.getCurrentCommandBuffer();
+pub fn endFrame() !void {
+    const current_image = swapchain.getCurrentImage();
+    var command_buffer = getCurrentCommandBuffer();
 
     // end the command buffer
     try command_buffer.end();
 
     // submit the command buffer
-    try self.device_api.queueSubmit(
-        self.graphics_queue.handle,
+    try device_api.queueSubmit(
+        graphics_queue.handle,
         1,
         @ptrCast(&vk.SubmitInfo{
             .wait_semaphore_count = 1,
@@ -489,7 +489,7 @@ pub fn endFrame(self: *Renderer) !void {
         current_image.frame_fence,
     );
 
-    const state = self.swapchain.present() catch |err| switch (err) {
+    const state = swapchain.present() catch |err| switch (err) {
         error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
         else => |narrow| return narrow,
     };
@@ -499,49 +499,49 @@ pub fn endFrame(self: *Renderer) !void {
     // this should be configurable, so that you can choose if you only want to recreate on error.
     if (state == .suboptimal) {
         std.log.info("endFrame() Present was suboptimal. Recreating resources.", .{});
-        try self.reinitSwapchainFramebuffersAndCmdBuffers();
+        try reinitSwapchainFramebuffersAndCmdBuffers();
     }
 }
 
-pub fn drawFrame(self: *Renderer, packet: RenderPacket) !void {
-    if (try self.beginFrame(packet.delta_time)) {
-        try self.beginRenderPass(.world);
+pub fn drawFrame(packet: RenderPacket) !void {
+    if (try beginFrame(packet.delta_time)) {
+        try beginRenderPass(.world);
 
-        self.phong_shader.bindGlobal();
+        phong_shader.bindGlobal();
 
-        try self.phong_shader.setUniform("projection", self.projection);
-        try self.phong_shader.setUniform("view", self.view);
+        try phong_shader.setUniform("projection", projection);
+        try phong_shader.setUniform("view", view);
 
-        try self.phong_shader.applyGlobal();
+        try phong_shader.applyGlobal();
 
         for (packet.geometries) |geometry| {
-            try self.drawGeometry(geometry);
+            try drawGeometry(geometry);
         }
 
-        try self.endRenderPass(.world);
+        try endRenderPass(.world);
 
-        try self.beginRenderPass(.ui);
+        try beginRenderPass(.ui);
 
-        self.ui_shader.bindGlobal();
+        ui_shader.bindGlobal();
 
-        try self.ui_shader.setUniform("projection", self.ui_projection);
-        try self.ui_shader.setUniform("view", self.ui_view);
+        try ui_shader.setUniform("projection", ui_projection);
+        try ui_shader.setUniform("view", ui_view);
 
-        try self.ui_shader.applyGlobal();
+        try ui_shader.applyGlobal();
 
         for (packet.ui_geometries) |ui_geometry| {
-            try self.drawGeometry(ui_geometry);
+            try drawGeometry(ui_geometry);
         }
-        try self.endRenderPass(.ui);
+        try endRenderPass(.ui);
 
-        try self.endFrame();
+        try endFrame();
 
-        self.frame_index += 1;
+        frame_index += 1;
     }
 }
 
-pub fn drawGeometry(self: *Renderer, data: GeometryRenderData) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
+pub fn drawGeometry(data: GeometryRenderData) !void {
+    const command_buffer = getCurrentCommandBuffer();
 
     const geometry = try Geometry.get(data.geometry);
 
@@ -554,77 +554,77 @@ pub fn drawGeometry(self: *Renderer, data: GeometryRenderData) !void {
 
     switch (material.material_type) {
         .world => {
-            try self.phong_shader.setUniform("model", data.model);
+            try phong_shader.setUniform("model", data.model);
 
-            try self.phong_shader.bindInstance(material.instance_handle.?);
+            try phong_shader.bindInstance(material.instance_handle.?);
 
-            try self.phong_shader.setUniform("diffuse_color", material.diffuse_color);
-            try self.phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+            try phong_shader.setUniform("diffuse_color", material.diffuse_color);
+            try phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
 
-            try self.phong_shader.applyInstance();
+            try phong_shader.applyInstance();
         },
         .ui => {
-            try self.ui_shader.setUniform("model", data.model);
+            try ui_shader.setUniform("model", data.model);
 
-            try self.ui_shader.bindInstance(material.instance_handle.?);
+            try ui_shader.bindInstance(material.instance_handle.?);
 
-            try self.ui_shader.setUniform("diffuse_color", material.diffuse_color);
-            try self.ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+            try ui_shader.setUniform("diffuse_color", material.diffuse_color);
+            try ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
 
-            try self.ui_shader.applyInstance();
+            try ui_shader.applyInstance();
         },
     }
 
-    const buffer_data = self.geometries[geometry.internal_id.?];
+    const buffer_data = geometries[geometry.internal_id.?];
 
-    self.device_api.cmdBindVertexBuffers(
+    device_api.cmdBindVertexBuffers(
         command_buffer.handle,
         0,
         1,
-        @ptrCast(&self.vertex_buffer.handle),
+        @ptrCast(&vertex_buffer.handle),
         @ptrCast(&[_]u64{buffer_data.vertex_buffer_offset}),
     );
 
     if (buffer_data.index_count > 0) {
-        self.device_api.cmdBindIndexBuffer(
+        device_api.cmdBindIndexBuffer(
             command_buffer.handle,
-            self.index_buffer.handle,
+            index_buffer.handle,
             buffer_data.index_buffer_offset,
             .uint32,
         );
 
-        self.device_api.cmdDrawIndexed(command_buffer.handle, buffer_data.index_count, 1, 0, 0, 0);
+        device_api.cmdDrawIndexed(command_buffer.handle, buffer_data.index_count, 1, 0, 0, 0);
     } else {
-        self.device_api.cmdDraw(command_buffer.handle, buffer_data.vertex_count, 1, 0, 0);
+        device_api.cmdDraw(command_buffer.handle, buffer_data.vertex_count, 1, 0, 0);
     }
 }
 
-pub fn beginRenderPass(self: *Renderer, render_pass_type: RenderPass.Type) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
+pub fn beginRenderPass(render_pass_type: RenderPass.Type) !void {
+    const command_buffer = getCurrentCommandBuffer();
 
     switch (render_pass_type) {
         .world => {
-            self.world_render_pass.begin(command_buffer, self.getCurrentWorldFramebuffer());
-            self.phong_shader.bind();
+            world_render_pass.begin(command_buffer, getCurrentWorldFramebuffer());
+            phong_shader.bind();
         },
         .ui => {
-            self.ui_render_pass.begin(command_buffer, self.getCurrentFramebuffer());
-            self.ui_shader.bind();
+            ui_render_pass.begin(command_buffer, getCurrentFramebuffer());
+            ui_shader.bind();
         },
     }
 }
 
-pub fn endRenderPass(self: *Renderer, render_pass_type: RenderPass.Type) !void {
-    const command_buffer = self.getCurrentCommandBuffer();
+pub fn endRenderPass(render_pass_type: RenderPass.Type) !void {
+    const command_buffer = getCurrentCommandBuffer();
 
     switch (render_pass_type) {
-        .world => self.world_render_pass.end(command_buffer),
-        .ui => self.ui_render_pass.end(command_buffer),
+        .world => world_render_pass.end(command_buffer),
+        .ui => ui_render_pass.end(command_buffer),
     }
 }
 
 // utils
-fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const u8) !vk.Instance {
+fn createInstance(app_name: [*:0]const u8) !vk.Instance {
     const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return error.GetRequiredInstanceExtensionsFailed;
 
     // list of extensions to be requested when creating the instance
@@ -657,7 +657,7 @@ fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const 
         }
     }
 
-    const instance = try base_api.createInstance(&.{
+    return try base_api.createInstance(&.{
         .flags = if (builtin.os.tag == .macos) .{ .enumerate_portability_bit_khr = true } else .{},
         .p_application_info = &.{
             .p_application_name = app_name,
@@ -671,19 +671,17 @@ fn createInstance(allocator: Allocator, base_api: BaseAPI, app_name: [*:0]const 
         .enabled_extension_count = @intCast(instance_extensions.items.len),
         .pp_enabled_extension_names = @ptrCast(instance_extensions.items),
     }, null);
-
-    return instance;
 }
 
-fn createSurface(instance: vk.Instance) !vk.SurfaceKHR {
-    var surface: vk.SurfaceKHR = undefined;
-    if (glfw.createWindowSurface(instance, zing.engine.window, null, &surface) != @intFromEnum(vk.Result.success)) {
+fn createSurface() !vk.SurfaceKHR {
+    var window_surface: vk.SurfaceKHR = undefined;
+    if (glfw.createWindowSurface(instance, zing.engine.window, null, &window_surface) != @intFromEnum(vk.Result.success)) {
         return error.SurfaceCreationFailed;
     }
-    return surface;
+    return window_surface;
 }
 
-fn pickPhysicalDevice(allocator: Allocator, instance: vk.Instance, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !PhysicalDevice {
+fn pickPhysicalDevice() !PhysicalDevice {
     var count: u32 = undefined;
     _ = try instance_api.enumeratePhysicalDevices(instance, &count, null);
 
@@ -695,18 +693,18 @@ fn pickPhysicalDevice(allocator: Allocator, instance: vk.Instance, instance_api:
     var best_physical_device: ?PhysicalDevice = null;
 
     for (physical_devices) |handle| {
-        const physical_device = PhysicalDevice.init(allocator, handle, instance_api, surface) catch continue;
+        const candidate = PhysicalDevice.init(handle) catch continue;
 
-        if (physical_device.score > max_score) {
-            max_score = physical_device.score;
-            best_physical_device = physical_device;
+        if (candidate.score > max_score) {
+            max_score = candidate.score;
+            best_physical_device = candidate;
         }
     }
 
     return best_physical_device orelse error.NoSuitablePhysicalDeviceFound;
 }
 
-fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_api: InstanceAPI) !vk.Device {
+fn createDevice() !vk.Device {
     var queue_count: u32 = 0;
     var queue_family_indices = [1]u32{std.math.maxInt(u32)} ** 4;
     var queue_create_infos: [4]vk.DeviceQueueCreateInfo = undefined;
@@ -758,7 +756,7 @@ fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_
         }
     }
 
-    const device = try instance_api.createDevice(physical_device.handle, &.{
+    return try instance_api.createDevice(physical_device.handle, &.{
         .flags = .{},
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &queue_create_infos,
@@ -768,29 +766,27 @@ fn createDevice(allocator: Allocator, physical_device: PhysicalDevice, instance_
         .pp_enabled_extension_names = @ptrCast(device_extensions.items),
         .p_enabled_features = null,
     }, null);
-
-    return device;
 }
 
-fn initFramebuffers(self: *Renderer) !void {
-    errdefer self.deinitFramebuffers();
+fn initFramebuffers() !void {
+    errdefer deinitFramebuffers();
 
-    try self.world_framebuffers.resize(0);
-    for (self.swapchain.images.slice()) |image| {
+    try world_framebuffers.resize(0);
+    for (swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,
-            self.swapchain.depth_image.view,
+            swapchain.depth_image.view,
         };
 
-        try self.world_framebuffers.append(
-            try self.device_api.createFramebuffer(
-                self.device,
+        try world_framebuffers.append(
+            try device_api.createFramebuffer(
+                device,
                 &vk.FramebufferCreateInfo{
-                    .render_pass = self.world_render_pass.handle,
+                    .render_pass = world_render_pass.handle,
                     .attachment_count = @intCast(attachments.len),
                     .p_attachments = &attachments,
-                    .width = self.swapchain.extent.width,
-                    .height = self.swapchain.extent.height,
+                    .width = swapchain.extent.width,
+                    .height = swapchain.extent.height,
                     .layers = 1,
                 },
                 null,
@@ -798,21 +794,21 @@ fn initFramebuffers(self: *Renderer) !void {
         );
     }
 
-    try self.framebuffers.resize(0);
-    for (self.swapchain.images.slice()) |image| {
+    try framebuffers.resize(0);
+    for (swapchain.images.slice()) |image| {
         const attachments = [_]vk.ImageView{
             image.view,
         };
 
-        try self.framebuffers.append(
-            try self.device_api.createFramebuffer(
-                self.device,
+        try framebuffers.append(
+            try device_api.createFramebuffer(
+                device,
                 &vk.FramebufferCreateInfo{
-                    .render_pass = self.ui_render_pass.handle,
+                    .render_pass = ui_render_pass.handle,
                     .attachment_count = @intCast(attachments.len),
                     .p_attachments = &attachments,
-                    .width = self.swapchain.extent.width,
-                    .height = self.swapchain.extent.height,
+                    .width = swapchain.extent.width,
+                    .height = swapchain.extent.height,
                     .layers = 1,
                 },
                 null,
@@ -821,73 +817,73 @@ fn initFramebuffers(self: *Renderer) !void {
     }
 }
 
-fn deinitFramebuffers(self: *Renderer) void {
-    for (self.framebuffers.slice()) |framebuffer| {
+fn deinitFramebuffers() void {
+    for (framebuffers.slice()) |framebuffer| {
         if (framebuffer != .null_handle) {
-            self.device_api.destroyFramebuffer(self.device, framebuffer, null);
+            device_api.destroyFramebuffer(device, framebuffer, null);
         }
     }
-    self.framebuffers.len = 0;
+    framebuffers.len = 0;
 
-    for (self.world_framebuffers.slice()) |framebuffer| {
+    for (world_framebuffers.slice()) |framebuffer| {
         if (framebuffer != .null_handle) {
-            self.device_api.destroyFramebuffer(self.device, framebuffer, null);
+            device_api.destroyFramebuffer(device, framebuffer, null);
         }
     }
-    self.world_framebuffers.len = 0;
+    world_framebuffers.len = 0;
 }
 
-fn initCommandBuffers(self: *Renderer) !void {
-    errdefer self.deinitCommandBuffers();
+fn initCommandBuffers() !void {
+    errdefer deinitCommandBuffers();
 
-    try self.graphics_command_buffers.resize(0);
-    for (0..self.swapchain.images.len) |_| {
-        try self.graphics_command_buffers.append(
-            try CommandBuffer.init(self.graphics_command_pool, .{}),
+    try graphics_command_buffers.resize(0);
+    for (0..swapchain.images.len) |_| {
+        try graphics_command_buffers.append(
+            try CommandBuffer.init(graphics_command_pool, .{}),
         );
     }
 }
 
-fn deinitCommandBuffers(self: *Renderer) void {
-    for (self.graphics_command_buffers.slice()) |*buffer| {
+fn deinitCommandBuffers() void {
+    for (graphics_command_buffers.slice()) |*buffer| {
         if (buffer.handle != .null_handle) {
             buffer.deinit();
         }
     }
-    self.graphics_command_buffers.len = 0;
+    graphics_command_buffers.len = 0;
 }
 
-fn reinitSwapchainFramebuffersAndCmdBuffers(self: *Renderer) !void {
-    if (self.desired_extent.width == 0 or self.desired_extent.height == 0) {
+fn reinitSwapchainFramebuffersAndCmdBuffers() !void {
+    if (desired_extent.width == 0 or desired_extent.height == 0) {
         // NOTE: don't bother recreating resources if width or height are 0
         return;
     }
 
-    try self.device_api.deviceWaitIdle(self.device);
+    try device_api.deviceWaitIdle(device);
 
-    try self.swapchain.reinit();
-    errdefer self.swapchain.deinit();
+    try swapchain.reinit();
+    errdefer swapchain.deinit();
 
-    self.deinitFramebuffers();
-    try self.initFramebuffers();
-    errdefer self.deinitFramebuffers();
+    deinitFramebuffers();
+    try initFramebuffers();
+    errdefer deinitFramebuffers();
 
-    self.deinitCommandBuffers();
-    try self.initCommandBuffers();
+    deinitCommandBuffers();
+    try initCommandBuffers();
 
-    self.swapchain.extent_generation = self.desired_extent_generation;
+    swapchain.extent_generation = desired_extent_generation;
 }
 
-fn setProjection(self: *Renderer, size: glfw.Window.Size) void {
+fn setProjection(size: glfw.Window.Size) void {
     const width: f32 = @floatFromInt(size.width);
     const height: f32 = @floatFromInt(size.height);
 
-    self.projection = math.perspectiveFovLh(self.fov, width / height, self.near_clip, self.far_clip);
-    self.ui_projection = math.orthographicOffCenterLh(0, width, height, 0, -1.0, 1.0);
+    projection = math.perspectiveFovLh(fov, width / height, near_clip, far_clip);
+    ui_projection = math.orthographicOffCenterLh(0, width, height, 0, -1.0, 1.0);
 }
 
 fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
-    zing.renderer.onResized(glfw.Window.Size{ .width = width, .height = height });
+    onResized(glfw.Window.Size{ .width = width, .height = height });
 }
 
 const PhysicalDevice = struct {
@@ -904,23 +900,23 @@ const PhysicalDevice = struct {
     score: u32,
 
     // public
-    pub fn init(allocator: Allocator, handle: vk.PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !PhysicalDevice {
+    pub fn init(handle: vk.PhysicalDevice) !PhysicalDevice {
         var self: PhysicalDevice = undefined;
         self.handle = handle;
         self.score = 1;
 
-        try self.initFeatureSupport(instance_api);
-        try self.initMemorySupport(instance_api);
-        try self.initDepthFormat(instance_api);
-        try self.initSurfaceSupport(instance_api, surface);
-        try self.initExtensionSupport(allocator, instance_api);
-        try self.initQueueSupport(allocator, instance_api, surface);
+        try self.initFeatureSupport();
+        try self.initMemorySupport();
+        try self.initDepthFormat();
+        try self.initSurfaceSupport();
+        try self.initExtensionSupport();
+        try self.initQueueSupport();
 
         return self;
     }
 
     // utils
-    fn initFeatureSupport(self: *PhysicalDevice, instance_api: InstanceAPI) !void {
+    fn initFeatureSupport(self: *PhysicalDevice) !void {
         const features = instance_api.getPhysicalDeviceFeatures(self.handle);
         const properties = instance_api.getPhysicalDeviceProperties(self.handle);
 
@@ -946,7 +942,7 @@ const PhysicalDevice = struct {
         self.properties = properties;
     }
 
-    fn initMemorySupport(self: *PhysicalDevice, instance_api: InstanceAPI) !void {
+    fn initMemorySupport(self: *PhysicalDevice) !void {
         self.supports_local_host_visible = false;
 
         const memory_properties = instance_api.getPhysicalDeviceMemoryProperties(self.handle);
@@ -964,7 +960,7 @@ const PhysicalDevice = struct {
         self.memory_properties = memory_properties;
     }
 
-    fn initDepthFormat(self: *PhysicalDevice, instance_api: InstanceAPI) !void {
+    fn initDepthFormat(self: *PhysicalDevice) !void {
         for (desired_depth_formats) |desired_format| {
             const format_properties = instance_api.getPhysicalDeviceFormatProperties(self.handle, desired_format);
 
@@ -977,7 +973,7 @@ const PhysicalDevice = struct {
         return error.CouldNotFindDepthFormat;
     }
 
-    fn initSurfaceSupport(self: *PhysicalDevice, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
+    fn initSurfaceSupport(self: *PhysicalDevice) !void {
         var format_count: u32 = undefined;
         _ = try instance_api.getPhysicalDeviceSurfaceFormatsKHR(self.handle, surface, &format_count, null);
 
@@ -1001,7 +997,7 @@ const PhysicalDevice = struct {
         }
     }
 
-    fn initExtensionSupport(self: PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI) !void {
+    fn initExtensionSupport(self: PhysicalDevice) !void {
         // TODO: make the optional extensions list into a map of pairs of extensions and weights
         //       which can then be used to increment the device score.
         var count: u32 = undefined;
@@ -1024,7 +1020,7 @@ const PhysicalDevice = struct {
         }
     }
 
-    fn initQueueSupport(self: *PhysicalDevice, allocator: Allocator, instance_api: InstanceAPI, surface: vk.SurfaceKHR) !void {
+    fn initQueueSupport(self: *PhysicalDevice) !void {
         var count: u32 = undefined;
         instance_api.getPhysicalDeviceQueueFamilyProperties(self.handle, &count, null);
 
@@ -1098,7 +1094,7 @@ const Queue = struct {
 
     fn init(family_index: u32) Queue {
         return .{
-            .handle = zing.renderer.device_api.getDeviceQueue(zing.renderer.device, family_index, 0),
+            .handle = device_api.getDeviceQueue(device, family_index, 0),
             .family_index = family_index,
         };
     }

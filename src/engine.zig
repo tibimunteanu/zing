@@ -63,8 +63,8 @@ pub fn init(allocator: Allocator) !void {
     };
     errdefer zing.engine.window.destroy();
 
-    try zing.renderer.init(allocator);
-    errdefer zing.renderer.deinit();
+    try Renderer.init(allocator);
+    errdefer Renderer.deinit();
 
     try Texture.initSystem(allocator);
     errdefer Texture.deinitSystem();
@@ -117,7 +117,7 @@ pub fn deinit() void {
     Geometry.deinitSystem();
     Material.deinitSystem();
     Texture.deinitSystem();
-    zing.renderer.deinit();
+    Renderer.deinit();
 
     zing.engine.window.destroy();
 
@@ -151,7 +151,7 @@ pub fn run() !void {
                 },
             };
 
-            try zing.renderer.drawFrame(packet);
+            try Renderer.drawFrame(packet);
 
             // const frame_end_time = glfw.getTime();
             // const frame_elapsed_time = frame_end_time - frame_start_time;
@@ -163,7 +163,7 @@ pub fn run() !void {
         glfw.pollEvents();
     }
 
-    try zing.renderer.waitIdle();
+    try Renderer.waitIdle();
 }
 
 // utils
@@ -209,7 +209,7 @@ fn updateCamera(self: *const Engine, delta_time: f32) !void {
     }
 
     recomputeCameraView();
-    zing.renderer.view = camera_view;
+    Renderer.view = camera_view;
 
     const pressN = self.window.getKey(.n);
     if (pressN == .press and prevPressN == .release) {

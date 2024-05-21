@@ -3,6 +3,7 @@ const pool = @import("zpool");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 const zing = @import("../zing.zig");
+const Renderer = @import("renderer.zig");
 const Buffer = @import("buffer.zig");
 const BinaryResource = @import("../resources/binary_resource.zig");
 const Texture = @import("texture.zig");
@@ -285,8 +286,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         );
     }
 
-    try self.descriptor_set_layouts.append(try zing.renderer.device_api.createDescriptorSetLayout(
-        zing.renderer.device,
+    try self.descriptor_set_layouts.append(try Renderer.device_api.createDescriptorSetLayout(
+        Renderer.device,
         &vk.DescriptorSetLayoutCreateInfo{
             .binding_count = global_bindings.len,
             .p_bindings = global_bindings.slice().ptr,
@@ -322,8 +323,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
             );
         }
 
-        try self.descriptor_set_layouts.append(try zing.renderer.device_api.createDescriptorSetLayout(
-            zing.renderer.device,
+        try self.descriptor_set_layouts.append(try Renderer.device_api.createDescriptorSetLayout(
+            Renderer.device,
             &vk.DescriptorSetLayoutCreateInfo{
                 .binding_count = instance_bindings.len,
                 .p_bindings = instance_bindings.slice().ptr,
@@ -353,7 +354,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     }
 
     // create pipeline layout
-    self.pipeline_layout = try zing.renderer.device_api.createPipelineLayout(zing.renderer.device, &.{
+    self.pipeline_layout = try Renderer.device_api.createPipelineLayout(Renderer.device, &.{
         .flags = .{},
         .set_layout_count = self.descriptor_set_layouts.len,
         .p_set_layouts = self.descriptor_set_layouts.slice().ptr,
@@ -461,8 +462,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         .base_pipeline_index = -1,
     };
 
-    _ = try zing.renderer.device_api.createGraphicsPipelines(
-        zing.renderer.device,
+    _ = try Renderer.device_api.createGraphicsPipelines(
+        Renderer.device,
         .null_handle,
         1,
         @ptrCast(&pipeline_create_info),
@@ -476,8 +477,8 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         vk.DescriptorPoolSize{ .type = .combined_image_sampler, .descriptor_count = 4096 },
     };
 
-    self.descriptor_pool = try zing.renderer.device_api.createDescriptorPool(
-        zing.renderer.device,
+    self.descriptor_pool = try Renderer.device_api.createDescriptorPool(
+        Renderer.device,
         &vk.DescriptorPoolCreateInfo{
             .flags = .{ .free_descriptor_set_bit = true },
             .pool_size_count = descriptor_pool_sizes.len,
@@ -490,7 +491,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     // allocate global descriptor sets
     const global_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.global));
     var global_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
-    try global_ubo_layouts.appendNTimes(global_ubo_layout, zing.renderer.swapchain.images.len);
+    try global_ubo_layouts.appendNTimes(global_ubo_layout, Renderer.swapchain.images.len);
 
     const global_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = self.descriptor_pool,
@@ -500,14 +501,14 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
 
     try self.global_state.descriptor_sets.resize(global_ubo_layouts.len);
 
-    try zing.renderer.device_api.allocateDescriptorSets(
-        zing.renderer.device,
+    try Renderer.device_api.allocateDescriptorSets(
+        Renderer.device,
         &global_ubo_descriptor_set_alloc_info,
         self.global_state.descriptor_sets.slice().ptr,
     );
 
     // create and map ubo
-    const ubo_alignment: u32 = @intCast(zing.renderer.physical_device.properties.limits.min_uniform_buffer_offset_alignment);
+    const ubo_alignment: u32 = @intCast(Renderer.physical_device.properties.limits.min_uniform_buffer_offset_alignment);
 
     self.global_scope.stride = std.mem.alignForward(u32, self.global_scope.size, ubo_alignment);
     self.instance_scope.stride = std.mem.alignForward(u32, self.instance_scope.size, ubo_alignment);
@@ -519,7 +520,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         ubo_size,
         .{ .transfer_dst_bit = true, .uniform_buffer_bit = true },
         .{
-            .device_local_bit = zing.renderer.physical_device.supports_local_host_visible,
+            .device_local_bit = Renderer.physical_device.supports_local_host_visible,
             .host_visible_bit = true,
             .host_coherent_bit = true,
         },
@@ -547,8 +548,8 @@ pub fn deinit(self: *Shader) void {
     }
 
     if (self.global_state.descriptor_sets.len > 0) {
-        zing.renderer.device_api.freeDescriptorSets(
-            zing.renderer.device,
+        Renderer.device_api.freeDescriptorSets(
+            Renderer.device,
             self.descriptor_pool,
             self.global_state.descriptor_sets.len,
             self.global_state.descriptor_sets.slice().ptr,
@@ -557,27 +558,27 @@ pub fn deinit(self: *Shader) void {
     }
 
     if (self.descriptor_pool != .null_handle) {
-        zing.renderer.device_api.destroyDescriptorPool(zing.renderer.device, self.descriptor_pool, null);
+        Renderer.device_api.destroyDescriptorPool(Renderer.device, self.descriptor_pool, null);
     }
 
     if (self.pipeline != .null_handle) {
-        zing.renderer.device_api.destroyPipeline(zing.renderer.device, self.pipeline, null);
+        Renderer.device_api.destroyPipeline(Renderer.device, self.pipeline, null);
     }
 
     if (self.pipeline_layout != .null_handle) {
-        zing.renderer.device_api.destroyPipelineLayout(zing.renderer.device, self.pipeline_layout, null);
+        Renderer.device_api.destroyPipelineLayout(Renderer.device, self.pipeline_layout, null);
     }
 
     for (self.descriptor_set_layouts.slice()) |descriptor_set_layout| {
         if (descriptor_set_layout != .null_handle) {
-            zing.renderer.device_api.destroyDescriptorSetLayout(zing.renderer.device, descriptor_set_layout, null);
+            Renderer.device_api.destroyDescriptorSetLayout(Renderer.device, descriptor_set_layout, null);
         }
     }
     self.descriptor_set_layouts.len = 0;
 
     for (self.shader_modules.slice()) |module| {
         if (module != .null_handle) {
-            zing.renderer.device_api.destroyShaderModule(zing.renderer.device, module, null);
+            Renderer.device_api.destroyShaderModule(Renderer.device, module, null);
         }
     }
     self.shader_modules.len = 0;
@@ -608,7 +609,7 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     // allocate instance descriptor sets
     const instance_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.instance));
     var instance_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
-    try instance_ubo_layouts.appendNTimes(instance_ubo_layout, zing.renderer.swapchain.images.len);
+    try instance_ubo_layouts.appendNTimes(instance_ubo_layout, Renderer.swapchain.images.len);
 
     const instance_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = self.descriptor_pool,
@@ -618,15 +619,15 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
 
     try instance_state.descriptor_sets.resize(instance_ubo_layouts.len);
 
-    try zing.renderer.device_api.allocateDescriptorSets(
-        zing.renderer.device,
+    try Renderer.device_api.allocateDescriptorSets(
+        Renderer.device,
         &instance_ubo_descriptor_set_alloc_info,
         instance_state.descriptor_sets.slice().ptr,
     );
 
     errdefer {
-        zing.renderer.device_api.freeDescriptorSets(
-            zing.renderer.device,
+        Renderer.device_api.freeDescriptorSets(
+            Renderer.device,
             self.descriptor_pool,
             instance_state.descriptor_sets.len,
             instance_state.descriptor_sets.slice().ptr,
@@ -644,10 +645,10 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     );
     for (instance_state.descriptor_states.slice()) |*descriptor_state| {
         try descriptor_state.generations.resize(0);
-        try descriptor_state.generations.appendNTimes(null, zing.renderer.swapchain.images.len);
+        try descriptor_state.generations.appendNTimes(null, Renderer.swapchain.images.len);
 
         try descriptor_state.handles.resize(0);
-        try descriptor_state.handles.appendNTimes(TextureHandle.nil, zing.renderer.swapchain.images.len);
+        try descriptor_state.handles.appendNTimes(TextureHandle.nil, Renderer.swapchain.images.len);
     }
 
     // clear textures to default texture handle
@@ -669,8 +670,8 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
 
         self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
 
-        zing.renderer.device_api.freeDescriptorSets(
-            zing.renderer.device,
+        Renderer.device_api.freeDescriptorSets(
+            Renderer.device,
             self.descriptor_pool,
             instance_state.descriptor_sets.len,
             instance_state.descriptor_sets.slice().ptr,
@@ -682,7 +683,7 @@ pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
 }
 
 pub fn bind(self: *const Shader) void {
-    zing.renderer.device_api.cmdBindPipeline(zing.renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
+    Renderer.device_api.cmdBindPipeline(Renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
 }
 
 pub fn bindGlobal(self: *Shader) void {
@@ -728,8 +729,8 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
     } else {
         switch (p_uniform.scope) {
             .local => {
-                zing.renderer.device_api.cmdPushConstants(
-                    zing.renderer.getCurrentCommandBuffer().handle,
+                Renderer.device_api.cmdPushConstants(
+                    Renderer.getCurrentCommandBuffer().handle,
                     self.pipeline_layout,
                     .{ .vertex_bit = true, .fragment_bit = true },
                     p_uniform.offset,
@@ -749,8 +750,8 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
 }
 
 pub fn applyGlobal(self: *Shader) !void {
-    const image_index = zing.renderer.swapchain.image_index;
-    const command_buffer = zing.renderer.getCurrentCommandBuffer();
+    const image_index = Renderer.swapchain.image_index;
+    const command_buffer = Renderer.getCurrentCommandBuffer();
     const descriptor_set = self.global_state.descriptor_sets.get(image_index);
 
     const buffer_info = vk.DescriptorBufferInfo{
@@ -777,8 +778,8 @@ pub fn applyGlobal(self: *Shader) !void {
     }
 
     if (descriptor_writes.len > 0) {
-        zing.renderer.device_api.updateDescriptorSets(
-            zing.renderer.device,
+        Renderer.device_api.updateDescriptorSets(
+            Renderer.device,
             descriptor_writes.len,
             @ptrCast(descriptor_writes.slice().ptr),
             0,
@@ -786,7 +787,7 @@ pub fn applyGlobal(self: *Shader) !void {
         );
     }
 
-    zing.renderer.device_api.cmdBindDescriptorSets(
+    Renderer.device_api.cmdBindDescriptorSets(
         command_buffer.handle,
         .graphics,
         self.pipeline_layout,
@@ -799,8 +800,8 @@ pub fn applyGlobal(self: *Shader) !void {
 }
 
 pub fn applyInstance(self: *Shader) !void {
-    const image_index = zing.renderer.swapchain.image_index;
-    const command_buffer = zing.renderer.getCurrentCommandBuffer();
+    const image_index = Renderer.swapchain.image_index;
+    const command_buffer = Renderer.getCurrentCommandBuffer();
 
     if (self.instance_state_pool.getColumnPtrIfLive(self.ubo_bound_instance_handle, .instance_state)) |instance_state| {
         const descriptor_set = instance_state.descriptor_sets.get(image_index);
@@ -855,8 +856,8 @@ pub fn applyInstance(self: *Shader) !void {
         });
 
         if (descriptor_writes.len > 0) {
-            zing.renderer.device_api.updateDescriptorSets(
-                zing.renderer.device,
+            Renderer.device_api.updateDescriptorSets(
+                Renderer.device,
                 descriptor_writes.len,
                 @ptrCast(descriptor_writes.slice().ptr),
                 0,
@@ -864,7 +865,7 @@ pub fn applyInstance(self: *Shader) !void {
             );
         }
 
-        zing.renderer.device_api.cmdBindDescriptorSets(
+        Renderer.device_api.cmdBindDescriptorSets(
             command_buffer.handle,
             .graphics,
             self.pipeline_layout,
@@ -934,8 +935,8 @@ fn createShaderModule(allocator: Allocator, path: []const u8) !vk.ShaderModule {
     var binary_resource = try BinaryResource.init(allocator, path);
     defer binary_resource.deinit();
 
-    return try zing.renderer.device_api.createShaderModule(
-        zing.renderer.device,
+    return try Renderer.device_api.createShaderModule(
+        Renderer.device,
         &vk.ShaderModuleCreateInfo{
             .flags = .{},
             .code_size = binary_resource.bytes.len,
@@ -966,8 +967,8 @@ inline fn parseVkShaderStageFlags(stage_type: []const u8) !vk.ShaderStageFlags {
 }
 
 inline fn parseVkRenderPass(render_pass_name: []const u8) !vk.RenderPass {
-    if (std.mem.eql(u8, render_pass_name, "world")) return zing.renderer.world_render_pass.handle;
-    if (std.mem.eql(u8, render_pass_name, "ui")) return zing.renderer.ui_render_pass.handle;
+    if (std.mem.eql(u8, render_pass_name, "world")) return Renderer.world_render_pass.handle;
+    if (std.mem.eql(u8, render_pass_name, "ui")) return Renderer.ui_render_pass.handle;
 
     return error.UnknownRenderPass;
 }

@@ -3,6 +3,7 @@ const glfw = @import("glfw");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 const zing = @import("../zing.zig");
+const Renderer = @import("renderer.zig");
 const Image = @import("image.zig");
 
 const Allocator = std.mem.Allocator;
@@ -58,12 +59,12 @@ pub fn init(
 
     const image_sharing = self.getImageSharingInfo();
 
-    const device = zing.renderer.device;
-    const device_api = zing.renderer.device_api;
+    const device = Renderer.device;
+    const device_api = Renderer.device_api;
 
     self.handle = try device_api.createSwapchainKHR(device, &.{
         .flags = .{},
-        .surface = zing.renderer.surface,
+        .surface = Renderer.surface,
         .min_image_count = 3, // NOTE: at least triple buffering
         .image_format = self.surface_format.format,
         .image_color_space = self.surface_format.color_space,
@@ -106,14 +107,14 @@ pub fn init(
 
 pub fn deinit(self: *Swapchain) void {
     self.deinitImages();
-    zing.renderer.device_api.destroySemaphore(zing.renderer.device, self.next_image_acquired_semaphore, null);
-    zing.renderer.device_api.destroySwapchainKHR(zing.renderer.device, self.handle, null);
+    Renderer.device_api.destroySemaphore(Renderer.device, self.next_image_acquired_semaphore, null);
+    Renderer.device_api.destroySwapchainKHR(Renderer.device, self.handle, null);
 }
 
 pub fn reinit(self: *Swapchain) !void {
     var old = self.*;
     old.deinitImages();
-    zing.renderer.device_api.destroySemaphore(zing.renderer.device, old.next_image_acquired_semaphore, null);
+    Renderer.device_api.destroySemaphore(Renderer.device, old.next_image_acquired_semaphore, null);
 
     self.* = try init(old.allocator, .{
         .desired_surface_format = old.surface_format,
@@ -137,8 +138,8 @@ pub fn present(self: *Swapchain) !PresentState {
 
     // present the current frame
     // NOTE: it's ok to ignore .suboptimal_khr result here. the following acquireNextImage() returns it.
-    _ = try zing.renderer.device_api.queuePresentKHR(
-        zing.renderer.present_queue.handle,
+    _ = try Renderer.device_api.queuePresentKHR(
+        Renderer.present_queue.handle,
         &vk.PresentInfoKHR{
             .wait_semaphore_count = 1,
             .p_wait_semaphores = @ptrCast(&current_image.render_finished_semaphore),
@@ -156,9 +157,9 @@ pub fn present(self: *Swapchain) !PresentState {
 
 // utils
 fn initCapabilities(self: *Swapchain) !void {
-    self.capabilities = try zing.renderer.instance_api.getPhysicalDeviceSurfaceCapabilitiesKHR(
-        zing.renderer.physical_device.handle,
-        zing.renderer.surface,
+    self.capabilities = try Renderer.instance_api.getPhysicalDeviceSurfaceCapabilitiesKHR(
+        Renderer.physical_device.handle,
+        Renderer.surface,
     );
 }
 
@@ -168,19 +169,19 @@ fn initExtent(self: *Swapchain) !void {
     if (self.capabilities.current_extent.width == 0xFFFF_FFFF) {
         self.extent = .{
             .width = std.math.clamp(
-                zing.renderer.desired_extent.width,
+                Renderer.desired_extent.width,
                 self.capabilities.min_image_extent.width,
                 self.capabilities.max_image_extent.width,
             ),
             .height = std.math.clamp(
-                zing.renderer.desired_extent.height,
+                Renderer.desired_extent.height,
                 self.capabilities.min_image_extent.height,
                 self.capabilities.max_image_extent.height,
             ),
         };
     }
 
-    self.extent_generation = zing.renderer.desired_extent_generation;
+    self.extent_generation = Renderer.desired_extent_generation;
 
     if (self.extent.width == 0 or self.extent.height == 0) {
         return error.InvalidSurfaceDimensions;
@@ -189,14 +190,14 @@ fn initExtent(self: *Swapchain) !void {
 
 // TODO: check supportedTransforms, supportedCompsiteAlpha and supportedUsageFlags from caps
 fn initSurfaceFormat(self: *Swapchain, desired_surface_format: vk.SurfaceFormatKHR) !void {
-    const physical_device = zing.renderer.physical_device.handle;
+    const physical_device = Renderer.physical_device.handle;
 
     var count: u32 = undefined;
-    _ = try zing.renderer.instance_api.getPhysicalDeviceSurfaceFormatsKHR(physical_device, zing.renderer.surface, &count, null);
+    _ = try Renderer.instance_api.getPhysicalDeviceSurfaceFormatsKHR(physical_device, Renderer.surface, &count, null);
 
     const surface_formats = try self.allocator.alloc(vk.SurfaceFormatKHR, count);
     defer self.allocator.free(surface_formats);
-    _ = try zing.renderer.instance_api.getPhysicalDeviceSurfaceFormatsKHR(physical_device, zing.renderer.surface, &count, surface_formats.ptr);
+    _ = try Renderer.instance_api.getPhysicalDeviceSurfaceFormatsKHR(physical_device, Renderer.surface, &count, surface_formats.ptr);
 
     if (surface_formats.len == 1 and surface_formats[0].format == .undefined) {
         // NOTE: the spec says that if this is the case, then any format is available
@@ -219,14 +220,14 @@ fn initSurfaceFormat(self: *Swapchain, desired_surface_format: vk.SurfaceFormatK
 }
 
 fn initPresentMode(self: *Swapchain, desired_present_modes: []const vk.PresentModeKHR) !void {
-    const physical_device = zing.renderer.physical_device.handle;
+    const physical_device = Renderer.physical_device.handle;
 
     var count: u32 = undefined;
-    _ = try zing.renderer.instance_api.getPhysicalDeviceSurfacePresentModesKHR(physical_device, zing.renderer.surface, &count, null);
+    _ = try Renderer.instance_api.getPhysicalDeviceSurfacePresentModesKHR(physical_device, Renderer.surface, &count, null);
 
     const present_modes = try self.allocator.alloc(vk.PresentModeKHR, count);
     defer self.allocator.free(present_modes);
-    _ = try zing.renderer.instance_api.getPhysicalDeviceSurfacePresentModesKHR(physical_device, zing.renderer.surface, &count, present_modes.ptr);
+    _ = try Renderer.instance_api.getPhysicalDeviceSurfacePresentModesKHR(physical_device, Renderer.surface, &count, present_modes.ptr);
 
     for (desired_present_modes) |desired_mode| {
         if (std.mem.indexOfScalar(vk.PresentModeKHR, present_modes, desired_mode) != null) {
@@ -242,27 +243,27 @@ fn initPresentMode(self: *Swapchain, desired_present_modes: []const vk.PresentMo
 fn getImageSharingInfo(self: *const Swapchain) ?[]const u32 {
     _ = self;
 
-    if (zing.renderer.graphics_queue.family_index == zing.renderer.present_queue.family_index) {
+    if (Renderer.graphics_queue.family_index == Renderer.present_queue.family_index) {
         return null;
     }
 
     return &[_]u32{
-        zing.renderer.graphics_queue.family_index,
-        zing.renderer.present_queue.family_index,
+        Renderer.graphics_queue.family_index,
+        Renderer.present_queue.family_index,
     };
 }
 
 fn initImages(self: *Swapchain) !void {
     // get the image handles
     var count: u32 = undefined;
-    _ = try zing.renderer.device_api.getSwapchainImagesKHR(zing.renderer.device, self.handle, &count, null);
+    _ = try Renderer.device_api.getSwapchainImagesKHR(Renderer.device, self.handle, &count, null);
 
     if (count > config.swapchain_max_images) {
         return error.MaxSwapchainImageCountExceeded;
     }
 
     var imageHandles: [config.swapchain_max_images]vk.Image = undefined;
-    _ = try zing.renderer.device_api.getSwapchainImagesKHR(zing.renderer.device, self.handle, &count, &imageHandles);
+    _ = try Renderer.device_api.getSwapchainImagesKHR(Renderer.device, self.handle, &count, &imageHandles);
 
     // init swapchain images
     try self.images.resize(0);
@@ -282,7 +283,7 @@ fn initImages(self: *Swapchain) !void {
         &vk.ImageCreateInfo{
             .flags = .{},
             .image_type = .@"2d",
-            .format = zing.renderer.physical_device.depth_format,
+            .format = Renderer.physical_device.depth_format,
             .extent = .{
                 .width = self.extent.width,
                 .height = self.extent.height,
@@ -301,7 +302,7 @@ fn initImages(self: *Swapchain) !void {
         @constCast(&vk.ImageViewCreateInfo{
             .image = .null_handle,
             .view_type = .@"2d",
-            .format = zing.renderer.physical_device.depth_format,
+            .format = Renderer.physical_device.depth_format,
             .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
             .subresource_range = .{
                 .aspect_mask = .{ .depth_bit = true },
@@ -327,8 +328,8 @@ fn acquireNextImage(self: *Swapchain) !PresentState {
     // NOTE: in order to reference the current image while rendering,
     // call acquire next image as the last step.
     // and use an aux semaphore since we can't know beforehand which image semaphore to signal.
-    const acquired = try zing.renderer.device_api.acquireNextImageKHR(
-        zing.renderer.device,
+    const acquired = try Renderer.device_api.acquireNextImageKHR(
+        Renderer.device,
         self.handle,
         maxInt(u64),
         self.next_image_acquired_semaphore,
@@ -361,7 +362,7 @@ const SwapchainImage = struct {
 
     // utils
     fn init(handle: vk.Image, format: vk.Format) !SwapchainImage {
-        const view = try zing.renderer.device_api.createImageView(zing.renderer.device, &.{
+        const view = try Renderer.device_api.createImageView(Renderer.device, &.{
             .flags = .{},
             .image = handle,
             .view_type = .@"2d",
@@ -375,17 +376,17 @@ const SwapchainImage = struct {
                 .layer_count = 1,
             },
         }, null);
-        errdefer zing.renderer.device_api.destroyImageView(zing.renderer.device, view, null);
+        errdefer Renderer.device_api.destroyImageView(Renderer.device, view, null);
 
-        const image_acquired_semaphore = try zing.renderer.device_api.createSemaphore(zing.renderer.device, &.{}, null);
-        errdefer zing.renderer.device_api.destroySemaphore(zing.renderer.device, image_acquired_semaphore, null);
+        const image_acquired_semaphore = try Renderer.device_api.createSemaphore(Renderer.device, &.{}, null);
+        errdefer Renderer.device_api.destroySemaphore(Renderer.device, image_acquired_semaphore, null);
 
-        const render_finished_semaphore = try zing.renderer.device_api.createSemaphore(zing.renderer.device, &.{}, null);
-        errdefer zing.renderer.device_api.destroySemaphore(zing.renderer.device, render_finished_semaphore, null);
+        const render_finished_semaphore = try Renderer.device_api.createSemaphore(Renderer.device, &.{}, null);
+        errdefer Renderer.device_api.destroySemaphore(Renderer.device, render_finished_semaphore, null);
 
         // NOTE: start signaled so the first frame can get past it.
-        const frame_fence = try zing.renderer.device_api.createFence(zing.renderer.device, &.{ .flags = .{ .signaled_bit = true } }, null);
-        errdefer zing.renderer.device_api.destroyFence(zing.renderer.device, frame_fence, null);
+        const frame_fence = try Renderer.device_api.createFence(Renderer.device, &.{ .flags = .{ .signaled_bit = true } }, null);
+        errdefer Renderer.device_api.destroyFence(Renderer.device, frame_fence, null);
 
         return .{
             .handle = handle,
@@ -399,10 +400,10 @@ const SwapchainImage = struct {
     fn deinit(self: *SwapchainImage) void {
         self.waitForFrameFence(.{ .reset = false }) catch return;
 
-        zing.renderer.device_api.destroyFence(zing.renderer.device, self.frame_fence, null);
-        zing.renderer.device_api.destroySemaphore(zing.renderer.device, self.render_finished_semaphore, null);
-        zing.renderer.device_api.destroySemaphore(zing.renderer.device, self.image_acquired_semaphore, null);
-        zing.renderer.device_api.destroyImageView(zing.renderer.device, self.view, null);
+        Renderer.device_api.destroyFence(Renderer.device, self.frame_fence, null);
+        Renderer.device_api.destroySemaphore(Renderer.device, self.render_finished_semaphore, null);
+        Renderer.device_api.destroySemaphore(Renderer.device, self.image_acquired_semaphore, null);
+        Renderer.device_api.destroyImageView(Renderer.device, self.view, null);
 
         self.handle = .null_handle;
         self.view = .null_handle;
@@ -413,10 +414,10 @@ const SwapchainImage = struct {
 
     // public
     pub fn waitForFrameFence(self: *const SwapchainImage, options: struct { reset: bool = false }) !void {
-        _ = try zing.renderer.device_api.waitForFences(zing.renderer.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
+        _ = try Renderer.device_api.waitForFences(Renderer.device, 1, @ptrCast(&self.frame_fence), vk.TRUE, maxInt(u64));
 
         if (options.reset) {
-            try zing.renderer.device_api.resetFences(zing.renderer.device, 1, @ptrCast(&self.frame_fence));
+            try Renderer.device_api.resetFences(Renderer.device, 1, @ptrCast(&self.frame_fence));
         }
     }
 };

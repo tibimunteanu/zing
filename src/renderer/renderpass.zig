@@ -1,6 +1,7 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
+const Renderer = @import("renderer.zig");
 const CommandBuffer = @import("command_buffer.zig");
 
 const Allocator = std.mem.Allocator;
@@ -56,7 +57,7 @@ pub fn init(
 
     const attachment_descriptions = [_]vk.AttachmentDescription{
         .{
-            .format = zing.renderer.swapchain.surface_format.format,
+            .format = Renderer.swapchain.surface_format.format,
             .samples = .{ .@"1_bit" = true },
             .load_op = if (options.clear_flags.color) .clear else .load,
             .store_op = .store,
@@ -66,7 +67,7 @@ pub fn init(
             .final_layout = if (options.has_next) .color_attachment_optimal else .present_src_khr,
         },
         .{
-            .format = zing.renderer.physical_device.depth_format,
+            .format = Renderer.physical_device.depth_format,
             .samples = .{ .@"1_bit" = true },
             .load_op = if (options.clear_flags.depth) .clear else .load,
             .store_op = .dont_care,
@@ -117,8 +118,8 @@ pub fn init(
         },
     };
 
-    self.handle = try zing.renderer.device_api.createRenderPass(
-        zing.renderer.device,
+    self.handle = try Renderer.device_api.createRenderPass(
+        Renderer.device,
         &vk.RenderPassCreateInfo{
             .attachment_count = if (options.clear_flags.depth) attachment_descriptions.len else 1,
             .p_attachments = &attachment_descriptions,
@@ -129,14 +130,14 @@ pub fn init(
         },
         null,
     );
-    errdefer zing.renderer.device_api.destroyRenderPass(zing.renderer.device, self.handle, null);
+    errdefer Renderer.device_api.destroyRenderPass(Renderer.device, self.handle, null);
 
     return self;
 }
 
 pub fn deinit(self: *RenderPass) void {
     if (self.handle != .null_handle) {
-        zing.renderer.device_api.destroyRenderPass(zing.renderer.device, self.handle, null);
+        Renderer.device_api.destroyRenderPass(Renderer.device, self.handle, null);
     }
     self.handle = .null_handle;
 }
@@ -162,14 +163,14 @@ pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffe
         clear_value_count += 1;
     }
 
-    zing.renderer.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
+    Renderer.device_api.cmdBeginRenderPass(command_buffer.handle, &vk.RenderPassBeginInfo{
         .render_pass = self.handle,
         .framebuffer = framebuffer,
         .render_area = switch (self.render_area) {
             .fixed => |area| area,
             .swapchain => .{
                 .offset = .{ .x = 0, .y = 0 },
-                .extent = zing.renderer.swapchain.extent,
+                .extent = Renderer.swapchain.extent,
             },
         },
         .clear_value_count = clear_value_count,
@@ -180,5 +181,5 @@ pub fn begin(self: *RenderPass, command_buffer: *const CommandBuffer, framebuffe
 pub fn end(self: *RenderPass, command_buffer: *const CommandBuffer) void {
     _ = self;
 
-    zing.renderer.device_api.cmdEndRenderPass(command_buffer.handle);
+    Renderer.device_api.cmdEndRenderPass(command_buffer.handle);
 }

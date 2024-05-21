@@ -305,7 +305,7 @@ fn create(
 
     var internal_data: ?*GeometryData = null;
 
-    for (&zing.renderer.geometries, 0..) |*slot, i| {
+    for (&Renderer.geometries, 0..) |*slot, i| {
         if (slot.id == null) {
             const id: u32 = @truncate(i);
             self.internal_id = id;
@@ -318,12 +318,12 @@ fn create(
     if (internal_data) |data| {
         data.vertex_count = @truncate(vertices.len);
         data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(vertices)));
-        data.vertex_buffer_offset = try zing.renderer.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(vertices));
+        data.vertex_buffer_offset = try Renderer.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(vertices));
 
         if (indices.len > 0) {
             data.index_count = @truncate(indices.len);
             data.index_size = @sizeOf(std.meta.Elem(@TypeOf(indices)));
-            data.index_buffer_offset = try zing.renderer.index_buffer.allocAndUpload(std.mem.sliceAsBytes(indices));
+            data.index_buffer_offset = try Renderer.index_buffer.allocAndUpload(std.mem.sliceAsBytes(indices));
         }
 
         data.generation = if (self.generation) |g| g +% 1 else 0;
@@ -390,19 +390,19 @@ fn createDefault() !void {
 
 fn destroy(self: *Geometry) void {
     if (self.internal_id != null) {
-        zing.renderer.device_api.deviceWaitIdle(zing.renderer.device) catch {
+        Renderer.device_api.deviceWaitIdle(Renderer.device) catch {
             std.log.err("Could not destroy geometry {s}", .{self.name.slice()});
         };
 
-        const internal_data = &zing.renderer.geometries[self.internal_id.?];
+        const internal_data = &Renderer.geometries[self.internal_id.?];
 
-        zing.renderer.vertex_buffer.free(
+        Renderer.vertex_buffer.free(
             internal_data.vertex_buffer_offset,
             internal_data.vertex_size,
         ) catch unreachable;
 
         if (internal_data.index_size > 0) {
-            zing.renderer.index_buffer.free(
+            Renderer.index_buffer.free(
                 internal_data.index_buffer_offset,
                 internal_data.index_size,
             ) catch unreachable;

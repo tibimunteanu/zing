@@ -3,6 +3,7 @@ const pool = @import("zpool");
 const zing = @import("../zing.zig");
 const vk = @import("vk.zig");
 
+const Renderer = @import("renderer.zig");
 const Image = @import("image.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
@@ -254,7 +255,7 @@ fn create(
 
     try staging_buffer.loadData(0, image_size, .{}, pixels);
 
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(zing.renderer.graphics_command_pool);
+    var command_buffer = try CommandBuffer.initAndBeginSingleUse(Renderer.graphics_command_pool);
 
     try self.image.pipelineImageBarrier(
         &command_buffer,
@@ -266,7 +267,7 @@ fn create(
         .transfer_dst_optimal,
     );
 
-    zing.renderer.device_api.cmdCopyBufferToImage(
+    Renderer.device_api.cmdCopyBufferToImage(
         command_buffer.handle,
         staging_buffer.handle,
         self.image.handle,
@@ -301,10 +302,10 @@ fn create(
         .shader_read_only_optimal,
     );
 
-    try command_buffer.endSingleUseAndDeinit(zing.renderer.graphics_queue.handle);
+    try command_buffer.endSingleUseAndDeinit(Renderer.graphics_queue.handle);
 
     // create the sampler
-    self.sampler = try zing.renderer.device_api.createSampler(zing.renderer.device, &vk.SamplerCreateInfo{
+    self.sampler = try Renderer.device_api.createSampler(Renderer.device, &vk.SamplerCreateInfo{
         .mag_filter = .linear,
         .min_filter = .linear,
         .address_mode_u = .repeat,
@@ -367,11 +368,11 @@ fn createDefault() !void {
 }
 
 fn destroy(self: *Texture) void {
-    zing.renderer.device_api.deviceWaitIdle(zing.renderer.device) catch {};
+    Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
 
     self.image.deinit();
 
-    zing.renderer.device_api.destroySampler(zing.renderer.device, self.sampler, null);
+    Renderer.device_api.destroySampler(Renderer.device, self.sampler, null);
 
     self.* = undefined;
 }

@@ -1,6 +1,7 @@
 const std = @import("std");
 const vk = @import("vk.zig");
 const zing = @import("../zing.zig");
+const Renderer = @import("renderer.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const FreeList = @import("../free_list.zig");
 
@@ -35,7 +36,7 @@ pub fn init(
     self.total_size = size;
     self.memory_property_flags = memory_property_flags;
 
-    self.handle = try zing.renderer.device_api.createBuffer(zing.renderer.device, &vk.BufferCreateInfo{
+    self.handle = try Renderer.device_api.createBuffer(Renderer.device, &vk.BufferCreateInfo{
         .flags = .{},
         .usage = usage,
         .size = size,
@@ -43,12 +44,12 @@ pub fn init(
         .queue_family_index_count = 0,
         .p_queue_family_indices = null,
     }, null);
-    errdefer zing.renderer.device_api.destroyBuffer(zing.renderer.device, self.handle, null);
+    errdefer Renderer.device_api.destroyBuffer(Renderer.device, self.handle, null);
 
-    const memory_requirements = zing.renderer.device_api.getBufferMemoryRequirements(zing.renderer.device, self.handle);
+    const memory_requirements = Renderer.device_api.getBufferMemoryRequirements(Renderer.device, self.handle);
 
-    self.memory = try zing.renderer.allocate(memory_requirements, memory_property_flags);
-    errdefer zing.renderer.device_api.freeMemory(zing.renderer.device, self.memory, null);
+    self.memory = try Renderer.allocate(memory_requirements, memory_property_flags);
+    errdefer Renderer.device_api.freeMemory(Renderer.device, self.memory, null);
 
     if (options.bind_on_create) {
         try self.bind(0);
@@ -65,12 +66,12 @@ pub fn deinit(self: *Buffer) void {
     }
 
     if (self.handle != .null_handle) {
-        zing.renderer.device_api.destroyBuffer(zing.renderer.device, self.handle, null);
+        Renderer.device_api.destroyBuffer(Renderer.device, self.handle, null);
         self.handle = .null_handle;
     }
 
     if (self.memory != .null_handle) {
-        zing.renderer.device_api.freeMemory(zing.renderer.device, self.memory, null);
+        Renderer.device_api.freeMemory(Renderer.device, self.memory, null);
         self.memory = .null_handle;
     }
 
@@ -79,12 +80,12 @@ pub fn deinit(self: *Buffer) void {
 }
 
 pub fn bind(self: *const Buffer, offset: vk.DeviceSize) !void {
-    try zing.renderer.device_api.bindBufferMemory(zing.renderer.device, self.handle, self.memory, offset);
+    try Renderer.device_api.bindBufferMemory(Renderer.device, self.handle, self.memory, offset);
 }
 
 pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
-    return @as([*]u8, @ptrCast(try zing.renderer.device_api.mapMemory(
-        zing.renderer.device,
+    return @as([*]u8, @ptrCast(try Renderer.device_api.mapMemory(
+        Renderer.device,
         self.memory,
         offset,
         size,
@@ -93,7 +94,7 @@ pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, fla
 }
 
 pub fn unlock(self: *const Buffer) void {
-    zing.renderer.device_api.unmapMemory(zing.renderer.device, self.memory);
+    Renderer.device_api.unmapMemory(Renderer.device, self.memory);
 }
 
 pub fn alloc(self: *Buffer, size: u64) !u64 {
@@ -126,8 +127,8 @@ pub fn upload(self: *Buffer, offset: u64, data: []const u8) !void {
 
     try staging_buffer.copyTo(
         self,
-        zing.renderer.graphics_command_pool,
-        zing.renderer.graphics_queue.handle,
+        Renderer.graphics_command_pool,
+        Renderer.graphics_queue.handle,
         vk.BufferCopy{
             .src_offset = 0,
             .dst_offset = offset,
@@ -156,7 +157,7 @@ pub fn resize(self: *Buffer, new_size: usize, command_pool: vk.CommandPool, queu
     }
 
     const new_buffer = try Buffer.init(
-        zing.renderer,
+        Renderer,
         new_size,
         self.usage,
         self.memory_property_flags,
@@ -185,11 +186,11 @@ pub fn copyTo(
         try self.free_list.?.copyTo(&dst.free_list.?);
     }
 
-    try zing.renderer.device_api.queueWaitIdle(queue);
+    try Renderer.device_api.queueWaitIdle(queue);
 
     var command_buffer = try CommandBuffer.initAndBeginSingleUse(command_pool);
 
-    zing.renderer.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
+    Renderer.device_api.cmdCopyBuffer(command_buffer.handle, self.handle, dst.handle, 1, @ptrCast(&region));
 
     try command_buffer.endSingleUseAndDeinit(queue);
 }
