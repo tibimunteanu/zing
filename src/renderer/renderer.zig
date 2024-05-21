@@ -11,10 +11,7 @@ const RenderPass = @import("renderpass.zig");
 const Swapchain = @import("swapchain.zig");
 
 const Material = @import("material.zig");
-const MaterialHandle = Material.MaterialHandle;
-
 const Geometry = @import("geometry.zig");
-const GeometryHandle = Geometry.GeometryHandle;
 
 const Shader = @import("shader.zig");
 const ShaderResource = @import("../resources/shader_resource.zig");
@@ -161,7 +158,7 @@ pub const geometry_max_count: u32 = 4096;
 
 pub const GeometryRenderData = struct {
     model: math.Mat,
-    geometry: GeometryHandle,
+    geometry: Geometry.Handle,
 };
 
 pub const RenderPacket = struct {
@@ -203,7 +200,7 @@ pub var ui_shader: Shader = undefined;
 pub var vertex_buffer: Buffer = undefined;
 pub var index_buffer: Buffer = undefined;
 
-pub var geometries: [geometry_max_count]Geometry.GeometryData = undefined;
+pub var geometries: [geometry_max_count]Geometry.Data = undefined;
 
 pub var projection: math.Mat = undefined;
 pub var view: math.Mat = undefined;

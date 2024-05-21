@@ -13,29 +13,29 @@ const Array = std.BoundedArray;
 
 const Texture = @This();
 
-pub const TextureUse = enum(u8) {
+pub const Use = enum(u8) {
     unknown = 0,
     map_diffuse = 1,
 };
 
-pub const TextureMap = struct {
-    texture: TextureHandle = TextureHandle.nil,
-    use: TextureUse = .unknown,
+pub const Map = struct {
+    texture: Handle = Handle.nil,
+    use: Use = .unknown,
 };
 
-pub const TexturePool = pool.Pool(16, 16, Texture, struct {
+const TexturePool = pool.Pool(16, 16, Texture, struct {
     texture: Texture,
     reference_count: usize,
     auto_release: bool,
 });
-pub const TextureHandle = TexturePool.Handle;
+pub const Handle = TexturePool.Handle;
 
 pub const default_texture_name = "default";
 
 var allocator: Allocator = undefined;
 var textures: TexturePool = undefined;
-var lookup: std.StringHashMap(TextureHandle) = undefined;
-var default_texture: TextureHandle = TextureHandle.nil;
+var lookup: std.StringHashMap(Handle) = undefined;
+var default_texture: Handle = Handle.nil;
 
 name: Array(u8, 256),
 width: u32,
@@ -52,7 +52,7 @@ pub fn initSystem(ally: Allocator) !void {
     textures = try TexturePool.initMaxCapacity(allocator);
     errdefer textures.deinit();
 
-    lookup = std.StringHashMap(TextureHandle).init(allocator);
+    lookup = std.StringHashMap(Handle).init(allocator);
     errdefer lookup.deinit();
 
     try lookup.ensureTotalCapacity(@truncate(textures.capacity()));
@@ -66,11 +66,11 @@ pub fn deinitSystem() void {
     textures.deinit();
 }
 
-pub fn acquireDefault() TextureHandle {
+pub fn acquireDefault() Handle {
     return default_texture;
 }
 
-pub fn acquireByName(name: []const u8, options: struct { auto_release: bool }) !TextureHandle {
+pub fn acquireByName(name: []const u8, options: struct { auto_release: bool }) !Handle {
     if (lookup.get(name)) |handle| {
         return acquireByHandle(handle);
     } else {
@@ -103,7 +103,7 @@ pub fn acquireByName(name: []const u8, options: struct { auto_release: bool }) !
     }
 }
 
-pub fn acquireByHandle(handle: TextureHandle) !TextureHandle {
+pub fn acquireByHandle(handle: Handle) !Handle {
     try textures.requireLiveHandle(handle);
 
     if (handle.id == default_texture.id) {
@@ -129,7 +129,7 @@ pub fn releaseByName(name: []const u8) void {
     }
 }
 
-pub fn releaseByHandle(handle: TextureHandle) void {
+pub fn releaseByHandle(handle: Handle) void {
     if (!textures.isLiveHandle(handle)) {
         std.log.warn("Texture: Cannot release texture with invalid handle!", .{});
         return;
@@ -158,19 +158,19 @@ pub fn releaseByHandle(handle: TextureHandle) void {
     }
 }
 
-pub inline fn exists(handle: TextureHandle) bool {
+pub inline fn exists(handle: Handle) bool {
     return textures.isLiveHandle(handle);
 }
 
-pub inline fn get(handle: TextureHandle) !*Texture {
+pub inline fn get(handle: Handle) !*Texture {
     return try textures.getColumnPtr(handle, .texture);
 }
 
-pub inline fn getIfExists(handle: TextureHandle) ?*Texture {
+pub inline fn getIfExists(handle: Handle) ?*Texture {
     return textures.getColumnPtrIfLive(handle, .texture);
 }
 
-pub inline fn getOrDefault(handle: TextureHandle) *Texture {
+pub inline fn getOrDefault(handle: Handle) *Texture {
     return textures.getColumnPtrIfLive(handle, .texture) //
     orelse textures.getColumnPtrAssumeLive(default_texture, .texture);
 }
@@ -381,7 +381,7 @@ fn destroy(self: *Texture) void {
     self.* = undefined;
 }
 
-fn remove(handle: TextureHandle) void {
+fn remove(handle: Handle) void {
     if (textures.getColumnPtrIfLive(handle, .texture)) |texture| {
         std.log.info("Texture: Remove '{s}'", .{texture.name.slice()});
 

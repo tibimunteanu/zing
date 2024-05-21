@@ -5,8 +5,6 @@ const math = @import("zmath");
 const Renderer = @import("renderer.zig");
 const Material = @import("material.zig");
 
-const MaterialHandle = Material.MaterialHandle;
-
 const Vertex3D = Renderer.Vertex3D;
 const Vertex2D = Renderer.Vertex2D;
 
@@ -15,7 +13,7 @@ const Array = std.BoundedArray;
 
 const Geometry = @This();
 
-pub const GeometryData = struct {
+pub const Data = struct {
     id: ?u32,
     generation: ?u32,
     vertex_count: u32,
@@ -26,14 +24,14 @@ pub const GeometryData = struct {
     index_buffer_offset: u64,
 };
 
-pub const GeometryPool = pool.Pool(16, 16, Geometry, struct {
+const GeometryPool = pool.Pool(16, 16, Geometry, struct {
     geometry: Geometry,
     reference_count: usize,
     auto_release: bool,
 });
-pub const GeometryHandle = GeometryPool.Handle;
+pub const Handle = GeometryPool.Handle;
 
-pub fn GeometryConfig(comptime Vertex: type, comptime Index: type) type {
+pub fn Config(comptime Vertex: type, comptime Index: type) type {
     return struct {
         const Self = @This();
 
@@ -171,11 +169,11 @@ pub const default_geometry_2d_name = "default_2d";
 
 var allocator: Allocator = undefined;
 var geometries: GeometryPool = undefined;
-var default_geometry: GeometryHandle = GeometryHandle.nil;
-var default_geometry_2d: GeometryHandle = GeometryHandle.nil;
+var default_geometry: Handle = Handle.nil;
+var default_geometry_2d: Handle = Handle.nil;
 
 name: Array(u8, 256),
-material: MaterialHandle,
+material: Material.Handle,
 generation: ?u32,
 internal_id: ?u32,
 
@@ -193,15 +191,15 @@ pub fn deinitSystem() void {
     geometries.deinit();
 }
 
-pub fn acquireDefault() GeometryHandle {
+pub fn acquireDefault() Handle {
     return default_geometry;
 }
 
-pub fn acquireDefault2D() GeometryHandle {
+pub fn acquireDefault2D() Handle {
     return default_geometry_2d;
 }
 
-pub fn acquireByConfig(config: anytype, options: struct { auto_release: bool }) !GeometryHandle {
+pub fn acquireByConfig(config: anytype, options: struct { auto_release: bool }) !Handle {
     const material_handle = Material.acquireByName(config.material_name) //
     catch Material.acquireDefault();
 
@@ -226,7 +224,7 @@ pub fn acquireByConfig(config: anytype, options: struct { auto_release: bool }) 
     return handle;
 }
 
-pub fn acquireByHandle(handle: GeometryHandle) !GeometryHandle {
+pub fn acquireByHandle(handle: Handle) !Handle {
     try geometries.requireLiveHandle(handle);
 
     if (handle.id == default_geometry.id) {
@@ -244,7 +242,7 @@ pub fn acquireByHandle(handle: GeometryHandle) !GeometryHandle {
     return handle;
 }
 
-pub fn releaseByHandle(handle: GeometryHandle) void {
+pub fn releaseByHandle(handle: Handle) void {
     if (!geometries.isLiveHandle(handle)) {
         std.log.warn("Geometry: Cannot release geometry with invalid handle!", .{});
         return;
@@ -273,22 +271,22 @@ pub fn releaseByHandle(handle: GeometryHandle) void {
     }
 }
 
-pub inline fn exists(handle: GeometryHandle) bool {
+pub inline fn exists(handle: Handle) bool {
     return geometries.isLiveHandle(handle);
 }
 
-pub inline fn get(handle: GeometryHandle) !*Geometry {
+pub inline fn get(handle: Handle) !*Geometry {
     return try geometries.getColumnPtr(handle, .geometry);
 }
 
-pub inline fn getIfExists(handle: GeometryHandle) ?*Geometry {
+pub inline fn getIfExists(handle: Handle) ?*Geometry {
     return geometries.getColumnPtrIfLive(handle, .geometry);
 }
 
 // utils
 fn create(
     name: []const u8,
-    material: MaterialHandle,
+    material: Material.Handle,
     vertices: anytype,
     indices: anytype,
 ) !Geometry {
@@ -302,7 +300,7 @@ fn create(
         return error.VerticesCannotBeEmpty;
     }
 
-    var internal_data: ?*GeometryData = null;
+    var internal_data: ?*Data = null;
 
     for (&Renderer.geometries, 0..) |*slot, i| {
         if (slot.id == null) {
@@ -415,7 +413,7 @@ fn destroy(self: *Geometry) void {
     self.* = undefined;
 }
 
-fn remove(handle: GeometryHandle) void {
+fn remove(handle: Handle) void {
     if (geometries.getColumnPtrIfLive(handle, .geometry)) |geometry| {
         std.log.info("Geometry: Remove '{s}'", .{geometry.name.slice()});
 

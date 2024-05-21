@@ -7,11 +7,10 @@ const Buffer = @import("buffer.zig");
 const BinaryResource = @import("../resources/binary_resource.zig");
 const Texture = @import("texture.zig");
 
-const TextureHandle = Texture.TextureHandle;
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
-// TODO: TextureMap
+// TODO: Texture.Map
 // TODO: local push constant uniform block and apply local
 // TODO: keep sampler uniforms separate or index lookup
 // TODO: global_textures
@@ -124,14 +123,14 @@ pub const GlobalState = struct {
 
 pub const DescriptorState = struct {
     generations: Array(?u32, config.swapchain_max_images),
-    handles: Array(TextureHandle, config.swapchain_max_images),
+    handles: Array(Texture.Handle, config.swapchain_max_images),
 };
 
 pub const InstanceState = struct {
     ubo_offset: u64,
     descriptor_sets: Array(vk.DescriptorSet, config.swapchain_max_images),
     descriptor_states: Array(DescriptorState, config.shader_max_bindings),
-    textures: Array(TextureHandle, config.shader_max_instance_textures),
+    textures: Array(Texture.Handle, config.shader_max_instance_textures),
 };
 
 // NOTE: index_bits = 10 results in a maximum of 1024 instances
@@ -647,7 +646,7 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
         try descriptor_state.generations.appendNTimes(null, Renderer.swapchain.images.len);
 
         try descriptor_state.handles.resize(0);
-        try descriptor_state.handles.appendNTimes(TextureHandle.nil, Renderer.swapchain.images.len);
+        try descriptor_state.handles.appendNTimes(Texture.Handle.nil, Renderer.swapchain.images.len);
     }
 
     // clear textures to default texture handle
@@ -712,7 +711,7 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
     const p_uniform = &self.uniforms.items[uniform_handle];
 
     if (p_uniform.data_type == .sampler) {
-        if (@TypeOf(value) != TextureHandle) {
+        if (@TypeOf(value) != Texture.Handle) {
             return error.InvalidSamplerValue;
         }
 

@@ -7,8 +7,6 @@ const Texture = @import("texture.zig");
 const Shader = @import("shader.zig");
 const MaterialResource = @import("../resources/material_resource.zig");
 
-const TextureMap = Texture.TextureMap;
-const TextureHandle = Texture.TextureHandle;
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
@@ -27,24 +25,24 @@ pub const Config = struct {
     auto_release: bool = false,
 };
 
-pub const MaterialPool = pool.Pool(16, 16, Material, struct {
+const MaterialPool = pool.Pool(16, 16, Material, struct {
     material: Material,
     reference_count: usize,
     auto_release: bool,
 });
-pub const MaterialHandle = MaterialPool.Handle;
+pub const Handle = MaterialPool.Handle;
 
 pub const default_material_name = "default";
 
 var allocator: Allocator = undefined;
 var materials: MaterialPool = undefined;
-var lookup: std.StringHashMap(MaterialHandle) = undefined;
-var default_material: MaterialHandle = MaterialHandle.nil;
+var lookup: std.StringHashMap(Handle) = undefined;
+var default_material: Handle = Handle.nil;
 
 name: Array(u8, 256) = .{},
 material_type: Type = .world,
 diffuse_color: math.Vec = math.Vec{ 0, 0, 0, 0 },
-diffuse_map: TextureMap = .{},
+diffuse_map: Texture.Map = .{},
 generation: ?u32 = null,
 instance_handle: ?Shader.InstanceHandle = null,
 
@@ -54,7 +52,7 @@ pub fn initSystem(ally: Allocator) !void {
     materials = try MaterialPool.initMaxCapacity(allocator);
     errdefer materials.deinit();
 
-    lookup = std.StringHashMap(MaterialHandle).init(allocator);
+    lookup = std.StringHashMap(Handle).init(allocator);
     errdefer lookup.deinit();
 
     try lookup.ensureTotalCapacity(@truncate(materials.capacity()));
@@ -68,11 +66,11 @@ pub fn deinitSystem() void {
     materials.deinit();
 }
 
-pub fn acquireDefault() MaterialHandle {
+pub fn acquireDefault() Handle {
     return default_material;
 }
 
-pub fn acquireByConfig(config: Config) !MaterialHandle {
+pub fn acquireByConfig(config: Config) !Handle {
     var material = try create(config);
     errdefer material.destroy();
 
@@ -90,7 +88,7 @@ pub fn acquireByConfig(config: Config) !MaterialHandle {
     return handle;
 }
 
-pub fn acquireByName(name: []const u8) !MaterialHandle {
+pub fn acquireByName(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
         return acquireByHandle(handle);
     } else {
@@ -101,7 +99,7 @@ pub fn acquireByName(name: []const u8) !MaterialHandle {
     }
 }
 
-pub fn acquireByHandle(handle: MaterialHandle) !MaterialHandle {
+pub fn acquireByHandle(handle: Handle) !Handle {
     try materials.requireLiveHandle(handle);
 
     if (handle.id == default_material.id) {
@@ -127,7 +125,7 @@ pub fn releaseByName(name: []const u8) void {
     }
 }
 
-pub fn releaseByHandle(handle: MaterialHandle) void {
+pub fn releaseByHandle(handle: Handle) void {
     if (!materials.isLiveHandle(handle)) {
         std.log.warn("Material: Cannot release material with invalid handle!", .{});
         return;
@@ -174,19 +172,19 @@ pub fn reload(name: []const u8) !void {
     }
 }
 
-pub inline fn exists(handle: MaterialHandle) bool {
+pub inline fn exists(handle: Handle) bool {
     return materials.isLiveHandle(handle);
 }
 
-pub inline fn get(handle: MaterialHandle) !*Material {
+pub inline fn get(handle: Handle) !*Material {
     return try materials.getColumnPtr(handle, .material);
 }
 
-pub inline fn getIfExists(handle: MaterialHandle) ?*Material {
+pub inline fn getIfExists(handle: Handle) ?*Material {
     return materials.getColumnPtrIfLive(handle, .material);
 }
 
-pub inline fn getOrDefault(handle: MaterialHandle) *Material {
+pub inline fn getOrDefault(handle: Handle) *Material {
     return materials.getColumnPtrIfLive(handle, .material) //
     orelse materials.getColumnPtrAssumeLive(default_material, .material);
 }
@@ -202,7 +200,7 @@ fn create(config: Config) !Material {
     const diffuse_texture = Texture.acquireByName(config.diffuse_map_name, .{ .auto_release = true }) //
     catch Texture.acquireDefault();
 
-    self.diffuse_map = TextureMap{
+    self.diffuse_map = Texture.Map{
         .use = .map_diffuse,
         .texture = diffuse_texture,
     };
@@ -239,7 +237,7 @@ fn createDefault() !void {
 }
 
 fn destroy(self: *Material) void {
-    if (self.diffuse_map.texture.id != TextureHandle.nil.id) {
+    if (self.diffuse_map.texture.id != Texture.Handle.nil.id) {
         Texture.releaseByHandle(self.diffuse_map.texture);
     }
 
@@ -253,7 +251,7 @@ fn destroy(self: *Material) void {
     self.* = undefined;
 }
 
-fn remove(handle: MaterialHandle) void {
+fn remove(handle: Handle) void {
     if (materials.getColumnPtrIfLive(handle, .material)) |material| {
         std.log.info("Material: Remove material '{s}'", .{material.name.slice()});
 

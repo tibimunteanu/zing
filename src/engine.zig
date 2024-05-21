@@ -11,7 +11,6 @@ const Geometry = @import("renderer/geometry.zig");
 const Shader = @import("renderer/shader.zig");
 const ShaderResource = @import("resources/shader_resource.zig");
 
-const GeometryHandle = Geometry.GeometryHandle;
 const RenderPacket = Renderer.RenderPacket;
 const GeometryRenderData = Renderer.GeometryRenderData;
 const Vertex3D = Renderer.Vertex3D;
@@ -28,12 +27,11 @@ const names = [_][]const u8{
     "paving",
     "paving2",
 };
-var test_geometry = GeometryHandle.nil;
-var test_ui_geometry = GeometryHandle.nil;
+var test_geometry = Geometry.Handle.nil;
+var test_ui_geometry = Geometry.Handle.nil;
 // TODO: end temporary
 
-pub var window: glfw.Window = undefined;
-
+var window: glfw.Window = undefined;
 var last_time: f64 = 0;
 
 var camera_view: math.Mat = undefined;
@@ -74,7 +72,7 @@ pub fn init(allocator: Allocator) !void {
 
     // TODO: temporary
     // instance.test_geometry = .getDefaultGeometry();
-    var test_plane_config = try Geometry.GeometryConfig(Vertex3D, u32).initPlane(.{
+    var test_plane_config = try Geometry.Config(Vertex3D, u32).initPlane(.{
         .name = "plane",
         .material_name = "diffuse",
         .width = 20,
@@ -91,7 +89,7 @@ pub fn init(allocator: Allocator) !void {
         .{ .auto_release = true },
     );
 
-    var test_ui_plane_config = try Geometry.GeometryConfig(Vertex2D, u32).initPlane(.{
+    var test_ui_plane_config = try Geometry.Config(Vertex2D, u32).initPlane(.{
         .name = "ui_plane",
         .material_name = "ui",
         .width = 512,
