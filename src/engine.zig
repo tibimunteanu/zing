@@ -215,11 +215,8 @@ fn updateCamera(delta_time: f32) !void {
             const material = try Material.get(geometry.material);
 
             const prev_texture = material.diffuse_map.texture;
-            material.diffuse_map.texture = try Texture.acquireByName(
-                names[choice],
-                .{ .auto_release = true },
-            );
-            Texture.releaseByHandle(prev_texture);
+            material.diffuse_map.texture = try Texture.acquire(names[choice], .{ .auto_release = true });
+            prev_texture.release();
         }
     }
     prevPressN = pressN;

@@ -28,14 +28,94 @@ const TexturePool = pool.Pool(16, 16, Texture, struct {
     reference_count: usize,
     auto_release: bool,
 });
-pub const Handle = TexturePool.Handle;
 
-pub const default_texture_name = "default";
+pub const Handle = struct {
+    pub const nil = Handle{ .handle = TexturePool.Handle.nil };
+
+    handle: TexturePool.Handle,
+
+    pub fn acquire(self: Handle) !Handle {
+        if (self.eql(default)) {
+            return default;
+        }
+
+        const texture = try self.get();
+        const reference_count = textures.getColumnPtrAssumeLive(self.handle, .reference_count);
+
+        reference_count.* +|= 1;
+
+        std.log.info("Texture: Acquire '{s}' ({})", .{ texture.name.slice(), reference_count.* });
+
+        return self;
+    }
+
+    pub fn release(self: Handle) void {
+        if (self.eql(default)) {
+            std.log.warn("Texture: Release default!", .{});
+            return;
+        }
+
+        if (self.getIfExists()) |texture| {
+            const reference_count = textures.getColumnPtrAssumeLive(self.handle, .reference_count);
+            const auto_release = textures.getColumnAssumeLive(self.handle, .auto_release);
+
+            if (reference_count.* == 0) {
+                std.log.warn("Texture: Release with ref count 0!", .{});
+                return;
+            }
+
+            reference_count.* -|= 1;
+
+            if (reference_count.* == 0 and auto_release) {
+                self.remove();
+            } else {
+                std.log.info("Texture: Release '{s}' ({})", .{ texture.name.slice(), reference_count.* });
+            }
+        } else {
+            std.log.warn("Texture: Release invalid handle!", .{});
+        }
+    }
+
+    pub inline fn eql(self: Handle, other: Handle) bool {
+        return self.handle.id == other.handle.id;
+    }
+
+    pub inline fn exists(self: Handle) bool {
+        return textures.isLiveHandle(self.handle);
+    }
+
+    pub inline fn get(self: Handle) !*Texture {
+        return try textures.getColumnPtr(self.handle, .texture);
+    }
+
+    pub inline fn getIfExists(self: Handle) ?*Texture {
+        return textures.getColumnPtrIfLive(self.handle, .texture);
+    }
+
+    pub inline fn getOrDefault(self: Handle) *Texture {
+        return textures.getColumnPtrIfLive(self.handle, .texture) //
+        orelse textures.getColumnPtrAssumeLive(default.handle, .texture);
+    }
+
+    // utils
+    fn remove(self: Handle) void {
+        if (self.getIfExists()) |texture| {
+            std.log.info("Texture: Remove '{s}'", .{texture.name.slice()});
+
+            _ = lookup.remove(texture.name.slice());
+            textures.removeAssumeLive(self.handle);
+
+            texture.destroy();
+        }
+    }
+};
+
+pub const default_name = "default";
+pub var default: Handle = Handle.nil;
 
 var allocator: Allocator = undefined;
 var textures: TexturePool = undefined;
 var lookup: std.StringHashMap(Handle) = undefined;
-var default_texture: Handle = Handle.nil;
 
 name: Array(u8, 256),
 width: u32,
@@ -61,18 +141,18 @@ pub fn initSystem(ally: Allocator) !void {
 }
 
 pub fn deinitSystem() void {
-    removeAll();
+    var it = textures.liveHandles();
+    while (it.next()) |handle| {
+        (Handle{ .handle = handle }).remove();
+    }
+
     lookup.deinit();
     textures.deinit();
 }
 
-pub fn acquireDefault() Handle {
-    return default_texture;
-}
-
-pub fn acquireByName(name: []const u8, options: struct { auto_release: bool }) !Handle {
+pub fn acquire(name: []const u8, options: struct { auto_release: bool }) !Handle {
     if (lookup.get(name)) |handle| {
-        return acquireByHandle(handle);
+        return handle.acquire();
     } else {
         var resource = try ImageResource.init(allocator, name);
         defer resource.deinit();
@@ -85,97 +165,95 @@ pub fn acquireByName(name: []const u8, options: struct { auto_release: bool }) !
             resource.image.num_components,
             resource.image.data,
         );
-        texture.generation = if (texture.generation) |g| g +% 1 else 0;
         errdefer texture.destroy();
 
-        const handle = try textures.add(.{
-            .texture = texture,
-            .reference_count = 1,
-            .auto_release = options.auto_release,
-        });
-        errdefer textures.removeAssumeLive(handle);
+        const handle = Handle{
+            .handle = try textures.add(.{
+                .texture = texture,
+                .reference_count = 1,
+                .auto_release = options.auto_release,
+            }),
+        };
+        errdefer textures.removeAssumeLive(handle.handle);
 
         try lookup.put(texture.name.constSlice(), handle);
 
-        std.log.info("Texture: Create texture '{s}'. Ref count: 1", .{name});
+        std.log.info("Texture: Create '{s}' (1)", .{name});
 
         return handle;
     }
 }
 
-pub fn acquireByHandle(handle: Handle) !Handle {
-    try textures.requireLiveHandle(handle);
-
-    if (handle.id == default_texture.id) {
-        std.log.warn("Texture: Cannot acquire default texture. Use getDefaultTexture() instead!", .{});
-        return default_texture;
-    }
-
-    const texture = textures.getColumnPtrAssumeLive(handle, .texture);
-    const reference_count = textures.getColumnPtrAssumeLive(handle, .reference_count);
-
-    reference_count.* +|= 1;
-
-    std.log.info("Texture: Texture '{s}' was acquired. Ref count: {}", .{ texture.name.slice(), reference_count.* });
-
-    return handle;
-}
-
-pub fn releaseByName(name: []const u8) void {
+pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
-        releaseByHandle(handle);
+        if (handle.getIfExists()) |texture| {
+            var resource = try ImageResource.init(allocator, name);
+            defer resource.deinit();
+
+            var new_texture = try create(
+                name,
+                .r8g8b8a8_srgb,
+                resource.image.width,
+                resource.image.height,
+                resource.image.num_components,
+                resource.image.data,
+            );
+
+            new_texture.generation = if (texture.generation) |g| g +% 1 else 0;
+
+            texture.destroy();
+            texture.* = new_texture;
+        }
     } else {
-        std.log.warn("Texture: Cannot release non-existent texture!", .{});
+        return error.TextureDoesNotExist;
     }
-}
-
-pub fn releaseByHandle(handle: Handle) void {
-    if (!textures.isLiveHandle(handle)) {
-        std.log.warn("Texture: Cannot release texture with invalid handle!", .{});
-        return;
-    }
-
-    if (handle.id == default_texture.id) {
-        std.log.warn("Texture: Cannot release default texture!", .{});
-        return;
-    }
-
-    const texture = textures.getColumnPtrAssumeLive(handle, .texture);
-    const reference_count = textures.getColumnPtrAssumeLive(handle, .reference_count);
-    const auto_release = textures.getColumnAssumeLive(handle, .auto_release);
-
-    if (reference_count.* == 0) {
-        std.log.warn("Texture: Cannot release texture with ref count 0!", .{});
-        return;
-    }
-
-    reference_count.* -|= 1;
-
-    if (reference_count.* == 0 and auto_release) {
-        remove(handle);
-    } else {
-        std.log.info("Texture: Texture '{s}' was released. Ref count: {}", .{ texture.name.slice(), reference_count.* });
-    }
-}
-
-pub inline fn exists(handle: Handle) bool {
-    return textures.isLiveHandle(handle);
-}
-
-pub inline fn get(handle: Handle) !*Texture {
-    return try textures.getColumnPtr(handle, .texture);
-}
-
-pub inline fn getIfExists(handle: Handle) ?*Texture {
-    return textures.getColumnPtrIfLive(handle, .texture);
-}
-
-pub inline fn getOrDefault(handle: Handle) *Texture {
-    return textures.getColumnPtrIfLive(handle, .texture) //
-    orelse textures.getColumnPtrAssumeLive(default_texture, .texture);
 }
 
 // utils
+fn createDefault() !void {
+    const size: u32 = 64;
+    const num_components: u32 = 4;
+    const pixel_count = size * size;
+
+    var pixels: [pixel_count * num_components]u8 = undefined;
+    @memset(&pixels, 255);
+
+    for (0..size) |row| {
+        for (0..size) |col| {
+            const index = (row * size) + col;
+            const index_channel = index * num_components;
+
+            if (row % 2 == col % 2) {
+                pixels[index_channel + 0] = 0;
+                pixels[index_channel + 1] = 0;
+            }
+        }
+    }
+
+    var texture = try create(
+        default_name,
+        .r8g8b8a8_srgb,
+        size,
+        size,
+        num_components,
+        &pixels,
+    );
+    texture.generation = null; // NOTE: default texture must have null generation
+    errdefer texture.destroy();
+
+    default = Handle{
+        .handle = try textures.add(.{
+            .texture = texture,
+            .reference_count = 1,
+            .auto_release = false,
+        }),
+    };
+
+    try lookup.put(default_name, default);
+
+    std.log.info("Texture: Create '{s}'", .{default_name});
+}
+
 fn create(
     name: []const u8,
     format: vk.Format,
@@ -190,7 +268,7 @@ fn create(
     self.width = width;
     self.height = height;
     self.channel_count = num_components;
-    self.generation = null;
+    self.generation = 0;
 
     const image_size: vk.DeviceSize = width * height * num_components;
 
@@ -330,71 +408,11 @@ fn create(
     return self;
 }
 
-fn createDefault() !void {
-    const size: u32 = 64;
-    const num_components: u32 = 4;
-    const pixel_count = size * size;
-
-    var pixels: [pixel_count * num_components]u8 = undefined;
-    @memset(&pixels, 255);
-
-    for (0..size) |row| {
-        for (0..size) |col| {
-            const index = (row * size) + col;
-            const index_channel = index * num_components;
-
-            if (row % 2 == col % 2) {
-                pixels[index_channel + 0] = 0;
-                pixels[index_channel + 1] = 0;
-            }
-        }
-    }
-
-    var texture = try create(
-        default_texture_name,
-        .r8g8b8a8_srgb,
-        size,
-        size,
-        num_components,
-        &pixels,
-    );
-    errdefer texture.destroy();
-
-    default_texture = try textures.add(.{
-        .texture = texture,
-        .reference_count = 1,
-        .auto_release = false,
-    });
-
-    try lookup.put(default_texture_name, default_texture);
-
-    std.log.info("Texture: Create default texture '{s}'. Ref count: 1", .{texture.name.slice()});
-}
-
 fn destroy(self: *Texture) void {
     Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
 
     self.image.deinit();
-
     Renderer.device_api.destroySampler(Renderer.device, self.sampler, null);
 
     self.* = undefined;
-}
-
-fn remove(handle: Handle) void {
-    if (textures.getColumnPtrIfLive(handle, .texture)) |texture| {
-        std.log.info("Texture: Remove '{s}'", .{texture.name.slice()});
-
-        _ = lookup.remove(texture.name.slice());
-        textures.removeAssumeLive(handle);
-
-        texture.destroy();
-    }
-}
-
-fn removeAll() void {
-    var it = textures.liveHandles();
-    while (it.next()) |handle| {
-        remove(handle);
-    }
 }

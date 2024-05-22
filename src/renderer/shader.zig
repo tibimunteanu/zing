@@ -650,9 +650,8 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     }
 
     // clear textures to default texture handle
-    const default_texture_handle = Texture.acquireDefault();
     try instance_state.textures.resize(0);
-    try instance_state.textures.appendNTimes(default_texture_handle, self.instance_scope.uniform_sampler_count);
+    try instance_state.textures.appendNTimes(Texture.default, self.instance_scope.uniform_sampler_count);
 
     // add instance to pool
     const handle = try self.instance_state_pool.add(.{
@@ -833,7 +832,7 @@ pub fn applyInstance(self: *Shader) !void {
 
         for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
             const texture_handle = instance_state.textures.slice()[sampler_index];
-            const texture = Texture.getOrDefault(texture_handle);
+            const texture = texture_handle.getOrDefault();
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,

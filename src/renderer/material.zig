@@ -21,7 +21,7 @@ pub const Config = struct {
     name: []const u8 = "New Material",
     material_type: []const u8 = "world",
     diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
-    diffuse_map_name: []const u8 = Texture.default_texture_name,
+    diffuse_map_name: []const u8 = Texture.default_name,
     auto_release: bool = false,
 };
 
@@ -117,14 +117,6 @@ pub fn acquireByHandle(handle: Handle) !Handle {
     return handle;
 }
 
-pub fn releaseByName(name: []const u8) void {
-    if (lookup.get(name)) |handle| {
-        releaseByHandle(handle);
-    } else {
-        std.log.warn("Material: Cannot release non-existent material!", .{});
-    }
-}
-
 pub fn releaseByHandle(handle: Handle) void {
     if (!materials.isLiveHandle(handle)) {
         std.log.warn("Material: Cannot release material with invalid handle!", .{});
@@ -197,8 +189,8 @@ fn create(config: Config) !Material {
     self.material_type = if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world;
     self.diffuse_color = config.diffuse_color;
 
-    const diffuse_texture = Texture.acquireByName(config.diffuse_map_name, .{ .auto_release = true }) //
-    catch Texture.acquireDefault();
+    const diffuse_texture = Texture.acquire(config.diffuse_map_name, .{ .auto_release = true }) //
+    catch Texture.default;
 
     self.diffuse_map = Texture.Map{
         .use = .map_diffuse,
@@ -220,7 +212,7 @@ fn createDefault() !void {
         .name = default_material_name,
         .material_type = "world",
         .diffuse_color = math.Vec{ 1, 1, 1, 1 },
-        .diffuse_map_name = Texture.default_texture_name,
+        .diffuse_map_name = Texture.default_name,
         .auto_release = false,
     });
     material.generation = null; // NOTE: default material must have null generation
@@ -237,8 +229,8 @@ fn createDefault() !void {
 }
 
 fn destroy(self: *Material) void {
-    if (self.diffuse_map.texture.id != Texture.Handle.nil.id) {
-        Texture.releaseByHandle(self.diffuse_map.texture);
+    if (!self.diffuse_map.texture.eql(Texture.Handle.nil)) {
+        self.diffuse_map.texture.release();
     }
 
     if (self.instance_handle) |instance_handle| {
