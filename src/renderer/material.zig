@@ -47,7 +47,6 @@ const MaterialPool = pool.Pool(16, 16, Material, struct {
 
     pub fn release(self: Handle) void {
         if (self.eql(default)) {
-            std.log.warn("Material: Release default!", .{});
             return;
         }
 
@@ -74,6 +73,10 @@ const MaterialPool = pool.Pool(16, 16, Material, struct {
 
     pub inline fn eql(self: Handle, other: Handle) bool {
         return self.id == other.id;
+    }
+
+    pub inline fn isNilOrDefault(self: Handle) bool {
+        return self.eql(Handle.nil) or self.eql(default);
     }
 
     pub inline fn exists(self: Handle) bool {
@@ -235,7 +238,7 @@ fn create(config: Config) !Material {
 }
 
 fn destroy(self: *Material) void {
-    if (!self.diffuse_map.texture.eql(Texture.Handle.nil)) {
+    if (!self.diffuse_map.texture.isNilOrDefault()) {
         self.diffuse_map.texture.release();
     }
 

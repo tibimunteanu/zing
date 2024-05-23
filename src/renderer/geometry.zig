@@ -28,7 +28,89 @@ const GeometryPool = pool.Pool(16, 16, Geometry, struct {
     geometry: Geometry,
     reference_count: usize,
     auto_release: bool,
-}, struct {});
+}, struct {
+    pub fn acquire(self: Handle) !Handle {
+        if (self.eql(default)) {
+            return default;
+        }
+
+        const geometry = try self.get();
+        const reference_count = geometries.getColumnPtrAssumeLive(self, .reference_count);
+
+        reference_count.* +|= 1;
+
+        std.log.info("Geometry: Acquire '{s}' ({})", .{ geometry.name.slice(), reference_count.* });
+
+        return self;
+    }
+
+    pub fn release(self: Handle) void {
+        if (self.eql(default)) {
+            return;
+        }
+
+        if (self.getIfExists()) |geometry| {
+            const reference_count = geometries.getColumnPtrAssumeLive(self, .reference_count);
+            const auto_release = geometries.getColumnAssumeLive(self, .auto_release);
+
+            if (reference_count.* == 0) {
+                std.log.warn("Geometry: Release with ref count 0!", .{});
+                return;
+            }
+
+            reference_count.* -|= 1;
+
+            if (reference_count.* == 0 and auto_release) {
+                self.remove();
+            } else {
+                std.log.info("Geometry: Release '{s}' ({})", .{ geometry.name.slice(), reference_count.* });
+            }
+        } else {
+            std.log.warn("Geometry: Release handle!", .{});
+        }
+    }
+
+    pub inline fn eql(self: Handle, other: Handle) bool {
+        return self.id == other.id;
+    }
+
+    pub inline fn exists(self: Handle) bool {
+        return geometries.isLiveHandle(self);
+    }
+
+    pub inline fn isNilOrDefault(self: Handle) bool {
+        return self.eql(Handle.nil) || self.eql(default) || self.eql(default_name_2d);
+    }
+
+    pub inline fn get(self: Handle) !*Geometry {
+        return try geometries.getColumnPtr(self, .geometry);
+    }
+
+    pub inline fn getIfExists(self: Handle) ?*Geometry {
+        return geometries.getColumnPtrIfLive(self, .geometry);
+    }
+
+    pub inline fn getOrDefault(self: Handle) *Geometry {
+        return geometries.getColumnPtrIfLive(self, .geometry) //
+        orelse geometries.getColumnPtrAssumeLive(default, .geometry);
+    }
+
+    pub inline fn getOrDefault2D(self: Handle) *Geometry {
+        return geometries.getColumnPtrIfLive(self, .geometry) //
+        orelse geometries.getColumnPtrAssumeLive(default_2d, .geometry);
+    }
+
+    pub fn remove(self: Handle) void {
+        if (self.getIfExists()) |geometry| {
+            std.log.info("Geometry: Remove '{s}'", .{geometry.name.slice()});
+
+            geometries.removeAssumeLive(self);
+
+            geometry.destroy();
+        }
+    }
+});
+
 pub const Handle = GeometryPool.Handle;
 
 pub fn Config(comptime Vertex: type, comptime Index: type) type {
@@ -164,13 +246,13 @@ pub fn Config(comptime Vertex: type, comptime Index: type) type {
     };
 }
 
-pub const default_geometry_name = "default";
-pub const default_geometry_2d_name = "default_2d";
+pub const default_name = "default";
+pub const default_name_2d = "default_2d";
+pub var default: Handle = Handle.nil;
+pub var default_2d: Handle = Handle.nil;
 
 var allocator: Allocator = undefined;
 var geometries: GeometryPool = undefined;
-var default_geometry: Handle = Handle.nil;
-var default_geometry_2d: Handle = Handle.nil;
 
 name: Array(u8, 256),
 material: Material.Handle,
@@ -187,29 +269,16 @@ pub fn initSystem(ally: Allocator) !void {
 }
 
 pub fn deinitSystem() void {
-    removeAll();
+    var it = geometries.liveHandles();
+    while (it.next()) |handle| {
+        handle.remove();
+    }
+
     geometries.deinit();
 }
 
-pub fn acquireDefault() Handle {
-    return default_geometry;
-}
-
-pub fn acquireDefault2D() Handle {
-    return default_geometry_2d;
-}
-
 pub fn acquireByConfig(config: anytype, options: struct { auto_release: bool }) !Handle {
-    const material_handle = Material.acquire(config.material_name) //
-    catch Material.default;
-
-    var geometry = try create(
-        config.name,
-        material_handle,
-        config.vertices,
-        config.indices,
-    );
-    geometry.generation = if (geometry.generation) |g| g +% 1 else 0;
+    var geometry = try create(config);
     errdefer geometry.destroy();
 
     const handle = try geometries.add(.{
@@ -219,86 +288,78 @@ pub fn acquireByConfig(config: anytype, options: struct { auto_release: bool }) 
     });
     errdefer geometries.removeAssumeLive(handle);
 
-    std.log.info("Geometry: Create geometry '{s}'. Ref count: 1", .{geometry.name.slice()});
+    std.log.info("Geometry: Create '{s}' (1)", .{config.name});
 
     return handle;
-}
-
-pub fn acquireByHandle(handle: Handle) !Handle {
-    try geometries.requireLiveHandle(handle);
-
-    if (handle.id == default_geometry.id) {
-        std.log.warn("Geometry: Cannot acquire default geometry. Use getDefaultGeometry() instead!", .{});
-        return default_geometry;
-    }
-
-    const geometry = geometries.getColumnPtrAssumeLive(handle, .geometry);
-    const reference_count = geometries.getColumnPtrAssumeLive(handle, .reference_count);
-
-    reference_count.* +|= 1;
-
-    std.log.info("Geometry: Geometry '{s}' was acquired. Ref count: {}", .{ geometry.name.slice(), reference_count.* });
-
-    return handle;
-}
-
-pub fn releaseByHandle(handle: Handle) void {
-    if (!geometries.isLiveHandle(handle)) {
-        std.log.warn("Geometry: Cannot release geometry with invalid handle!", .{});
-        return;
-    }
-
-    if (handle.id == default_geometry.id) {
-        std.log.warn("Geometry: Cannot release default geometry!", .{});
-        return;
-    }
-
-    const geometry = geometries.getColumnPtrAssumeLive(handle, .geometry);
-    const reference_count = geometries.getColumnPtrAssumeLive(handle, .reference_count);
-    const auto_release = geometries.getColumnAssumeLive(handle, .auto_release);
-
-    if (reference_count.* == 0) {
-        std.log.warn("Geometry: Cannot release geometry with ref count 0!", .{});
-        return;
-    }
-
-    reference_count.* -|= 1;
-
-    if (reference_count.* == 0 and auto_release) {
-        remove(handle);
-    } else {
-        std.log.info("Geometry: Geometry '{s}' was released. Ref count: {}", .{ geometry.name.slice(), reference_count.* });
-    }
-}
-
-pub inline fn exists(handle: Handle) bool {
-    return geometries.isLiveHandle(handle);
-}
-
-pub inline fn get(handle: Handle) !*Geometry {
-    return try geometries.getColumnPtr(handle, .geometry);
-}
-
-pub inline fn getIfExists(handle: Handle) ?*Geometry {
-    return geometries.getColumnPtrIfLive(handle, .geometry);
 }
 
 // utils
-fn create(
-    name: []const u8,
-    material: Material.Handle,
-    vertices: anytype,
-    indices: anytype,
-) !Geometry {
+fn createDefault() !void {
+    const vertices_3d = [_]Vertex3D{
+        .{ .position = .{ -5.0, -5.0, 0.0 }, .texcoord = .{ 0.0, 0.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
+        .{ .position = .{ 5.0, -5.0, 0.0 }, .texcoord = .{ 1.0, 0.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
+        .{ .position = .{ 5.0, 5.0, 0.0 }, .texcoord = .{ 1.0, 1.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } },
+        .{ .position = .{ -5.0, 5.0, 0.0 }, .texcoord = .{ 0.0, 1.0 }, .color = .{ 1.0, 1.0, 0.0, 1.0 } },
+    };
+
+    const indices_3d = [_]u32{ 0, 1, 2, 0, 2, 3 };
+
+    var geometry_3d = try create(Config(Vertex3D, u32){
+        .name = default_name,
+        .material_name = Material.default_name,
+        .vertices = &vertices_3d,
+        .indices = &indices_3d,
+    });
+    geometry_3d.generation = null; // NOTE: default geometry must have null generation
+    errdefer geometry_3d.destroy();
+
+    default = try geometries.add(.{
+        .geometry = geometry_3d,
+        .reference_count = 1,
+        .auto_release = false,
+    });
+
+    std.log.info("Geometry: Create '{s}'", .{default_name});
+
+    const vertices_2d = [_]Vertex2D{
+        .{ .position = .{ -5.0, -5.0 }, .texcoord = .{ 0.0, 0.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
+        .{ .position = .{ 5.0, -5.0 }, .texcoord = .{ 1.0, 0.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
+        .{ .position = .{ 5.0, 5.0 }, .texcoord = .{ 1.0, 1.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } },
+        .{ .position = .{ -5.0, 5.0 }, .texcoord = .{ 0.0, 1.0 }, .color = .{ 1.0, 1.0, 0.0, 1.0 } },
+    };
+
+    const indices_2d = [_]u32{ 0, 1, 2, 0, 2, 3 };
+
+    var geometry_2d = try create(Config(Vertex2D, u32){
+        .name = default_name_2d,
+        .material_name = Material.default_name,
+        .vertices = &vertices_2d,
+        .indices = &indices_2d,
+    });
+    geometry_2d.generation = null; // NOTE: default geometry must have null generation
+    errdefer geometry_2d.destroy();
+
+    default_2d = try geometries.add(.{
+        .geometry = geometry_2d,
+        .reference_count = 1,
+        .auto_release = false,
+    });
+
+    std.log.info("Geometry: Create '{s}'", .{default_name_2d});
+}
+
+fn create(config: anytype) !Geometry {
     var self: Geometry = undefined;
-    self.name = try Array(u8, 256).fromSlice(name);
-    self.material = material;
-    self.generation = null;
+    self.name = try Array(u8, 256).fromSlice(config.name);
+    self.generation = 0;
     self.internal_id = null;
 
-    if (vertices.len == 0) {
+    if (config.vertices.len == 0) {
         return error.VerticesCannotBeEmpty;
     }
+
+    self.material = Material.acquire(config.material_name) //
+    catch Material.default;
 
     var internal_data: ?*Data = null;
 
@@ -313,14 +374,14 @@ fn create(
     }
 
     if (internal_data) |data| {
-        data.vertex_count = @truncate(vertices.len);
-        data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(vertices)));
-        data.vertex_buffer_offset = try Renderer.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(vertices));
+        data.vertex_count = @truncate(config.vertices.len);
+        data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(config.vertices)));
+        data.vertex_buffer_offset = try Renderer.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(config.vertices));
 
-        if (indices.len > 0) {
-            data.index_count = @truncate(indices.len);
-            data.index_size = @sizeOf(std.meta.Elem(@TypeOf(indices)));
-            data.index_buffer_offset = try Renderer.index_buffer.allocAndUpload(std.mem.sliceAsBytes(indices));
+        if (config.indices.len > 0) {
+            data.index_count = @truncate(config.indices.len);
+            data.index_size = @sizeOf(std.meta.Elem(@TypeOf(config.indices)));
+            data.index_buffer_offset = try Renderer.index_buffer.allocAndUpload(std.mem.sliceAsBytes(config.indices));
         }
 
         data.generation = if (self.generation) |g| g +% 1 else 0;
@@ -331,65 +392,13 @@ fn create(
     return self;
 }
 
-fn createDefault() !void {
-    const vertices_3d = [_]Vertex3D{
-        .{ .position = .{ -5.0, -5.0, 0.0 }, .texcoord = .{ 0.0, 0.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
-        .{ .position = .{ 5.0, -5.0, 0.0 }, .texcoord = .{ 1.0, 0.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
-        .{ .position = .{ 5.0, 5.0, 0.0 }, .texcoord = .{ 1.0, 1.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } },
-        .{ .position = .{ -5.0, 5.0, 0.0 }, .texcoord = .{ 0.0, 1.0 }, .color = .{ 1.0, 1.0, 0.0, 1.0 } },
-    };
-
-    const indices_3d = [_]u32{ 0, 1, 2, 0, 2, 3 };
-
-    var geometry_3d = try create(
-        default_geometry_name,
-        Material.default,
-        &vertices_3d,
-        &indices_3d,
-    );
-    geometry_3d.generation = null; // NOTE: default geometry always has null generation
-    errdefer geometry_3d.destroy();
-
-    default_geometry = try geometries.add(.{
-        .geometry = geometry_3d,
-        .reference_count = 1,
-        .auto_release = false,
-    });
-
-    std.log.info("Geometry: Create default 3D geometry '{s}'. Ref count: 1", .{geometry_3d.name.slice()});
-
-    const vertices_2d = [_]Vertex2D{
-        .{ .position = .{ -5.0, -5.0 }, .texcoord = .{ 0.0, 0.0 }, .color = .{ 1.0, 0.0, 0.0, 1.0 } },
-        .{ .position = .{ 5.0, -5.0 }, .texcoord = .{ 1.0, 0.0 }, .color = .{ 0.0, 0.0, 1.0, 1.0 } },
-        .{ .position = .{ 5.0, 5.0 }, .texcoord = .{ 1.0, 1.0 }, .color = .{ 0.0, 1.0, 0.0, 1.0 } },
-        .{ .position = .{ -5.0, 5.0 }, .texcoord = .{ 0.0, 1.0 }, .color = .{ 1.0, 1.0, 0.0, 1.0 } },
-    };
-
-    const indices_2d = [_]u32{ 0, 1, 2, 0, 2, 3 };
-
-    var geometry_2d = try create(
-        default_geometry_2d_name,
-        Material.default,
-        &vertices_2d,
-        &indices_2d,
-    );
-    geometry_2d.generation = null; // NOTE: default geometry always has null generation
-    errdefer geometry_2d.destroy();
-
-    default_geometry_2d = try geometries.add(.{
-        .geometry = geometry_2d,
-        .reference_count = 1,
-        .auto_release = false,
-    });
-
-    std.log.info("Geometry: Create default 2D geometry '{s}'. Ref count: 1", .{geometry_2d.name.slice()});
-}
-
 fn destroy(self: *Geometry) void {
+    if (!self.material.isNilOrDefault()) {
+        self.material.release();
+    }
+
     if (self.internal_id != null) {
-        Renderer.device_api.deviceWaitIdle(Renderer.device) catch {
-            std.log.err("Could not destroy geometry {s}", .{self.name.slice()});
-        };
+        Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
 
         const internal_data = &Renderer.geometries[self.internal_id.?];
 
@@ -411,23 +420,4 @@ fn destroy(self: *Geometry) void {
     }
 
     self.* = undefined;
-}
-
-fn remove(handle: Handle) void {
-    if (geometries.getColumnPtrIfLive(handle, .geometry)) |geometry| {
-        std.log.info("Geometry: Remove '{s}'", .{geometry.name.slice()});
-
-        geometry.material.release();
-
-        geometries.removeAssumeLive(handle);
-
-        geometry.destroy();
-    }
-}
-
-fn removeAll() void {
-    var it = geometries.liveHandles();
-    while (it.next()) |handle| {
-        remove(handle);
-    }
 }

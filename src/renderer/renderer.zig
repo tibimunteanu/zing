@@ -539,7 +539,7 @@ pub fn drawFrame(packet: RenderPacket) !void {
 pub fn drawGeometry(data: GeometryRenderData) !void {
     const command_buffer = getCurrentCommandBuffer();
 
-    const geometry = try Geometry.get(data.geometry);
+    const geometry = try data.geometry.get();
     const material = geometry.material.getOrDefault();
 
     switch (material.material_type) {
