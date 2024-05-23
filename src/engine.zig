@@ -24,8 +24,8 @@ const Engine = @This();
 var choice: usize = 2;
 const names = [_][]const u8{
     "cobblestone",
-    "paving",
     "paving2",
+    "paving",
 };
 var test_geometry = Geometry.Handle.nil;
 var test_ui_geometry = Geometry.Handle.nil;
@@ -81,13 +81,11 @@ pub fn init(allocator: Allocator) !void {
         .segment_count_y = 4,
         .tile_x = 2,
         .tile_y = 2,
+        .auto_release = true,
     });
     defer test_plane_config.deinit();
 
-    test_geometry = try Geometry.acquire(
-        test_plane_config,
-        .{ .auto_release = true },
-    );
+    test_geometry = try Geometry.acquire(test_plane_config);
 
     var test_ui_plane_config = try Geometry.Config(Vertex2D, u32).initPlane(.{
         .name = "ui_plane",
@@ -98,13 +96,11 @@ pub fn init(allocator: Allocator) !void {
         .segment_count_y = 1,
         .tile_x = 1,
         .tile_y = 1,
+        .auto_release = true,
     });
     defer test_ui_plane_config.deinit();
 
-    test_ui_geometry = try Geometry.acquire(
-        test_ui_plane_config,
-        .{ .auto_release = true },
-    );
+    test_ui_geometry = try Geometry.acquire(test_ui_plane_config);
     // TODO: end temporary
 }
 

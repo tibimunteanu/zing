@@ -121,6 +121,7 @@ pub fn Config(comptime Vertex: type, comptime Index: type) type {
         vertices: []const Vertex,
         indices: []const Index,
         material_name: []const u8,
+        auto_release: bool,
 
         pub fn initPlane(
             options: struct {
@@ -132,6 +133,7 @@ pub fn Config(comptime Vertex: type, comptime Index: type) type {
                 segment_count_y: u32,
                 tile_x: u32,
                 tile_y: u32,
+                auto_release: bool,
             },
         ) !Self {
             if (options.width <= 0 or options.height <= 0) {
@@ -277,14 +279,14 @@ pub fn deinitSystem() void {
     geometries.deinit();
 }
 
-pub fn acquire(config: anytype, options: struct { auto_release: bool }) !Handle {
+pub fn acquire(config: anytype) !Handle {
     var geometry = try create(config);
     errdefer geometry.destroy();
 
     const handle = try geometries.add(.{
         .geometry = geometry,
         .reference_count = 1,
-        .auto_release = options.auto_release,
+        .auto_release = config.auto_release,
     });
     errdefer geometries.removeAssumeLive(handle);
 
@@ -309,6 +311,7 @@ fn createDefault() !void {
         .material_name = Material.default_name,
         .vertices = &vertices_3d,
         .indices = &indices_3d,
+        .auto_release = false,
     });
     geometry_3d.generation = null; // NOTE: default geometry must have null generation
     errdefer geometry_3d.destroy();
@@ -335,6 +338,7 @@ fn createDefault() !void {
         .material_name = Material.default_name,
         .vertices = &vertices_2d,
         .indices = &indices_2d,
+        .auto_release = false,
     });
     geometry_2d.generation = null; // NOTE: default geometry must have null generation
     errdefer geometry_2d.destroy();
