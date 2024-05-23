@@ -84,7 +84,7 @@ pub fn init(allocator: Allocator) !void {
     });
     defer test_plane_config.deinit();
 
-    test_geometry = try Geometry.acquireByConfig(
+    test_geometry = try Geometry.acquire(
         test_plane_config,
         .{ .auto_release = true },
     );
@@ -101,7 +101,7 @@ pub fn init(allocator: Allocator) !void {
     });
     defer test_ui_plane_config.deinit();
 
-    test_ui_geometry = try Geometry.acquireByConfig(
+    test_ui_geometry = try Geometry.acquire(
         test_ui_plane_config,
         .{ .auto_release = true },
     );

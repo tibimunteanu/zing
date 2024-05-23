@@ -277,7 +277,7 @@ pub fn deinitSystem() void {
     geometries.deinit();
 }
 
-pub fn acquireByConfig(config: anytype, options: struct { auto_release: bool }) !Handle {
+pub fn acquire(config: anytype, options: struct { auto_release: bool }) !Handle {
     var geometry = try create(config);
     errdefer geometry.destroy();
 
