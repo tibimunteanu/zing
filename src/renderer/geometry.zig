@@ -28,7 +28,7 @@ const GeometryPool = pool.Pool(16, 16, Geometry, struct {
     geometry: Geometry,
     reference_count: usize,
     auto_release: bool,
-});
+}, struct {});
 pub const Handle = GeometryPool.Handle;
 
 pub fn Config(comptime Vertex: type, comptime Index: type) type {
@@ -200,8 +200,8 @@ pub fn acquireDefault2D() Handle {
 }
 
 pub fn acquireByConfig(config: anytype, options: struct { auto_release: bool }) !Handle {
-    const material_handle = Material.acquireByName(config.material_name) //
-    catch Material.acquireDefault();
+    const material_handle = Material.acquire(config.material_name) //
+    catch Material.default;
 
     var geometry = try create(
         config.name,
@@ -343,7 +343,7 @@ fn createDefault() !void {
 
     var geometry_3d = try create(
         default_geometry_name,
-        Material.acquireDefault(),
+        Material.default,
         &vertices_3d,
         &indices_3d,
     );
@@ -369,7 +369,7 @@ fn createDefault() !void {
 
     var geometry_2d = try create(
         default_geometry_2d_name,
-        Material.acquireDefault(),
+        Material.default,
         &vertices_2d,
         &indices_2d,
     );
@@ -417,7 +417,7 @@ fn remove(handle: Handle) void {
     if (geometries.getColumnPtrIfLive(handle, .geometry)) |geometry| {
         std.log.info("Geometry: Remove '{s}'", .{geometry.name.slice()});
 
-        Material.releaseByHandle(geometry.material);
+        geometry.material.release();
 
         geometries.removeAssumeLive(handle);
 

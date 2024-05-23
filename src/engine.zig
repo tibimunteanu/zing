@@ -212,7 +212,7 @@ fn updateCamera(delta_time: f32) !void {
         choice %= names.len;
 
         if (Geometry.getIfExists(test_geometry)) |geometry| {
-            const material = try Material.get(geometry.material);
+            const material = try geometry.material.get();
 
             const prev_texture = material.diffuse_map.texture;
             material.diffuse_map.texture = try Texture.acquire(names[choice], .{ .auto_release = true });

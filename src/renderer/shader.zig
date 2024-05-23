@@ -136,7 +136,7 @@ pub const InstanceState = struct {
 // NOTE: index_bits = 10 results in a maximum of 1024 instances
 pub const InstancePool = pool.Pool(10, 22, InstanceState, struct {
     instance_state: InstanceState,
-});
+}, struct {});
 pub const InstanceHandle = InstancePool.Handle;
 
 pub const UniformHandle = u8;
