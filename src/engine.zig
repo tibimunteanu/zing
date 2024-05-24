@@ -29,9 +29,6 @@ const names = [_][]const u8{
 };
 var test_geometry = Geometry.Handle.nil;
 var test_ui_geometry = Geometry.Handle.nil;
-
-pub var phong_shader: Shader.Handle = undefined;
-pub var ui_shader: Shader.Handle = undefined;
 // TODO: end temporary
 
 var window: glfw.Window = undefined;
@@ -69,14 +66,6 @@ pub fn init(allocator: Allocator) !void {
 
     try Shader.initSystem(allocator);
     errdefer Shader.deinitSystem();
-
-    // TODO: temporary
-    phong_shader = try Shader.acquire("phong");
-    errdefer phong_shader.release();
-
-    ui_shader = try Shader.acquire("ui");
-    errdefer ui_shader.release();
-    // TODO: end temporary
 
     try Material.initSystem(allocator);
     errdefer Material.deinitSystem();
@@ -136,7 +125,7 @@ pub fn run() !void {
         if (window.getAttrib(.iconified) == 0) {
             const frame_start_time = glfw.getTime();
             const precise_delta_time = frame_start_time - last_time;
-            const delta_time = @as(f32, @floatCast(precise_delta_time));
+            const delta_time: f32 = @floatCast(precise_delta_time);
 
             try updateCamera(delta_time);
 
@@ -214,7 +203,7 @@ fn updateCamera(delta_time: f32) !void {
     }
 
     recomputeCameraView();
-    Renderer.view = camera_view;
+    Renderer.world_view = camera_view;
 
     const pressN = window.getKey(.n);
     if (pressN == .press and prevPressN == .release) {

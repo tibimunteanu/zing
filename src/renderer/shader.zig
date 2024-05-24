@@ -433,7 +433,7 @@ const ShaderPool = pool.Pool(16, 16, Shader, struct {
 
 pub const Handle = ShaderPool.Handle;
 
-pub const default_name = "default";
+pub const default_name = "phong";
 pub var default: Handle = Handle.nil;
 
 var allocator: Allocator = undefined;
@@ -618,7 +618,8 @@ pub fn acquire(name: []const u8) !Handle {
         });
         errdefer shaders.removeAssumeLive(handle);
 
-        try lookup.put(shader.name.slice(), handle);
+        const shader_ptr = try handle.get(); // NOTE: use name from ptr as key
+        try lookup.put(shader_ptr.name.constSlice(), handle);
 
         std.log.info("Shader: Create '{s}' (1)", .{name});
 
@@ -632,7 +633,10 @@ pub fn reload(name: []const u8) !void {
 }
 
 fn createDefault() !void {
-    // TODO: implement this
+    default = try acquire(default_name);
+
+    // var shader = try default.get();
+    // shader.generation = null; // NOTE: default shader must have null generation
 }
 
 // utils

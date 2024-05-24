@@ -1,7 +1,7 @@
 {
   "resource_type": "material",
   "name": "diffuse",
-  "material_type": "world",
+  "shader_name": "phong",
   "diffuse_color": [1.0, 1.0, 1.0, 1.0],
   "diffuse_map_name": "paving",
   "auto_release": true

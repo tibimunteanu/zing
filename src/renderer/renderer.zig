@@ -198,8 +198,8 @@ pub var index_buffer: Buffer = undefined;
 
 pub var geometries: [geometry_max_count]Geometry.Data = undefined;
 
-pub var projection: math.Mat = undefined;
-pub var view: math.Mat = undefined;
+pub var world_projection: math.Mat = undefined;
+pub var world_view: math.Mat = undefined;
 pub var ui_projection: math.Mat = undefined;
 pub var ui_view: math.Mat = undefined;
 pub var fov: f32 = undefined;
@@ -325,7 +325,7 @@ pub fn init(ally: Allocator, window: glfw.Window) !void {
         geometry.*.generation = null;
     }
 
-    view = math.inverse(math.translation(0.0, 0.0, -30.0));
+    world_view = math.inverse(math.translation(0.0, 0.0, -30.0));
     ui_view = math.inverse(math.identity());
 
     fov = std.math.degreesToRadians(45.0);
@@ -482,28 +482,11 @@ pub fn endFrame() !void {
 pub fn drawFrame(packet: RenderPacket) !void {
     if (try beginFrame(packet.delta_time)) {
         try beginRenderPass(.world);
-
-        try Engine.phong_shader.bindGlobal();
-        try Engine.phong_shader.setUniform("projection", projection);
-        try Engine.phong_shader.setUniform("view", view);
-        try Engine.phong_shader.applyGlobal();
-
-        for (packet.geometries) |geometry| {
-            try drawGeometry(geometry);
-        }
-
+        for (packet.geometries) |geometry| try drawGeometry(geometry, world_view, world_projection);
         try endRenderPass(.world);
 
         try beginRenderPass(.ui);
-
-        try Engine.ui_shader.bindGlobal();
-        try Engine.ui_shader.setUniform("projection", ui_projection);
-        try Engine.ui_shader.setUniform("view", ui_view);
-        try Engine.ui_shader.applyGlobal();
-
-        for (packet.ui_geometries) |ui_geometry| {
-            try drawGeometry(ui_geometry);
-        }
+        for (packet.ui_geometries) |ui_geometry| try drawGeometry(ui_geometry, ui_view, ui_projection);
         try endRenderPass(.ui);
 
         try endFrame();
@@ -512,34 +495,29 @@ pub fn drawFrame(packet: RenderPacket) !void {
     }
 }
 
-pub fn drawGeometry(data: GeometryRenderData) !void {
+pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.Mat) !void {
     const command_buffer = getCurrentCommandBuffer();
 
     const geometry = try data.geometry.get();
     const material = geometry.material.getOrDefault();
 
-    switch (material.material_type) {
-        .world => {
-            try Engine.phong_shader.bindLocal();
-            try Engine.phong_shader.setUniform("model", data.model);
-            try Engine.phong_shader.applyLocal();
+    // TODO: don't bind for each geometry
+    try material.shader.bind();
 
-            try Engine.phong_shader.bindInstance(material.instance_handle.?);
-            try Engine.phong_shader.setUniform("diffuse_color", material.diffuse_color);
-            try Engine.phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-            try Engine.phong_shader.applyInstance();
-        },
-        .ui => {
-            try Engine.ui_shader.bindLocal();
-            try Engine.ui_shader.setUniform("model", data.model);
-            try Engine.ui_shader.applyLocal();
+    // TODO: don't bind and apply global for each geometry
+    try material.shader.bindGlobal();
+    try material.shader.setUniform("view", view);
+    try material.shader.setUniform("projection", projection);
+    try material.shader.applyGlobal();
 
-            try Engine.ui_shader.bindInstance(material.instance_handle.?);
-            try Engine.ui_shader.setUniform("diffuse_color", material.diffuse_color);
-            try Engine.ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-            try Engine.ui_shader.applyInstance();
-        },
-    }
+    try material.shader.bindInstance(material.instance_handle.?);
+    try material.shader.setUniform("diffuse_color", material.diffuse_color);
+    try material.shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+    try material.shader.applyInstance();
+
+    try material.shader.bindLocal();
+    try material.shader.setUniform("model", data.model);
+    try material.shader.applyLocal();
 
     const buffer_data = geometries[geometry.internal_id.?];
 
@@ -569,14 +547,8 @@ pub fn beginRenderPass(render_pass_type: RenderPass.Type) !void {
     const command_buffer = getCurrentCommandBuffer();
 
     switch (render_pass_type) {
-        .world => {
-            world_render_pass.begin(command_buffer, getCurrentWorldFramebuffer());
-            try Engine.phong_shader.bind();
-        },
-        .ui => {
-            ui_render_pass.begin(command_buffer, getCurrentFramebuffer());
-            try Engine.ui_shader.bind();
-        },
+        .world => world_render_pass.begin(command_buffer, getCurrentWorldFramebuffer()),
+        .ui => ui_render_pass.begin(command_buffer, getCurrentFramebuffer()),
     }
 }
 
@@ -844,7 +816,7 @@ fn setProjection(size: glfw.Window.Size) void {
     const width: f32 = @floatFromInt(size.width);
     const height: f32 = @floatFromInt(size.height);
 
-    projection = math.perspectiveFovLh(fov, width / height, near_clip, far_clip);
+    world_projection = math.perspectiveFovLh(fov, width / height, near_clip, far_clip);
     ui_projection = math.orthographicOffCenterLh(0, width, height, 0, -1.0, 1.0);
 }
 

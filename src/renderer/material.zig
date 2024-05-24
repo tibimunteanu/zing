@@ -19,7 +19,7 @@ pub const Type = enum {
 
 pub const Config = struct {
     name: []const u8 = "New Material",
-    material_type: []const u8 = "world",
+    shader_name: []const u8 = Shader.default_name,
     diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
     diffuse_map_name: []const u8 = Texture.default_name,
     auto_release: bool = false,
@@ -118,7 +118,7 @@ var materials: MaterialPool = undefined;
 var lookup: std.StringHashMap(Handle) = undefined;
 
 name: Array(u8, 256),
-material_type: Type,
+shader: Shader.Handle,
 diffuse_color: math.Vec,
 diffuse_map: Texture.Map,
 generation: ?u32,
@@ -165,7 +165,8 @@ pub fn acquire(name: []const u8) !Handle {
         });
         errdefer materials.removeAssumeLive(handle);
 
-        try lookup.put(material.name.slice(), handle);
+        const material_ptr = try handle.get(); // NOTE: use name from ptr as key
+        try lookup.put(material_ptr.name.constSlice(), handle);
 
         std.log.info("Material: Create '{s}' (1)", .{name});
 
@@ -195,7 +196,7 @@ pub fn reload(name: []const u8) !void {
 fn createDefault() !void {
     var material = try create(Config{
         .name = default_name,
-        .material_type = "world",
+        .shader_name = Shader.default_name,
         .diffuse_color = math.Vec{ 1, 1, 1, 1 },
         .diffuse_map_name = Texture.default_name,
         .auto_release = false,
@@ -217,22 +218,20 @@ fn create(config: Config) !Material {
     var self: Material = undefined;
 
     self.name = try Array(u8, 256).fromSlice(config.name);
-    self.material_type = if (std.mem.eql(u8, config.material_type, "ui")) .ui else .world;
-    self.diffuse_color = config.diffuse_color;
-    self.generation = 0;
 
-    const diffuse_texture = Texture.acquire(config.diffuse_map_name, .{ .auto_release = true }) //
-    catch Texture.default;
+    self.shader = Shader.acquire(config.shader_name) catch Shader.default;
+    self.instance_handle = try self.shader.createInstance();
+
+    self.diffuse_color = config.diffuse_color;
+
+    const diffuse_texture = Texture.acquire(config.diffuse_map_name, .{ .auto_release = true }) catch Texture.default;
 
     self.diffuse_map = Texture.Map{
         .use = .map_diffuse,
         .texture = diffuse_texture,
     };
 
-    switch (self.material_type) {
-        .world => self.instance_handle = try Engine.phong_shader.createInstance(),
-        .ui => self.instance_handle = try Engine.ui_shader.createInstance(),
-    }
+    self.generation = 0;
 
     return self;
 }
@@ -243,10 +242,11 @@ fn destroy(self: *Material) void {
     }
 
     if (self.instance_handle) |instance_handle| {
-        switch (self.material_type) {
-            .world => Engine.phong_shader.destroyInstance(instance_handle),
-            .ui => Engine.ui_shader.destroyInstance(instance_handle),
-        }
+        self.shader.destroyInstance(instance_handle);
+    }
+
+    if (!self.shader.isNilOrDefault()) {
+        self.shader.release();
     }
 
     self.* = undefined;

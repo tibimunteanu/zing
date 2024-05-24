@@ -1,7 +1,7 @@
 {
   "resource_type": "material",
   "name": "ui",
-  "material_type": "ui",
+  "shader_name": "ui",
   "diffuse_color": [1.0, 1.0, 1.0, 1.0],
   "diffuse_map_name": "orange_lines_512",
   "auto_release": true

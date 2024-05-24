@@ -172,7 +172,8 @@ pub fn acquire(name: []const u8, options: struct { auto_release: bool }) !Handle
         });
         errdefer textures.removeAssumeLive(handle);
 
-        try lookup.put(texture.name.constSlice(), handle);
+        const texture_ptr = try handle.get(); // NOTE: use name from ptr as key
+        try lookup.put(texture_ptr.name.constSlice(), handle);
 
         std.log.info("Texture: Create '{s}' (1)", .{name});
 
