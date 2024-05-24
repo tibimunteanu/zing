@@ -11,9 +11,7 @@ const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
 // TODO: Texture.Map
-// TODO: local push constant uniform block and apply local
 // TODO: keep sampler uniforms separate or index lookup
-// TODO: global_textures
 // TODO: flags
 // TODO: descriptor pool free list
 // TODO: needs update
@@ -481,25 +479,6 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
         null,
     );
 
-    // allocate global descriptor sets
-    const global_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.global));
-    var global_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
-    try global_ubo_layouts.appendNTimes(global_ubo_layout, Renderer.swapchain.images.len);
-
-    const global_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
-        .descriptor_pool = self.descriptor_pool,
-        .descriptor_set_count = global_ubo_layouts.len,
-        .p_set_layouts = global_ubo_layouts.slice().ptr,
-    };
-
-    try self.global_state.descriptor_sets.resize(global_ubo_layouts.len);
-
-    try Renderer.device_api.allocateDescriptorSets(
-        Renderer.device,
-        &global_ubo_descriptor_set_alloc_info,
-        self.global_state.descriptor_sets.slice().ptr,
-    );
-
     // create and map ubo
     const ubo_alignment: u32 = @intCast(Renderer.physical_device.properties.limits.min_uniform_buffer_offset_alignment);
 
@@ -522,6 +501,25 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
 
     self.ubo_ptr = try self.ubo.lock(0, vk.WHOLE_SIZE, .{});
 
+    // allocate global descriptor sets
+    const global_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.global));
+    var global_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
+    try global_ubo_layouts.appendNTimes(global_ubo_layout, Renderer.swapchain.images.len);
+
+    const global_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
+        .descriptor_pool = self.descriptor_pool,
+        .descriptor_set_count = global_ubo_layouts.len,
+        .p_set_layouts = global_ubo_layouts.slice().ptr,
+    };
+
+    try self.global_state.descriptor_sets.resize(global_ubo_layouts.len);
+
+    try Renderer.device_api.allocateDescriptorSets(
+        Renderer.device,
+        &global_ubo_descriptor_set_alloc_info,
+        self.global_state.descriptor_sets.slice().ptr,
+    );
+
     // alloc global ubo range
     self.global_state.ubo_offset = try self.ubo.alloc(self.global_scope.stride);
 
@@ -540,10 +538,6 @@ pub fn deinit(self: *Shader) void {
         self.instance_state_pool.deinit();
     }
 
-    if (self.ubo.handle != .null_handle) {
-        self.ubo.deinit();
-    }
-
     if (self.global_state.descriptor_sets.len > 0) {
         Renderer.device_api.freeDescriptorSets(
             Renderer.device,
@@ -552,6 +546,10 @@ pub fn deinit(self: *Shader) void {
             self.global_state.descriptor_sets.slice().ptr,
         ) catch {};
         self.global_state.descriptor_sets.len = 0;
+    }
+
+    if (self.ubo.handle != .null_handle) {
+        self.ubo.deinit();
     }
 
     if (self.descriptor_pool != .null_handle) {
@@ -674,11 +672,6 @@ pub fn bind(self: *const Shader) void {
     Renderer.device_api.cmdBindPipeline(Renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
 }
 
-pub fn bindLocal(self: *Shader) !void {
-    self.bound_scope = .local;
-    self.bound_instance = InstanceHandle.nil;
-}
-
 pub fn bindGlobal(self: *Shader) !void {
     self.bound_scope = .global;
     self.bound_instance = InstanceHandle.nil;
@@ -691,6 +684,11 @@ pub fn bindInstance(self: *Shader, handle: InstanceHandle) !void {
         self.bound_instance = handle;
         self.bound_ubo_offset = instance_state.ubo_offset;
     } else return error.InvalidShaderInstanceHandle;
+}
+
+pub fn bindLocal(self: *Shader) !void {
+    self.bound_scope = .local;
+    self.bound_instance = InstanceHandle.nil;
 }
 
 pub fn getUniformHandle(self: *Shader, name: []const u8) !UniformHandle {
@@ -717,9 +715,9 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
                 self.global_state.textures.slice()[p_uniform.offset] = value;
             },
             .instance => {
-                if (self.instance_state_pool.getColumnPtrIfLive(self.bound_instance, .instance_state)) |instance_state| {
-                    instance_state.textures.slice()[p_uniform.offset] = value;
-                } else return error.InvalidShaderInstanceHandle;
+                var instance_state = try self.instance_state_pool.getColumnPtr(self.bound_instance, .instance_state);
+
+                instance_state.textures.slice()[p_uniform.offset] = value;
             },
             .local => return error.CannotSetLocalSamplers,
         }
@@ -743,33 +741,25 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
     }
 }
 
-pub fn applyLocal(self: *Shader) !void {
-    Renderer.device_api.cmdPushConstants(
-        Renderer.getCurrentCommandBuffer().handle,
-        self.pipeline_layout,
-        .{ .vertex_bit = true, .fragment_bit = true },
-        0,
-        128,
-        self.local_push_constant_buffer.slice().ptr,
-    );
-}
-
 pub fn applyGlobal(self: *Shader) !void {
     const image_index = Renderer.swapchain.image_index;
     const command_buffer = Renderer.getCurrentCommandBuffer();
     const descriptor_set = self.global_state.descriptor_sets.get(image_index);
 
+    var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
+
+    var dst_binding: u32 = 0;
+
+    // descriptor 0 - uniform buffer
     const buffer_info = vk.DescriptorBufferInfo{
         .buffer = self.ubo.handle,
         .offset = self.global_state.ubo_offset,
         .range = self.global_scope.stride,
     };
 
-    var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
-
     try descriptor_writes.append(vk.WriteDescriptorSet{
         .dst_set = descriptor_set,
-        .dst_binding = 0,
+        .dst_binding = dst_binding,
         .dst_array_element = 0,
         .descriptor_type = .uniform_buffer,
         .descriptor_count = 1,
@@ -778,15 +768,38 @@ pub fn applyGlobal(self: *Shader) !void {
         .p_texel_buffer_view = undefined,
     });
 
-    if (self.global_scope.uniform_sampler_count > 0) {
-        return error.GlobalTexturesNotYetSupported;
+    dst_binding += 1;
+
+    // descriptor 1 - samplers
+    var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+
+    for (0..self.global_scope.uniform_sampler_count) |sampler_index| {
+        const texture_handle = self.global_state.textures.slice()[sampler_index];
+        const texture = texture_handle.getOrDefault();
+
+        try image_infos.append(vk.DescriptorImageInfo{
+            .image_layout = .shader_read_only_optimal,
+            .image_view = texture.image.view,
+            .sampler = texture.sampler,
+        });
     }
+
+    try descriptor_writes.append(vk.WriteDescriptorSet{
+        .dst_set = descriptor_set,
+        .dst_binding = dst_binding,
+        .descriptor_type = .combined_image_sampler,
+        .descriptor_count = self.global_scope.uniform_sampler_count,
+        .dst_array_element = 0,
+        .p_buffer_info = undefined,
+        .p_image_info = image_infos.slice().ptr,
+        .p_texel_buffer_view = undefined,
+    });
 
     if (descriptor_writes.len > 0) {
         Renderer.device_api.updateDescriptorSets(
             Renderer.device,
             descriptor_writes.len,
-            @ptrCast(descriptor_writes.slice().ptr),
+            descriptor_writes.slice().ptr,
             0,
             null,
         );
@@ -807,80 +820,89 @@ pub fn applyGlobal(self: *Shader) !void {
 pub fn applyInstance(self: *Shader) !void {
     const image_index = Renderer.swapchain.image_index;
     const command_buffer = Renderer.getCurrentCommandBuffer();
+    const instance_state = try self.instance_state_pool.getColumnPtr(self.bound_instance, .instance_state);
+    const descriptor_set = instance_state.descriptor_sets.get(image_index);
 
-    if (self.instance_state_pool.getColumnPtrIfLive(self.bound_instance, .instance_state)) |instance_state| {
-        const descriptor_set = instance_state.descriptor_sets.get(image_index);
+    var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
 
-        var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
+    var dst_binding: u32 = 0;
 
-        var dst_binding: u32 = 0;
+    // descriptor 0 - uniform buffer
+    const buffer_info = vk.DescriptorBufferInfo{
+        .buffer = self.ubo.handle,
+        .offset = instance_state.ubo_offset,
+        .range = self.instance_scope.stride,
+    };
 
-        // descriptor 0 - uniform buffer
-        const buffer_info = vk.DescriptorBufferInfo{
-            .buffer = self.ubo.handle,
-            .offset = instance_state.ubo_offset,
-            .range = self.instance_scope.stride,
-        };
+    try descriptor_writes.append(vk.WriteDescriptorSet{
+        .dst_set = descriptor_set,
+        .dst_binding = dst_binding,
+        .dst_array_element = 0,
+        .descriptor_type = .uniform_buffer,
+        .descriptor_count = 1,
+        .p_buffer_info = @ptrCast(&buffer_info),
+        .p_image_info = undefined,
+        .p_texel_buffer_view = undefined,
+    });
 
-        try descriptor_writes.append(vk.WriteDescriptorSet{
-            .dst_set = descriptor_set,
-            .dst_binding = dst_binding,
-            .dst_array_element = 0,
-            .descriptor_type = .uniform_buffer,
-            .descriptor_count = 1,
-            .p_buffer_info = @ptrCast(&buffer_info),
-            .p_image_info = undefined,
-            .p_texel_buffer_view = undefined,
+    dst_binding += 1;
+
+    // descriptor 1 - samplers
+    var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+
+    for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
+        const texture_handle = instance_state.textures.slice()[sampler_index];
+        const texture = texture_handle.getOrDefault();
+
+        try image_infos.append(vk.DescriptorImageInfo{
+            .image_layout = .shader_read_only_optimal,
+            .image_view = texture.image.view,
+            .sampler = texture.sampler,
         });
+    }
 
-        dst_binding += 1;
+    try descriptor_writes.append(vk.WriteDescriptorSet{
+        .dst_set = descriptor_set,
+        .dst_binding = dst_binding,
+        .descriptor_type = .combined_image_sampler,
+        .descriptor_count = self.instance_scope.uniform_sampler_count,
+        .dst_array_element = 0,
+        .p_buffer_info = undefined,
+        .p_image_info = image_infos.slice().ptr,
+        .p_texel_buffer_view = undefined,
+    });
 
-        // descriptor 1 - samplers
-        var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
-
-        for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
-            const texture_handle = instance_state.textures.slice()[sampler_index];
-            const texture = texture_handle.getOrDefault();
-
-            try image_infos.append(vk.DescriptorImageInfo{
-                .image_layout = .shader_read_only_optimal,
-                .image_view = texture.image.view,
-                .sampler = texture.sampler,
-            });
-        }
-
-        try descriptor_writes.append(vk.WriteDescriptorSet{
-            .dst_set = descriptor_set,
-            .dst_binding = dst_binding,
-            .descriptor_type = .combined_image_sampler,
-            .descriptor_count = self.instance_scope.uniform_sampler_count,
-            .dst_array_element = 0,
-            .p_buffer_info = undefined,
-            .p_image_info = @ptrCast(image_infos.slice().ptr),
-            .p_texel_buffer_view = undefined,
-        });
-
-        if (descriptor_writes.len > 0) {
-            Renderer.device_api.updateDescriptorSets(
-                Renderer.device,
-                descriptor_writes.len,
-                @ptrCast(descriptor_writes.slice().ptr),
-                0,
-                null,
-            );
-        }
-
-        Renderer.device_api.cmdBindDescriptorSets(
-            command_buffer.handle,
-            .graphics,
-            self.pipeline_layout,
-            1,
-            1,
-            @ptrCast(&descriptor_set),
+    if (descriptor_writes.len > 0) {
+        Renderer.device_api.updateDescriptorSets(
+            Renderer.device,
+            descriptor_writes.len,
+            descriptor_writes.slice().ptr,
             0,
             null,
         );
     }
+
+    Renderer.device_api.cmdBindDescriptorSets(
+        command_buffer.handle,
+        .graphics,
+        self.pipeline_layout,
+        1,
+        1,
+        @ptrCast(&descriptor_set),
+        0,
+        null,
+    );
+}
+
+pub fn applyLocal(self: *Shader) !void {
+    Renderer.device_api.cmdPushConstants(
+        Renderer.getCurrentCommandBuffer().handle,
+        self.pipeline_layout,
+        .{ .vertex_bit = true, .fragment_bit = true },
+        0,
+        128,
+        self.local_push_constant_buffer.slice().ptr,
+    );
 }
 
 // utils
