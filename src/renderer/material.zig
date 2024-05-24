@@ -2,7 +2,7 @@ const std = @import("std");
 const pool = @import("zpool");
 const math = @import("zmath");
 
-const Renderer = @import("renderer.zig");
+const Engine = @import("../engine.zig");
 const Texture = @import("texture.zig");
 const Shader = @import("shader.zig");
 const MaterialResource = @import("../resources/material_resource.zig");
@@ -230,8 +230,8 @@ fn create(config: Config) !Material {
     };
 
     switch (self.material_type) {
-        .world => self.instance_handle = try Renderer.phong_shader.initInstance(),
-        .ui => self.instance_handle = try Renderer.ui_shader.initInstance(),
+        .world => self.instance_handle = try Engine.phong_shader.createInstance(),
+        .ui => self.instance_handle = try Engine.ui_shader.createInstance(),
     }
 
     return self;
@@ -244,8 +244,8 @@ fn destroy(self: *Material) void {
 
     if (self.instance_handle) |instance_handle| {
         switch (self.material_type) {
-            .world => Renderer.phong_shader.deinitInstance(instance_handle),
-            .ui => Renderer.ui_shader.deinitInstance(instance_handle),
+            .world => Engine.phong_shader.destroyInstance(instance_handle),
+            .ui => Engine.ui_shader.destroyInstance(instance_handle),
         }
     }
 

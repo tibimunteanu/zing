@@ -2,6 +2,7 @@
   "resource_type": "shader",
   "name": "phong",
   "render_pass_name": "world",
+  "auto_release": true,
 
   "stages": [
     { "stage_type": "vertex", "path": "shaders/phong.vert.spv" },

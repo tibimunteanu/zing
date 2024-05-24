@@ -5,6 +5,7 @@ const config = @import("../config.zig");
 const Renderer = @import("renderer.zig");
 const Buffer = @import("buffer.zig");
 const BinaryResource = @import("../resources/binary_resource.zig");
+const ShaderResource = @import("../resources/shader_resource.zig");
 const Texture = @import("texture.zig");
 
 const Allocator = std.mem.Allocator;
@@ -17,6 +18,427 @@ const Array = std.BoundedArray;
 // TODO: needs update
 
 const Shader = @This();
+
+const ShaderPool = pool.Pool(16, 16, Shader, struct {
+    shader: Shader,
+    reference_count: usize,
+    auto_release: bool,
+}, struct {
+    pub fn acquire(self: Handle) !Handle {
+        if (self.eql(default)) {
+            return default;
+        }
+
+        const shader = try self.get();
+        const reference_count = shaders.getColumnPtrAssumeLive(self, .reference_count);
+
+        reference_count.* +|= 1;
+
+        std.log.info("Shader: Acquire '{s}' ({})", .{ shader.name.slice(), reference_count.* });
+
+        return self;
+    }
+
+    pub fn release(self: Handle) void {
+        if (self.eql(default)) {
+            return;
+        }
+
+        if (self.getIfExists()) |shader| {
+            const reference_count = shaders.getColumnPtrAssumeLive(self, .reference_count);
+            const auto_release = shaders.getColumnAssumeLive(self, .auto_release);
+
+            if (reference_count.* == 0) {
+                std.log.warn("Shader: Release with ref count 0!", .{});
+                return;
+            }
+
+            reference_count.* -|= 1;
+
+            if (reference_count.* == 0 and auto_release) {
+                self.remove();
+            } else {
+                std.log.info("Shader: Release '{s}' ({})", .{ shader.name.slice(), reference_count.* });
+            }
+        } else {
+            std.log.warn("Shader: Release invalid handle!", .{});
+        }
+    }
+
+    pub inline fn eql(self: Handle, other: Handle) bool {
+        return self.id == other.id;
+    }
+
+    pub inline fn isNilOrDefault(self: Handle) bool {
+        return self.eql(Handle.nil) or self.eql(default);
+    }
+
+    pub inline fn exists(self: Handle) bool {
+        return shaders.isLiveHandle(self);
+    }
+
+    pub inline fn get(self: Handle) !*Shader {
+        return try shaders.getColumnPtr(self, .shader);
+    }
+
+    pub inline fn getIfExists(self: Handle) ?*Shader {
+        return shaders.getColumnPtrIfLive(self, .shader);
+    }
+
+    pub inline fn getOrDefault(self: Handle) *Shader {
+        return shaders.getColumnPtrIfLive(self, .shader) //
+        orelse shaders.getColumnPtrAssumeLive(default, .shader);
+    }
+
+    pub fn remove(self: Handle) void {
+        if (self.getIfExists()) |shader| {
+            std.log.info("Shader: Remove '{s}'", .{shader.name.slice()});
+
+            _ = lookup.remove(shader.name.slice());
+            shaders.removeAssumeLive(self);
+
+            shader.destroy();
+        }
+    }
+
+    pub fn createInstance(self: Handle) !InstanceHandle {
+        var shader = try self.get();
+
+        var instance_state = InstanceState{
+            .ubo_offset = 0,
+            .descriptor_sets = try Array(vk.DescriptorSet, config.swapchain_max_images).init(0),
+            .textures = try Array(Texture.Handle, config.shader_max_instance_textures).init(0),
+        };
+
+        // allocate instance descriptor sets
+        const instance_ubo_layout = shader.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.instance));
+        var instance_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
+        try instance_ubo_layouts.appendNTimes(instance_ubo_layout, Renderer.swapchain.images.len);
+
+        const instance_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
+            .descriptor_pool = shader.descriptor_pool,
+            .descriptor_set_count = instance_ubo_layouts.len,
+            .p_set_layouts = instance_ubo_layouts.slice().ptr,
+        };
+
+        try instance_state.descriptor_sets.resize(instance_ubo_layouts.len);
+
+        try Renderer.device_api.allocateDescriptorSets(
+            Renderer.device,
+            &instance_ubo_descriptor_set_alloc_info,
+            instance_state.descriptor_sets.slice().ptr,
+        );
+
+        errdefer {
+            Renderer.device_api.freeDescriptorSets(
+                Renderer.device,
+                shader.descriptor_pool,
+                instance_state.descriptor_sets.len,
+                instance_state.descriptor_sets.slice().ptr,
+            ) catch {};
+            instance_state.descriptor_sets.len = 0;
+        }
+
+        // allocate instance ubo range
+        instance_state.ubo_offset = try shader.ubo.alloc(shader.instance_scope.stride);
+        errdefer shader.ubo.free(instance_state.ubo_offset, shader.instance_scope.stride) catch {};
+
+        // clear textures to default texture handle
+        try instance_state.textures.resize(0);
+        try instance_state.textures.appendNTimes(Texture.default, shader.instance_scope.uniform_sampler_count);
+
+        // add instance to pool
+        const handle = try shader.instance_state_pool.add(.{
+            .instance_state = instance_state,
+        });
+
+        return handle;
+    }
+
+    pub fn destroyInstance(self: Handle, handle: InstanceHandle) void {
+        if (self.getIfExists()) |shader| {
+            if (shader.instance_state_pool.getColumnPtrIfLive(handle, .instance_state)) |instance_state| {
+                shader.instance_state_pool.removeAssumeLive(handle);
+
+                shader.ubo.free(instance_state.ubo_offset, shader.instance_scope.stride) catch {};
+
+                Renderer.device_api.freeDescriptorSets(
+                    Renderer.device,
+                    shader.descriptor_pool,
+                    instance_state.descriptor_sets.len,
+                    instance_state.descriptor_sets.slice().ptr,
+                ) catch {};
+                instance_state.descriptor_sets.len = 0;
+
+                instance_state.* = undefined;
+            }
+        }
+    }
+
+    pub fn bind(self: Handle) !void {
+        const shader = try self.get();
+
+        Renderer.device_api.cmdBindPipeline(Renderer.getCurrentCommandBuffer().handle, .graphics, shader.pipeline);
+    }
+
+    pub fn bindGlobal(self: Handle) !void {
+        var shader = try self.get();
+
+        shader.bound_scope = .global;
+        shader.bound_instance = InstanceHandle.nil;
+        shader.bound_ubo_offset = shader.global_state.ubo_offset;
+    }
+
+    pub fn bindInstance(self: Handle, handle: InstanceHandle) !void {
+        var shader = try self.get();
+
+        if (shader.instance_state_pool.getColumnPtrIfLive(handle, .instance_state)) |instance_state| {
+            shader.bound_scope = .instance;
+            shader.bound_instance = handle;
+            shader.bound_ubo_offset = instance_state.ubo_offset;
+        } else return error.InvalidShaderInstanceHandle;
+    }
+
+    pub fn bindLocal(self: Handle) !void {
+        var shader = try self.get();
+
+        shader.bound_scope = .local;
+        shader.bound_instance = InstanceHandle.nil;
+    }
+
+    pub fn getUniformHandle(self: Handle, name: []const u8) !UniformHandle {
+        var shader = try self.get();
+
+        return shader.uniform_lookup.get(name) orelse error.UniformNotFound;
+    }
+
+    pub fn setUniform(self: Handle, uniform: anytype, value: anytype) !void {
+        var shader = try self.get();
+
+        const uniform_handle = if (@TypeOf(uniform) == UniformHandle)
+            uniform
+        else if (@typeInfo(@TypeOf(uniform)) == .Pointer and std.meta.Elem(@TypeOf(uniform)) == u8)
+            try self.getUniformHandle(uniform)
+        else
+            unreachable;
+
+        const p_uniform = &shader.uniforms.items[uniform_handle];
+
+        if (p_uniform.data_type == .sampler) {
+            if (@TypeOf(value) != Texture.Handle) {
+                return error.InvalidSamplerValue;
+            }
+
+            switch (p_uniform.scope) {
+                .global => {
+                    shader.global_state.textures.slice()[p_uniform.offset] = value;
+                },
+                .instance => {
+                    var instance_state = try shader.instance_state_pool.getColumnPtr(shader.bound_instance, .instance_state);
+
+                    instance_state.textures.slice()[p_uniform.offset] = value;
+                },
+                .local => return error.CannotSetLocalSamplers,
+            }
+        } else {
+            switch (p_uniform.scope) {
+                .local => {
+                    const local_offset_ptr: [*]u8 = @ptrFromInt(
+                        @intFromPtr(shader.local_push_constant_buffer.slice().ptr) + p_uniform.offset,
+                    );
+
+                    @memcpy(local_offset_ptr, &std.mem.toBytes(value));
+                },
+                .global, .instance => {
+                    const ubo_offset_ptr = @as([*]u8, @ptrFromInt(
+                        @intFromPtr(shader.ubo_ptr) + shader.bound_ubo_offset + p_uniform.offset,
+                    ));
+
+                    @memcpy(ubo_offset_ptr, &std.mem.toBytes(value));
+                },
+            }
+        }
+    }
+
+    pub fn applyGlobal(self: Handle) !void {
+        var shader = try self.get();
+
+        const image_index = Renderer.swapchain.image_index;
+        const command_buffer = Renderer.getCurrentCommandBuffer();
+        const descriptor_set = shader.global_state.descriptor_sets.get(image_index);
+
+        var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
+
+        var dst_binding: u32 = 0;
+
+        // descriptor 0 - uniform buffer
+        const buffer_info = vk.DescriptorBufferInfo{
+            .buffer = shader.ubo.handle,
+            .offset = shader.global_state.ubo_offset,
+            .range = shader.global_scope.stride,
+        };
+
+        try descriptor_writes.append(vk.WriteDescriptorSet{
+            .dst_set = descriptor_set,
+            .dst_binding = dst_binding,
+            .dst_array_element = 0,
+            .descriptor_type = .uniform_buffer,
+            .descriptor_count = 1,
+            .p_buffer_info = @ptrCast(&buffer_info),
+            .p_image_info = undefined,
+            .p_texel_buffer_view = undefined,
+        });
+
+        dst_binding += 1;
+
+        // descriptor 1 - samplers
+        var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+
+        for (0..shader.global_scope.uniform_sampler_count) |sampler_index| {
+            const texture_handle = shader.global_state.textures.slice()[sampler_index];
+            const texture = texture_handle.getOrDefault();
+
+            try image_infos.append(vk.DescriptorImageInfo{
+                .image_layout = .shader_read_only_optimal,
+                .image_view = texture.image.view,
+                .sampler = texture.sampler,
+            });
+        }
+
+        try descriptor_writes.append(vk.WriteDescriptorSet{
+            .dst_set = descriptor_set,
+            .dst_binding = dst_binding,
+            .descriptor_type = .combined_image_sampler,
+            .descriptor_count = shader.global_scope.uniform_sampler_count,
+            .dst_array_element = 0,
+            .p_buffer_info = undefined,
+            .p_image_info = image_infos.slice().ptr,
+            .p_texel_buffer_view = undefined,
+        });
+
+        if (descriptor_writes.len > 0) {
+            Renderer.device_api.updateDescriptorSets(
+                Renderer.device,
+                descriptor_writes.len,
+                descriptor_writes.slice().ptr,
+                0,
+                null,
+            );
+        }
+
+        Renderer.device_api.cmdBindDescriptorSets(
+            command_buffer.handle,
+            .graphics,
+            shader.pipeline_layout,
+            0,
+            1,
+            @ptrCast(&descriptor_set),
+            0,
+            null,
+        );
+    }
+
+    pub fn applyInstance(self: Handle) !void {
+        var shader = try self.get();
+
+        const image_index = Renderer.swapchain.image_index;
+        const command_buffer = Renderer.getCurrentCommandBuffer();
+        const instance_state = try shader.instance_state_pool.getColumnPtr(shader.bound_instance, .instance_state);
+        const descriptor_set = instance_state.descriptor_sets.get(image_index);
+
+        var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
+
+        var dst_binding: u32 = 0;
+
+        // descriptor 0 - uniform buffer
+        const buffer_info = vk.DescriptorBufferInfo{
+            .buffer = shader.ubo.handle,
+            .offset = instance_state.ubo_offset,
+            .range = shader.instance_scope.stride,
+        };
+
+        try descriptor_writes.append(vk.WriteDescriptorSet{
+            .dst_set = descriptor_set,
+            .dst_binding = dst_binding,
+            .dst_array_element = 0,
+            .descriptor_type = .uniform_buffer,
+            .descriptor_count = 1,
+            .p_buffer_info = @ptrCast(&buffer_info),
+            .p_image_info = undefined,
+            .p_texel_buffer_view = undefined,
+        });
+
+        dst_binding += 1;
+
+        // descriptor 1 - samplers
+        var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+
+        for (0..shader.instance_scope.uniform_sampler_count) |sampler_index| {
+            const texture_handle = instance_state.textures.slice()[sampler_index];
+            const texture = texture_handle.getOrDefault();
+
+            try image_infos.append(vk.DescriptorImageInfo{
+                .image_layout = .shader_read_only_optimal,
+                .image_view = texture.image.view,
+                .sampler = texture.sampler,
+            });
+        }
+
+        try descriptor_writes.append(vk.WriteDescriptorSet{
+            .dst_set = descriptor_set,
+            .dst_binding = dst_binding,
+            .descriptor_type = .combined_image_sampler,
+            .descriptor_count = shader.instance_scope.uniform_sampler_count,
+            .dst_array_element = 0,
+            .p_buffer_info = undefined,
+            .p_image_info = image_infos.slice().ptr,
+            .p_texel_buffer_view = undefined,
+        });
+
+        if (descriptor_writes.len > 0) {
+            Renderer.device_api.updateDescriptorSets(
+                Renderer.device,
+                descriptor_writes.len,
+                descriptor_writes.slice().ptr,
+                0,
+                null,
+            );
+        }
+
+        Renderer.device_api.cmdBindDescriptorSets(
+            command_buffer.handle,
+            .graphics,
+            shader.pipeline_layout,
+            1,
+            1,
+            @ptrCast(&descriptor_set),
+            0,
+            null,
+        );
+    }
+
+    pub fn applyLocal(self: Handle) !void {
+        var shader = try self.get();
+
+        Renderer.device_api.cmdPushConstants(
+            Renderer.getCurrentCommandBuffer().handle,
+            shader.pipeline_layout,
+            .{ .vertex_bit = true, .fragment_bit = true },
+            0,
+            128,
+            shader.local_push_constant_buffer.slice().ptr,
+        );
+    }
+});
+
+pub const Handle = ShaderPool.Handle;
+
+pub const default_name = "default";
+pub var default: Handle = Handle.nil;
+
+var allocator: Allocator = undefined;
+var shaders: ShaderPool = undefined;
+var lookup: std.StringHashMap(Handle) = undefined;
 
 pub const Scope = enum(u8) {
     global = 0,
@@ -127,7 +549,6 @@ pub const InstanceHandle = InstancePool.Handle;
 
 pub const UniformHandle = u8;
 
-allocator: Allocator,
 name: Array(u8, 256),
 
 attributes: std.ArrayList(Attribute),
@@ -156,9 +577,67 @@ bound_scope: Scope,
 bound_ubo_offset: u64,
 bound_instance: InstanceHandle,
 
-pub fn init(allocator: Allocator, shader_config: Config) !Shader {
+pub fn initSystem(ally: Allocator) !void {
+    allocator = ally;
+
+    shaders = try ShaderPool.initMaxCapacity(allocator);
+    errdefer shaders.deinit();
+
+    lookup = std.StringHashMap(Handle).init(allocator);
+    errdefer lookup.deinit();
+
+    try lookup.ensureTotalCapacity(@truncate(shaders.capacity()));
+
+    try createDefault();
+}
+
+pub fn deinitSystem() void {
+    var it = shaders.liveHandles();
+    while (it.next()) |handle| {
+        handle.remove();
+    }
+
+    lookup.deinit();
+    shaders.deinit();
+}
+
+pub fn acquire(name: []const u8) !Handle {
+    if (lookup.get(name)) |handle| {
+        return handle.acquire();
+    } else {
+        var resource = try ShaderResource.init(allocator, name);
+        defer resource.deinit();
+
+        var shader = try create(resource.config.value);
+        errdefer shader.destroy();
+
+        const handle = try shaders.add(.{
+            .shader = shader,
+            .reference_count = 1,
+            .auto_release = resource.config.value.auto_release,
+        });
+        errdefer shaders.removeAssumeLive(handle);
+
+        try lookup.put(shader.name.slice(), handle);
+
+        std.log.info("Shader: Create '{s}' (1)", .{name});
+
+        return handle;
+    }
+}
+
+pub fn reload(name: []const u8) !void {
+    _ = name; // autofix
+    // TODO: implement this
+}
+
+fn createDefault() !void {
+    // TODO: implement this
+}
+
+// utils
+fn create(shader_config: Config) !Shader {
     var self: Shader = undefined;
-    self.allocator = allocator;
 
     // initialize everything so we can only do an errdefer self.deinit();
     self.attributes.capacity = 0;
@@ -190,7 +669,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     self.bound_ubo_offset = 0;
     self.bound_instance = InstanceHandle.nil;
 
-    errdefer self.deinit();
+    errdefer self.destroy();
 
     self.name = try Array(u8, 256).fromSlice(shader_config.name);
 
@@ -211,7 +690,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     try self.shader_modules.resize(0);
 
     for (shader_config.stages) |stage| {
-        const module = try createShaderModule(allocator, stage.path);
+        const module = try createShaderModule(stage.path);
         try self.shader_modules.append(module);
 
         try shader_stages.append(vk.PipelineShaderStageCreateInfo{
@@ -533,7 +1012,7 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     return self;
 }
 
-pub fn deinit(self: *Shader) void {
+fn destroy(self: *Shader) void {
     if (self.instance_state_pool.capacity() > 0) {
         self.instance_state_pool.deinit();
     }
@@ -581,7 +1060,7 @@ pub fn deinit(self: *Shader) void {
     if (self.uniform_lookup.unmanaged.metadata != null) {
         var it = self.uniform_lookup.keyIterator();
         while (it.next()) |key| {
-            self.allocator.free(key.*);
+            allocator.free(key.*);
         }
 
         self.uniform_lookup.deinit();
@@ -598,314 +1077,6 @@ pub fn deinit(self: *Shader) void {
     self.* = undefined;
 }
 
-pub fn initInstance(self: *Shader) !InstanceHandle {
-    var instance_state = InstanceState{
-        .ubo_offset = 0,
-        .descriptor_sets = try Array(vk.DescriptorSet, config.swapchain_max_images).init(0),
-        .textures = try Array(Texture.Handle, config.shader_max_instance_textures).init(0),
-    };
-
-    // allocate instance descriptor sets
-    const instance_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.instance));
-    var instance_ubo_layouts = try Array(vk.DescriptorSetLayout, config.swapchain_max_images).init(0);
-    try instance_ubo_layouts.appendNTimes(instance_ubo_layout, Renderer.swapchain.images.len);
-
-    const instance_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
-        .descriptor_pool = self.descriptor_pool,
-        .descriptor_set_count = instance_ubo_layouts.len,
-        .p_set_layouts = instance_ubo_layouts.slice().ptr,
-    };
-
-    try instance_state.descriptor_sets.resize(instance_ubo_layouts.len);
-
-    try Renderer.device_api.allocateDescriptorSets(
-        Renderer.device,
-        &instance_ubo_descriptor_set_alloc_info,
-        instance_state.descriptor_sets.slice().ptr,
-    );
-
-    errdefer {
-        Renderer.device_api.freeDescriptorSets(
-            Renderer.device,
-            self.descriptor_pool,
-            instance_state.descriptor_sets.len,
-            instance_state.descriptor_sets.slice().ptr,
-        ) catch {};
-        instance_state.descriptor_sets.len = 0;
-    }
-
-    // allocate instance ubo range
-    instance_state.ubo_offset = try self.ubo.alloc(self.instance_scope.stride);
-    errdefer self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
-
-    // clear textures to default texture handle
-    try instance_state.textures.resize(0);
-    try instance_state.textures.appendNTimes(Texture.default, self.instance_scope.uniform_sampler_count);
-
-    // add instance to pool
-    const handle = try self.instance_state_pool.add(.{
-        .instance_state = instance_state,
-    });
-
-    return handle;
-}
-
-pub fn deinitInstance(self: *Shader, handle: InstanceHandle) void {
-    if (self.instance_state_pool.getColumnPtrIfLive(handle, .instance_state)) |instance_state| {
-        self.instance_state_pool.removeAssumeLive(handle);
-
-        self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
-
-        Renderer.device_api.freeDescriptorSets(
-            Renderer.device,
-            self.descriptor_pool,
-            instance_state.descriptor_sets.len,
-            instance_state.descriptor_sets.slice().ptr,
-        ) catch {};
-        instance_state.descriptor_sets.len = 0;
-
-        instance_state.* = undefined;
-    }
-}
-
-pub fn bind(self: *const Shader) void {
-    Renderer.device_api.cmdBindPipeline(Renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
-}
-
-pub fn bindGlobal(self: *Shader) !void {
-    self.bound_scope = .global;
-    self.bound_instance = InstanceHandle.nil;
-    self.bound_ubo_offset = self.global_state.ubo_offset;
-}
-
-pub fn bindInstance(self: *Shader, handle: InstanceHandle) !void {
-    if (self.instance_state_pool.getColumnPtrIfLive(handle, .instance_state)) |instance_state| {
-        self.bound_scope = .instance;
-        self.bound_instance = handle;
-        self.bound_ubo_offset = instance_state.ubo_offset;
-    } else return error.InvalidShaderInstanceHandle;
-}
-
-pub fn bindLocal(self: *Shader) !void {
-    self.bound_scope = .local;
-    self.bound_instance = InstanceHandle.nil;
-}
-
-pub fn getUniformHandle(self: *Shader, name: []const u8) !UniformHandle {
-    return self.uniform_lookup.get(name) orelse error.UniformNotFound;
-}
-
-pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
-    const uniform_handle = if (@TypeOf(uniform) == UniformHandle)
-        uniform
-    else if (@typeInfo(@TypeOf(uniform)) == .Pointer and std.meta.Elem(@TypeOf(uniform)) == u8)
-        try self.getUniformHandle(uniform)
-    else
-        unreachable;
-
-    const p_uniform = &self.uniforms.items[uniform_handle];
-
-    if (p_uniform.data_type == .sampler) {
-        if (@TypeOf(value) != Texture.Handle) {
-            return error.InvalidSamplerValue;
-        }
-
-        switch (p_uniform.scope) {
-            .global => {
-                self.global_state.textures.slice()[p_uniform.offset] = value;
-            },
-            .instance => {
-                var instance_state = try self.instance_state_pool.getColumnPtr(self.bound_instance, .instance_state);
-
-                instance_state.textures.slice()[p_uniform.offset] = value;
-            },
-            .local => return error.CannotSetLocalSamplers,
-        }
-    } else {
-        switch (p_uniform.scope) {
-            .local => {
-                const local_offset_ptr: [*]u8 = @ptrFromInt(
-                    @intFromPtr(self.local_push_constant_buffer.slice().ptr) + p_uniform.offset,
-                );
-
-                @memcpy(local_offset_ptr, &std.mem.toBytes(value));
-            },
-            .global, .instance => {
-                const ubo_offset_ptr = @as([*]u8, @ptrFromInt(
-                    @intFromPtr(self.ubo_ptr) + self.bound_ubo_offset + p_uniform.offset,
-                ));
-
-                @memcpy(ubo_offset_ptr, &std.mem.toBytes(value));
-            },
-        }
-    }
-}
-
-pub fn applyGlobal(self: *Shader) !void {
-    const image_index = Renderer.swapchain.image_index;
-    const command_buffer = Renderer.getCurrentCommandBuffer();
-    const descriptor_set = self.global_state.descriptor_sets.get(image_index);
-
-    var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
-
-    var dst_binding: u32 = 0;
-
-    // descriptor 0 - uniform buffer
-    const buffer_info = vk.DescriptorBufferInfo{
-        .buffer = self.ubo.handle,
-        .offset = self.global_state.ubo_offset,
-        .range = self.global_scope.stride,
-    };
-
-    try descriptor_writes.append(vk.WriteDescriptorSet{
-        .dst_set = descriptor_set,
-        .dst_binding = dst_binding,
-        .dst_array_element = 0,
-        .descriptor_type = .uniform_buffer,
-        .descriptor_count = 1,
-        .p_buffer_info = @ptrCast(&buffer_info),
-        .p_image_info = undefined,
-        .p_texel_buffer_view = undefined,
-    });
-
-    dst_binding += 1;
-
-    // descriptor 1 - samplers
-    var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
-
-    for (0..self.global_scope.uniform_sampler_count) |sampler_index| {
-        const texture_handle = self.global_state.textures.slice()[sampler_index];
-        const texture = texture_handle.getOrDefault();
-
-        try image_infos.append(vk.DescriptorImageInfo{
-            .image_layout = .shader_read_only_optimal,
-            .image_view = texture.image.view,
-            .sampler = texture.sampler,
-        });
-    }
-
-    try descriptor_writes.append(vk.WriteDescriptorSet{
-        .dst_set = descriptor_set,
-        .dst_binding = dst_binding,
-        .descriptor_type = .combined_image_sampler,
-        .descriptor_count = self.global_scope.uniform_sampler_count,
-        .dst_array_element = 0,
-        .p_buffer_info = undefined,
-        .p_image_info = image_infos.slice().ptr,
-        .p_texel_buffer_view = undefined,
-    });
-
-    if (descriptor_writes.len > 0) {
-        Renderer.device_api.updateDescriptorSets(
-            Renderer.device,
-            descriptor_writes.len,
-            descriptor_writes.slice().ptr,
-            0,
-            null,
-        );
-    }
-
-    Renderer.device_api.cmdBindDescriptorSets(
-        command_buffer.handle,
-        .graphics,
-        self.pipeline_layout,
-        0,
-        1,
-        @ptrCast(&descriptor_set),
-        0,
-        null,
-    );
-}
-
-pub fn applyInstance(self: *Shader) !void {
-    const image_index = Renderer.swapchain.image_index;
-    const command_buffer = Renderer.getCurrentCommandBuffer();
-    const instance_state = try self.instance_state_pool.getColumnPtr(self.bound_instance, .instance_state);
-    const descriptor_set = instance_state.descriptor_sets.get(image_index);
-
-    var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
-
-    var dst_binding: u32 = 0;
-
-    // descriptor 0 - uniform buffer
-    const buffer_info = vk.DescriptorBufferInfo{
-        .buffer = self.ubo.handle,
-        .offset = instance_state.ubo_offset,
-        .range = self.instance_scope.stride,
-    };
-
-    try descriptor_writes.append(vk.WriteDescriptorSet{
-        .dst_set = descriptor_set,
-        .dst_binding = dst_binding,
-        .dst_array_element = 0,
-        .descriptor_type = .uniform_buffer,
-        .descriptor_count = 1,
-        .p_buffer_info = @ptrCast(&buffer_info),
-        .p_image_info = undefined,
-        .p_texel_buffer_view = undefined,
-    });
-
-    dst_binding += 1;
-
-    // descriptor 1 - samplers
-    var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
-
-    for (0..self.instance_scope.uniform_sampler_count) |sampler_index| {
-        const texture_handle = instance_state.textures.slice()[sampler_index];
-        const texture = texture_handle.getOrDefault();
-
-        try image_infos.append(vk.DescriptorImageInfo{
-            .image_layout = .shader_read_only_optimal,
-            .image_view = texture.image.view,
-            .sampler = texture.sampler,
-        });
-    }
-
-    try descriptor_writes.append(vk.WriteDescriptorSet{
-        .dst_set = descriptor_set,
-        .dst_binding = dst_binding,
-        .descriptor_type = .combined_image_sampler,
-        .descriptor_count = self.instance_scope.uniform_sampler_count,
-        .dst_array_element = 0,
-        .p_buffer_info = undefined,
-        .p_image_info = image_infos.slice().ptr,
-        .p_texel_buffer_view = undefined,
-    });
-
-    if (descriptor_writes.len > 0) {
-        Renderer.device_api.updateDescriptorSets(
-            Renderer.device,
-            descriptor_writes.len,
-            descriptor_writes.slice().ptr,
-            0,
-            null,
-        );
-    }
-
-    Renderer.device_api.cmdBindDescriptorSets(
-        command_buffer.handle,
-        .graphics,
-        self.pipeline_layout,
-        1,
-        1,
-        @ptrCast(&descriptor_set),
-        0,
-        null,
-    );
-}
-
-pub fn applyLocal(self: *Shader) !void {
-    Renderer.device_api.cmdPushConstants(
-        Renderer.getCurrentCommandBuffer().handle,
-        self.pipeline_layout,
-        .{ .vertex_bit = true, .fragment_bit = true },
-        0,
-        128,
-        self.local_push_constant_buffer.slice().ptr,
-    );
-}
-
-// utils
 fn addAttributes(self: *Shader, attribute_configs: []const AttributeConfig) !void {
     for (attribute_configs) |attribute_config| {
         const attribute_data_type = try parseAttributeDataType(attribute_config.data_type);
@@ -942,7 +1113,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
             .offset = if (is_sampler) scope_config.uniform_sampler_count else scope_config.stride,
         });
 
-        try self.uniform_lookup.put(try self.allocator.dupe(u8, uniform_config.name), uniform_handle);
+        try self.uniform_lookup.put(try allocator.dupe(u8, uniform_config.name), uniform_handle);
 
         if (is_sampler) {
             if (scope == .local) {
@@ -961,7 +1132,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
     }
 }
 
-fn createShaderModule(allocator: Allocator, path: []const u8) !vk.ShaderModule {
+fn createShaderModule(path: []const u8) !vk.ShaderModule {
     var binary_resource = try BinaryResource.init(allocator, path);
     defer binary_resource.deinit();
 
@@ -1007,6 +1178,7 @@ inline fn parseVkRenderPass(render_pass_name: []const u8) !vk.RenderPass {
 pub const Config = struct {
     name: []const u8 = "new_shader",
     render_pass_name: []const u8 = "world",
+    auto_release: bool = true,
     stages: []const StageConfig,
     attributes: []const AttributeConfig,
     uniforms: []const UniformConfig,

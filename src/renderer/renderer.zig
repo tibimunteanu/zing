@@ -5,6 +5,7 @@ const math = @import("zmath");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 
+const Engine = @import("../engine.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const RenderPass = @import("renderpass.zig");
@@ -12,9 +13,7 @@ const Swapchain = @import("swapchain.zig");
 
 const Material = @import("material.zig");
 const Geometry = @import("geometry.zig");
-
 const Shader = @import("shader.zig");
-const ShaderResource = @import("../resources/shader_resource.zig");
 
 const resources_image = @import("../resources/image_resource.zig");
 const resources_material = @import("../resources/material_resource.zig");
@@ -194,9 +193,6 @@ pub var graphics_command_buffers: Array(CommandBuffer, config.swapchain_max_imag
 pub var world_render_pass: RenderPass = undefined;
 pub var ui_render_pass: RenderPass = undefined;
 
-pub var phong_shader: Shader = undefined;
-pub var ui_shader: Shader = undefined;
-
 pub var vertex_buffer: Buffer = undefined;
 pub var index_buffer: Buffer = undefined;
 
@@ -304,19 +300,6 @@ pub fn init(ally: Allocator, window: glfw.Window) !void {
     try initCommandBuffers();
     errdefer deinitCommandBuffers();
 
-    // create shaders
-    var phong_shader_resource = try ShaderResource.init(allocator, "phong");
-    defer phong_shader_resource.deinit();
-
-    phong_shader = try Shader.init(allocator, phong_shader_resource.config.value);
-    errdefer phong_shader.deinit();
-
-    var ui_shader_resource = try ShaderResource.init(allocator, "ui");
-    defer ui_shader_resource.deinit();
-
-    ui_shader = try Shader.init(allocator, ui_shader_resource.config.value);
-    errdefer ui_shader.deinit();
-
     // create buffers
     vertex_buffer = try Buffer.init(
         allocator,
@@ -369,9 +352,6 @@ pub fn deinit() void {
 
     vertex_buffer.deinit();
     index_buffer.deinit();
-
-    ui_shader.deinit();
-    phong_shader.deinit();
 
     swapchain.deinit();
 
@@ -503,10 +483,10 @@ pub fn drawFrame(packet: RenderPacket) !void {
     if (try beginFrame(packet.delta_time)) {
         try beginRenderPass(.world);
 
-        try phong_shader.bindGlobal();
-        try phong_shader.setUniform("projection", projection);
-        try phong_shader.setUniform("view", view);
-        try phong_shader.applyGlobal();
+        try Engine.phong_shader.bindGlobal();
+        try Engine.phong_shader.setUniform("projection", projection);
+        try Engine.phong_shader.setUniform("view", view);
+        try Engine.phong_shader.applyGlobal();
 
         for (packet.geometries) |geometry| {
             try drawGeometry(geometry);
@@ -516,10 +496,10 @@ pub fn drawFrame(packet: RenderPacket) !void {
 
         try beginRenderPass(.ui);
 
-        try ui_shader.bindGlobal();
-        try ui_shader.setUniform("projection", ui_projection);
-        try ui_shader.setUniform("view", ui_view);
-        try ui_shader.applyGlobal();
+        try Engine.ui_shader.bindGlobal();
+        try Engine.ui_shader.setUniform("projection", ui_projection);
+        try Engine.ui_shader.setUniform("view", ui_view);
+        try Engine.ui_shader.applyGlobal();
 
         for (packet.ui_geometries) |ui_geometry| {
             try drawGeometry(ui_geometry);
@@ -540,24 +520,24 @@ pub fn drawGeometry(data: GeometryRenderData) !void {
 
     switch (material.material_type) {
         .world => {
-            try phong_shader.bindLocal();
-            try phong_shader.setUniform("model", data.model);
-            try phong_shader.applyLocal();
+            try Engine.phong_shader.bindLocal();
+            try Engine.phong_shader.setUniform("model", data.model);
+            try Engine.phong_shader.applyLocal();
 
-            try phong_shader.bindInstance(material.instance_handle.?);
-            try phong_shader.setUniform("diffuse_color", material.diffuse_color);
-            try phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-            try phong_shader.applyInstance();
+            try Engine.phong_shader.bindInstance(material.instance_handle.?);
+            try Engine.phong_shader.setUniform("diffuse_color", material.diffuse_color);
+            try Engine.phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+            try Engine.phong_shader.applyInstance();
         },
         .ui => {
-            try ui_shader.bindLocal();
-            try ui_shader.setUniform("model", data.model);
-            try ui_shader.applyLocal();
+            try Engine.ui_shader.bindLocal();
+            try Engine.ui_shader.setUniform("model", data.model);
+            try Engine.ui_shader.applyLocal();
 
-            try ui_shader.bindInstance(material.instance_handle.?);
-            try ui_shader.setUniform("diffuse_color", material.diffuse_color);
-            try ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-            try ui_shader.applyInstance();
+            try Engine.ui_shader.bindInstance(material.instance_handle.?);
+            try Engine.ui_shader.setUniform("diffuse_color", material.diffuse_color);
+            try Engine.ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+            try Engine.ui_shader.applyInstance();
         },
     }
 
@@ -591,11 +571,11 @@ pub fn beginRenderPass(render_pass_type: RenderPass.Type) !void {
     switch (render_pass_type) {
         .world => {
             world_render_pass.begin(command_buffer, getCurrentWorldFramebuffer());
-            phong_shader.bind();
+            try Engine.phong_shader.bind();
         },
         .ui => {
             ui_render_pass.begin(command_buffer, getCurrentFramebuffer());
-            ui_shader.bind();
+            try Engine.ui_shader.bind();
         },
     }
 }

@@ -29,6 +29,9 @@ const names = [_][]const u8{
 };
 var test_geometry = Geometry.Handle.nil;
 var test_ui_geometry = Geometry.Handle.nil;
+
+pub var phong_shader: Shader.Handle = undefined;
+pub var ui_shader: Shader.Handle = undefined;
 // TODO: end temporary
 
 var window: glfw.Window = undefined;
@@ -64,6 +67,17 @@ pub fn init(allocator: Allocator) !void {
     try Texture.initSystem(allocator);
     errdefer Texture.deinitSystem();
 
+    try Shader.initSystem(allocator);
+    errdefer Shader.deinitSystem();
+
+    // TODO: temporary
+    phong_shader = try Shader.acquire("phong");
+    errdefer phong_shader.release();
+
+    ui_shader = try Shader.acquire("ui");
+    errdefer ui_shader.release();
+    // TODO: end temporary
+
     try Material.initSystem(allocator);
     errdefer Material.deinitSystem();
 
@@ -71,7 +85,6 @@ pub fn init(allocator: Allocator) !void {
     errdefer Geometry.deinitSystem();
 
     // TODO: temporary
-    // instance.test_geometry = .getDefaultGeometry();
     var test_plane_config = try Geometry.Config(Vertex3D, u32).initPlane(.{
         .name = "plane",
         .material_name = "diffuse",
@@ -107,6 +120,7 @@ pub fn init(allocator: Allocator) !void {
 pub fn deinit() void {
     Geometry.deinitSystem();
     Material.deinitSystem();
+    Shader.deinitSystem();
     Texture.deinitSystem();
     Renderer.deinit();
 
