@@ -77,7 +77,6 @@ pub const Uniform = struct {
     data_type: DataType,
     size: u32,
     offset: u32,
-    texture_index: u16,
 
     pub const DataType = enum(u8) {
         int8,
@@ -715,11 +714,11 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
 
         switch (p_uniform.scope) {
             .global => {
-                return error.GlobalTexturesNotYetSupported;
+                self.global_state.textures.slice()[p_uniform.offset] = value;
             },
             .instance => {
                 if (self.instance_state_pool.getColumnPtrIfLive(self.bound_instance, .instance_state)) |instance_state| {
-                    instance_state.textures.slice()[p_uniform.texture_index] = value;
+                    instance_state.textures.slice()[p_uniform.offset] = value;
                 } else return error.InvalidShaderInstanceHandle;
             },
             .local => return error.CannotSetLocalSamplers,
@@ -918,8 +917,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
             .name = try Array(u8, 256).fromSlice(uniform_config.name),
             .data_type = uniform_data_type,
             .size = uniform_size,
-            .offset = if (is_sampler) 0 else scope_config.stride,
-            .texture_index = if (is_sampler) scope_config.uniform_sampler_count else 0,
+            .offset = if (is_sampler) scope_config.uniform_sampler_count else scope_config.stride,
         });
 
         try self.uniform_lookup.put(try self.allocator.dupe(u8, uniform_config.name), uniform_handle);
