@@ -481,13 +481,15 @@ pub fn endFrame() !void {
 
 pub fn drawFrame(packet: RenderPacket) !void {
     if (try beginFrame(packet.delta_time)) {
-        try beginRenderPass(.world);
-        for (packet.geometries) |geometry| try drawGeometry(geometry, world_view, world_projection);
-        try endRenderPass(.world);
+        const command_buffer = getCurrentCommandBuffer();
 
-        try beginRenderPass(.ui);
+        world_render_pass.begin(command_buffer, getCurrentWorldFramebuffer());
+        for (packet.geometries) |geometry| try drawGeometry(geometry, world_view, world_projection);
+        world_render_pass.end(command_buffer);
+
+        ui_render_pass.begin(command_buffer, getCurrentFramebuffer());
         for (packet.ui_geometries) |ui_geometry| try drawGeometry(ui_geometry, ui_view, ui_projection);
-        try endRenderPass(.ui);
+        ui_render_pass.end(command_buffer);
 
         try endFrame();
 
@@ -542,24 +544,6 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
         device_api.cmdDrawIndexed(command_buffer.handle, buffer_data.index_count, 1, 0, 0, 0);
     } else {
         device_api.cmdDraw(command_buffer.handle, buffer_data.vertex_count, 1, 0, 0);
-    }
-}
-
-pub fn beginRenderPass(render_pass_type: RenderPass.Type) !void {
-    const command_buffer = getCurrentCommandBuffer();
-
-    switch (render_pass_type) {
-        .world => world_render_pass.begin(command_buffer, getCurrentWorldFramebuffer()),
-        .ui => ui_render_pass.begin(command_buffer, getCurrentFramebuffer()),
-    }
-}
-
-pub fn endRenderPass(render_pass_type: RenderPass.Type) !void {
-    const command_buffer = getCurrentCommandBuffer();
-
-    switch (render_pass_type) {
-        .world => world_render_pass.end(command_buffer),
-        .ui => ui_render_pass.end(command_buffer),
     }
 }
 

@@ -7,11 +7,6 @@ const Allocator = std.mem.Allocator;
 
 const RenderPass = @This();
 
-pub const Type = enum {
-    world,
-    ui,
-};
-
 const RenderArea = union(enum) {
     fixed: vk.Rect2D,
     swapchain: void,
