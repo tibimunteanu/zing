@@ -6,7 +6,6 @@ pub const swapchain_max_images = 8;
 pub const shader_max_instances = 1024;
 pub const shader_max_stages = 2;
 pub const shader_max_bindings = 2;
-pub const shader_max_global_textures = 31;
 pub const shader_max_instance_textures = 31;
 pub const shader_max_attributes = 16;
 pub const shader_max_uniforms = 128;

@@ -503,11 +503,9 @@ pub fn drawFrame(packet: RenderPacket) !void {
     if (try beginFrame(packet.delta_time)) {
         try beginRenderPass(.world);
 
-        phong_shader.bindGlobal();
-
+        try phong_shader.bindGlobal();
         try phong_shader.setUniform("projection", projection);
         try phong_shader.setUniform("view", view);
-
         try phong_shader.applyGlobal();
 
         for (packet.geometries) |geometry| {
@@ -518,11 +516,9 @@ pub fn drawFrame(packet: RenderPacket) !void {
 
         try beginRenderPass(.ui);
 
-        ui_shader.bindGlobal();
-
+        try ui_shader.bindGlobal();
         try ui_shader.setUniform("projection", ui_projection);
         try ui_shader.setUniform("view", ui_view);
-
         try ui_shader.applyGlobal();
 
         for (packet.ui_geometries) |ui_geometry| {
@@ -544,23 +540,23 @@ pub fn drawGeometry(data: GeometryRenderData) !void {
 
     switch (material.material_type) {
         .world => {
+            try phong_shader.bindLocal();
             try phong_shader.setUniform("model", data.model);
+            try phong_shader.applyLocal();
 
             try phong_shader.bindInstance(material.instance_handle.?);
-
             try phong_shader.setUniform("diffuse_color", material.diffuse_color);
             try phong_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-
             try phong_shader.applyInstance();
         },
         .ui => {
+            try ui_shader.bindLocal();
             try ui_shader.setUniform("model", data.model);
+            try ui_shader.applyLocal();
 
             try ui_shader.bindInstance(material.instance_handle.?);
-
             try ui_shader.setUniform("diffuse_color", material.diffuse_color);
             try ui_shader.setUniform("diffuse_texture", material.diffuse_map.texture);
-
             try ui_shader.applyInstance();
         },
     }

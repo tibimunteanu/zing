@@ -116,20 +116,9 @@ pub const ScopeState = struct {
     uniform_sampler_count: u16 = 0,
 };
 
-pub const GlobalState = struct {
-    ubo_offset: u64,
-    descriptor_sets: Array(vk.DescriptorSet, config.swapchain_max_images),
-};
-
-pub const DescriptorState = struct {
-    generations: Array(?u32, config.swapchain_max_images),
-    handles: Array(Texture.Handle, config.swapchain_max_images),
-};
-
 pub const InstanceState = struct {
     ubo_offset: u64,
     descriptor_sets: Array(vk.DescriptorSet, config.swapchain_max_images),
-    descriptor_states: Array(DescriptorState, config.shader_max_bindings),
     textures: Array(Texture.Handle, config.shader_max_instance_textures),
 };
 
@@ -159,13 +148,16 @@ descriptor_set_layouts: Array(vk.DescriptorSetLayout, 2),
 pipeline_layout: vk.PipelineLayout,
 pipeline: vk.Pipeline,
 
-global_state: GlobalState,
+global_state: InstanceState,
 instance_state_pool: InstancePool,
 
 ubo: Buffer,
 ubo_ptr: [*]u8,
-ubo_bound_offset: u64,
-ubo_bound_instance_handle: InstanceHandle,
+local_push_constant_buffer: Array(u8, 128),
+
+bound_scope: Scope,
+bound_ubo_offset: u64,
+bound_instance: InstanceHandle,
 
 pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     var self: Shader = undefined;
@@ -187,15 +179,19 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     self.pipeline_layout = .null_handle;
     self.pipeline = .null_handle;
 
-    self.global_state = GlobalState{
+    self.global_state = InstanceState{
         .ubo_offset = 0,
         .descriptor_sets = try Array(vk.DescriptorSet, config.swapchain_max_images).init(0),
+        .textures = try Array(Texture.Handle, config.shader_max_instance_textures).init(0),
     };
     self.instance_state_pool._storage.capacity = 0;
 
     self.ubo.handle = .null_handle;
-    self.ubo_bound_offset = 0;
-    self.ubo_bound_instance_handle = InstanceHandle.nil;
+    self.local_push_constant_buffer = try Array(u8, 128).init(128);
+
+    self.bound_scope = .global;
+    self.bound_ubo_offset = 0;
+    self.bound_instance = InstanceHandle.nil;
 
     errdefer self.deinit();
 
@@ -530,6 +526,10 @@ pub fn init(allocator: Allocator, shader_config: Config) !Shader {
     // alloc global ubo range
     self.global_state.ubo_offset = try self.ubo.alloc(self.global_scope.stride);
 
+    // clear textures to default texture handle
+    try self.global_state.textures.resize(0);
+    try self.global_state.textures.appendNTimes(Texture.default, self.global_scope.uniform_sampler_count);
+
     // create instance state pool
     self.instance_state_pool = try InstancePool.initMaxCapacity(allocator);
 
@@ -602,7 +602,11 @@ pub fn deinit(self: *Shader) void {
 }
 
 pub fn initInstance(self: *Shader) !InstanceHandle {
-    var instance_state: InstanceState = undefined;
+    var instance_state = InstanceState{
+        .ubo_offset = 0,
+        .descriptor_sets = try Array(vk.DescriptorSet, config.swapchain_max_images).init(0),
+        .textures = try Array(Texture.Handle, config.shader_max_instance_textures).init(0),
+    };
 
     // allocate instance descriptor sets
     const instance_ubo_layout = self.descriptor_set_layouts.get(@intFromEnum(Shader.Scope.instance));
@@ -636,18 +640,6 @@ pub fn initInstance(self: *Shader) !InstanceHandle {
     // allocate instance ubo range
     instance_state.ubo_offset = try self.ubo.alloc(self.instance_scope.stride);
     errdefer self.ubo.free(instance_state.ubo_offset, self.instance_scope.stride) catch {};
-
-    // clear descriptor states
-    instance_state.descriptor_states = try Array(DescriptorState, config.shader_max_bindings).init(
-        self.instance_scope.binding_count,
-    );
-    for (instance_state.descriptor_states.slice()) |*descriptor_state| {
-        try descriptor_state.generations.resize(0);
-        try descriptor_state.generations.appendNTimes(null, Renderer.swapchain.images.len);
-
-        try descriptor_state.handles.resize(0);
-        try descriptor_state.handles.appendNTimes(Texture.Handle.nil, Renderer.swapchain.images.len);
-    }
 
     // clear textures to default texture handle
     try instance_state.textures.resize(0);
@@ -683,15 +675,22 @@ pub fn bind(self: *const Shader) void {
     Renderer.device_api.cmdBindPipeline(Renderer.getCurrentCommandBuffer().handle, .graphics, self.pipeline);
 }
 
-pub fn bindGlobal(self: *Shader) void {
-    self.ubo_bound_instance_handle = InstanceHandle.nil;
-    self.ubo_bound_offset = self.global_state.ubo_offset;
+pub fn bindLocal(self: *Shader) !void {
+    self.bound_scope = .local;
+    self.bound_instance = InstanceHandle.nil;
+}
+
+pub fn bindGlobal(self: *Shader) !void {
+    self.bound_scope = .global;
+    self.bound_instance = InstanceHandle.nil;
+    self.bound_ubo_offset = self.global_state.ubo_offset;
 }
 
 pub fn bindInstance(self: *Shader, handle: InstanceHandle) !void {
     if (self.instance_state_pool.getColumnPtrIfLive(handle, .instance_state)) |instance_state| {
-        self.ubo_bound_instance_handle = handle;
-        self.ubo_bound_offset = instance_state.ubo_offset;
+        self.bound_scope = .instance;
+        self.bound_instance = handle;
+        self.bound_ubo_offset = instance_state.ubo_offset;
     } else return error.InvalidShaderInstanceHandle;
 }
 
@@ -715,9 +714,11 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
         }
 
         switch (p_uniform.scope) {
-            .global => return error.GlobalTexturesNotYetSupported,
+            .global => {
+                return error.GlobalTexturesNotYetSupported;
+            },
             .instance => {
-                if (self.instance_state_pool.getColumnPtrIfLive(self.ubo_bound_instance_handle, .instance_state)) |instance_state| {
+                if (self.instance_state_pool.getColumnPtrIfLive(self.bound_instance, .instance_state)) |instance_state| {
                     instance_state.textures.slice()[p_uniform.texture_index] = value;
                 } else return error.InvalidShaderInstanceHandle;
             },
@@ -726,24 +727,32 @@ pub fn setUniform(self: *Shader, uniform: anytype, value: anytype) !void {
     } else {
         switch (p_uniform.scope) {
             .local => {
-                Renderer.device_api.cmdPushConstants(
-                    Renderer.getCurrentCommandBuffer().handle,
-                    self.pipeline_layout,
-                    .{ .vertex_bit = true, .fragment_bit = true },
-                    p_uniform.offset,
-                    p_uniform.size,
-                    &value,
+                const local_offset_ptr: [*]u8 = @ptrFromInt(
+                    @intFromPtr(self.local_push_constant_buffer.slice().ptr) + p_uniform.offset,
                 );
+
+                @memcpy(local_offset_ptr, &std.mem.toBytes(value));
             },
             .global, .instance => {
                 const ubo_offset_ptr = @as([*]u8, @ptrFromInt(
-                    @intFromPtr(self.ubo_ptr) + self.ubo_bound_offset + p_uniform.offset,
+                    @intFromPtr(self.ubo_ptr) + self.bound_ubo_offset + p_uniform.offset,
                 ));
 
                 @memcpy(ubo_offset_ptr, &std.mem.toBytes(value));
             },
         }
     }
+}
+
+pub fn applyLocal(self: *Shader) !void {
+    Renderer.device_api.cmdPushConstants(
+        Renderer.getCurrentCommandBuffer().handle,
+        self.pipeline_layout,
+        .{ .vertex_bit = true, .fragment_bit = true },
+        0,
+        128,
+        self.local_push_constant_buffer.slice().ptr,
+    );
 }
 
 pub fn applyGlobal(self: *Shader) !void {
@@ -800,7 +809,7 @@ pub fn applyInstance(self: *Shader) !void {
     const image_index = Renderer.swapchain.image_index;
     const command_buffer = Renderer.getCurrentCommandBuffer();
 
-    if (self.instance_state_pool.getColumnPtrIfLive(self.ubo_bound_instance_handle, .instance_state)) |instance_state| {
+    if (self.instance_state_pool.getColumnPtrIfLive(self.bound_instance, .instance_state)) |instance_state| {
         const descriptor_set = instance_state.descriptor_sets.get(image_index);
 
         var descriptor_writes = try Array(vk.WriteDescriptorSet, 2).init(0);
@@ -925,6 +934,10 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
             scope_config.size += uniform_size;
             scope_config.stride += if (scope == .local) std.mem.alignForward(u32, uniform_size, 4) else uniform_size;
         }
+    }
+
+    if (self.local_scope.stride > 128) {
+        return error.LocalScopeOverflow;
     }
 }
 
