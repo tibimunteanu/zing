@@ -55,7 +55,7 @@ const ShaderPool = pool.Pool(16, 16, Shader, struct {
 
             reference_count.* -|= 1;
 
-            if (reference_count.* == 0 and auto_release) {
+            if (auto_release and reference_count.* == 0) {
                 self.remove();
             } else {
                 std.log.info("Shader: Release '{s}' ({})", .{ shader.name.slice(), reference_count.* });
