@@ -15,8 +15,10 @@ const Material = @This();
 pub const Config = struct {
     name: []const u8 = "New Material",
     shader_name: []const u8 = Shader.default_name,
+    // TODO: change to material properties which configure type (uniform/sampler), name and value
+    // names should correspond to the ones in the shader
     diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
-    diffuse_texture_name: []const u8 = Texture.default_name,
+    diffuse_texture: []const u8 = Texture.default_name,
     auto_release: bool = false,
 };
 
@@ -114,8 +116,11 @@ var lookup: std.StringHashMap(Handle) = undefined;
 
 name: Array(u8, 256),
 shader: Shader.Handle,
+
+// TODO: replace these with generic properties that map to shader uniforms
 diffuse_color: math.Vec,
 diffuse_texture: Texture.Handle,
+
 generation: ?u32,
 instance_handle: ?Shader.InstanceHandle,
 
@@ -193,7 +198,7 @@ fn createDefault() !void {
         .name = default_name,
         .shader_name = Shader.default_name,
         .diffuse_color = math.Vec{ 1, 1, 1, 1 },
-        .diffuse_texture_name = Texture.default_name,
+        .diffuse_texture = Texture.default_name,
         .auto_release = false,
     });
     material.generation = null; // NOTE: default material must have null generation
@@ -218,8 +223,7 @@ fn create(config: Config) !Material {
     self.instance_handle = try self.shader.createInstance();
 
     self.diffuse_color = config.diffuse_color;
-
-    self.diffuse_texture = Texture.acquire(config.diffuse_texture_name) catch Texture.default;
+    self.diffuse_texture = Texture.acquire(config.diffuse_texture) catch Texture.default;
 
     self.generation = 0;
 

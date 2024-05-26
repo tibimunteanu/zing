@@ -3,6 +3,6 @@
   "name": "diffuse",
   "shader_name": "phong",
   "diffuse_color": [1.0, 1.0, 1.0, 1.0],
-  "diffuse_texture_name": "paving",
+  "diffuse_texture": "paving",
   "auto_release": true
 }
