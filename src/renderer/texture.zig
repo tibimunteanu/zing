@@ -59,7 +59,7 @@ const TexturePool = pool.Pool(16, 16, Texture, struct {
 
             reference_count.* -|= 1;
 
-            if (reference_count.* == 0 and auto_release) {
+            if (auto_release and reference_count.* == 0) {
                 self.remove();
             } else {
                 std.log.info("Texture: Release '{s}' ({})", .{ texture.name.slice(), reference_count.* });

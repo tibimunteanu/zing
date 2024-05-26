@@ -60,13 +60,13 @@ const GeometryPool = pool.Pool(16, 16, Geometry, struct {
 
             reference_count.* -|= 1;
 
-            if (reference_count.* == 0 and auto_release) {
+            if (auto_release and reference_count.* == 0) {
                 self.remove();
             } else {
                 std.log.info("Geometry: Release '{s}' ({})", .{ geometry.name.slice(), reference_count.* });
             }
         } else {
-            std.log.warn("Geometry: Release handle!", .{});
+            std.log.warn("Geometry: Release invalid handle!", .{});
         }
     }
 
@@ -362,8 +362,7 @@ fn create(config: anytype) !Geometry {
         return error.VerticesCannotBeEmpty;
     }
 
-    self.material = Material.acquire(config.material_name) //
-    catch Material.default;
+    self.material = Material.acquire(config.material_name) catch Material.default;
 
     var internal_data: ?*Data = null;
 

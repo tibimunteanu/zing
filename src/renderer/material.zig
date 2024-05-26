@@ -61,7 +61,7 @@ const MaterialPool = pool.Pool(16, 16, Material, struct {
 
             reference_count.* -|= 1;
 
-            if (reference_count.* == 0 and auto_release) {
+            if (auto_release and reference_count.* == 0) {
                 self.remove();
             } else {
                 std.log.info("Material: Release '{s}' ({})", .{ material.name.slice(), reference_count.* });
@@ -176,17 +176,17 @@ pub fn acquire(name: []const u8) !Handle {
 
 pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
-        if (handle.getIfExists()) |material| {
-            var resource = try MaterialResource.init(allocator, name);
-            defer resource.deinit();
+        var material = try handle.get();
 
-            var new_material = try create(resource.config);
+        var resource = try MaterialResource.init(allocator, name);
+        defer resource.deinit();
 
-            new_material.generation = if (material.generation) |g| g +% 1 else 0;
+        var new_material = try create(resource.config);
 
-            material.destroy();
-            material.* = new_material;
-        }
+        new_material.generation = if (material.generation) |g| g +% 1 else 0;
+
+        material.destroy();
+        material.* = new_material;
     } else {
         return error.MaterialDoesNotExist;
     }
