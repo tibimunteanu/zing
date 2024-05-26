@@ -2,5 +2,6 @@
   "resource_type": "texture",
   "name": "cobblestone",
   "image_name": "cobblestone",
+  "filter_mode": "linear",
   "auto_release": true
 }

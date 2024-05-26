@@ -14,6 +14,7 @@ const Texture = @This();
 pub const Config = struct {
     name: []const u8,
     image_name: []const u8,
+    filter_mode: []const u8,
     auto_release: bool,
 };
 
@@ -187,6 +188,7 @@ fn createDefault() !void {
     var texture = try create(Config{
         .name = default_name,
         .image_name = Image.default_name,
+        .filter_mode = "linear",
         .auto_release = false,
     });
     texture.generation = null; // NOTE: default texture must have null generation
@@ -221,9 +223,11 @@ fn create(config: Config) !Texture {
         .auto_release = config.auto_release,
     }) catch Image.default;
 
+    const filter_mode = try parseFilterMode(config.filter_mode);
+
     self.sampler = try Renderer.device_api.createSampler(Renderer.device, &vk.SamplerCreateInfo{
-        .mag_filter = .linear,
-        .min_filter = .linear,
+        .mag_filter = filter_mode,
+        .min_filter = filter_mode,
         .address_mode_u = .repeat,
         .address_mode_v = .repeat,
         .address_mode_w = .repeat,
@@ -252,4 +256,9 @@ fn destroy(self: *Texture) void {
     }
 
     self.* = undefined;
+}
+
+// parse from config
+inline fn parseFilterMode(filter_mode: []const u8) !vk.Filter {
+    return std.meta.stringToEnum(vk.Filter, filter_mode) orelse error.UnknownFilterMode;
 }

@@ -2,5 +2,6 @@
   "resource_type": "texture",
   "name": "orange_lines_512",
   "image_name": "orange_lines_512",
+  "filter_mode": "linear",
   "auto_release": true
 }

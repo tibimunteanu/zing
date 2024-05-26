@@ -2,5 +2,6 @@
   "resource_type": "texture",
   "name": "paving",
   "image_name": "paving",
+  "filter_mode": "linear",
   "auto_release": true
 }
