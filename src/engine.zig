@@ -5,6 +5,7 @@ const glfw = @import("glfw");
 
 const utils = @import("utils.zig");
 const Renderer = @import("renderer/renderer.zig");
+const Image = @import("renderer/image.zig");
 const Texture = @import("renderer/texture.zig");
 const Material = @import("renderer/material.zig");
 const Geometry = @import("renderer/geometry.zig");
@@ -61,6 +62,9 @@ pub fn init(allocator: Allocator) !void {
     try Renderer.init(allocator, window);
     errdefer Renderer.deinit();
 
+    try Image.initSystem(allocator);
+    errdefer Image.deinitSystem();
+
     try Texture.initSystem(allocator);
     errdefer Texture.deinitSystem();
 
@@ -111,6 +115,7 @@ pub fn deinit() void {
     Material.deinitSystem();
     Shader.deinitSystem();
     Texture.deinitSystem();
+    Image.deinitSystem();
     Renderer.deinit();
 
     window.destroy();
@@ -213,8 +218,8 @@ fn updateCamera(delta_time: f32) !void {
         if (test_geometry.getIfExists()) |geometry| {
             const material = try geometry.material.get();
 
-            const prev_texture = material.diffuse_map.texture;
-            material.diffuse_map.texture = try Texture.acquire(names[choice], .{ .auto_release = true });
+            const prev_texture = material.diffuse_texture;
+            material.diffuse_texture = try Texture.acquire(names[choice]);
             prev_texture.release();
         }
     }

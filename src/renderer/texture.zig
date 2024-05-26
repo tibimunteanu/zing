@@ -4,23 +4,17 @@ const vk = @import("vk.zig");
 
 const Renderer = @import("renderer.zig");
 const Image = @import("image.zig");
-const Buffer = @import("buffer.zig");
-const CommandBuffer = @import("command_buffer.zig");
-const ImageResource = @import("../resources/image_resource.zig");
+const TextureResource = @import("../resources/texture_resource.zig");
 
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
 const Texture = @This();
 
-pub const Use = enum(u8) {
-    unknown = 0,
-    map_diffuse = 1,
-};
-
-pub const Map = struct {
-    texture: Handle = Handle.nil,
-    use: Use = .unknown,
+pub const Config = struct {
+    name: []const u8,
+    image_name: []const u8,
+    auto_release: bool,
 };
 
 const TexturePool = pool.Pool(16, 16, Texture, struct {
@@ -116,13 +110,9 @@ var textures: TexturePool = undefined;
 var lookup: std.StringHashMap(Handle) = undefined;
 
 name: Array(u8, 256),
-width: u32,
-height: u32,
-channel_count: u32,
-has_transparency: bool,
-generation: ?u32,
-image: Image,
+image: Image.Handle,
 sampler: vk.Sampler,
+generation: ?u32,
 
 pub fn initSystem(ally: Allocator) !void {
     allocator = ally;
@@ -148,27 +138,20 @@ pub fn deinitSystem() void {
     textures.deinit();
 }
 
-pub fn acquire(name: []const u8, options: struct { auto_release: bool }) !Handle {
+pub fn acquire(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
         return handle.acquire();
     } else {
-        var resource = try ImageResource.init(allocator, name);
+        var resource = try TextureResource.init(allocator, name);
         defer resource.deinit();
 
-        var texture = try create(
-            name,
-            .r8g8b8a8_srgb,
-            resource.image.width,
-            resource.image.height,
-            resource.image.num_components,
-            resource.image.data,
-        );
+        var texture = try create(resource.config.value);
         errdefer texture.destroy();
 
         const handle = try textures.add(.{
             .texture = texture,
             .reference_count = 1,
-            .auto_release = options.auto_release,
+            .auto_release = resource.config.value.auto_release,
         });
         errdefer textures.removeAssumeLive(handle);
 
@@ -184,17 +167,10 @@ pub fn acquire(name: []const u8, options: struct { auto_release: bool }) !Handle
 pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
         if (handle.getIfExists()) |texture| {
-            var resource = try ImageResource.init(allocator, name);
+            var resource = try TextureResource.init(allocator, name);
             defer resource.deinit();
 
-            var new_texture = try create(
-                name,
-                .r8g8b8a8_srgb,
-                resource.image.width,
-                resource.image.height,
-                resource.image.num_components,
-                resource.image.data,
-            );
+            var new_texture = try create(resource.config.value);
 
             new_texture.generation = if (texture.generation) |g| g +% 1 else 0;
 
@@ -208,33 +184,11 @@ pub fn reload(name: []const u8) !void {
 
 // utils
 fn createDefault() !void {
-    const size: u32 = 64;
-    const num_components: u32 = 4;
-    const pixel_count = size * size;
-
-    var pixels: [pixel_count * num_components]u8 = undefined;
-    @memset(&pixels, 255);
-
-    for (0..size) |row| {
-        for (0..size) |col| {
-            const index = (row * size) + col;
-            const index_channel = index * num_components;
-
-            if (row % 2 == col % 2) {
-                pixels[index_channel + 0] = 0;
-                pixels[index_channel + 1] = 0;
-            }
-        }
-    }
-
-    var texture = try create(
-        default_name,
-        .r8g8b8a8_srgb,
-        size,
-        size,
-        num_components,
-        &pixels,
-    );
+    var texture = try create(Config{
+        .name = default_name,
+        .image_name = Image.default_name,
+        .auto_release = false,
+    });
     texture.generation = null; // NOTE: default texture must have null generation
     errdefer texture.destroy();
 
@@ -249,139 +203,24 @@ fn createDefault() !void {
     std.log.info("Texture: Create '{s}'", .{default_name});
 }
 
-fn create(
-    name: []const u8,
-    format: vk.Format,
-    width: u32,
-    height: u32,
-    num_components: u32,
-    pixels: []const u8,
-) !Texture {
+fn create(config: Config) !Texture {
     var self: Texture = undefined;
 
-    self.name = try Array(u8, 256).fromSlice(name);
-    self.width = width;
-    self.height = height;
-    self.channel_count = num_components;
-    self.generation = 0;
+    self.name = try Array(u8, 256).fromSlice(config.name);
 
-    const image_size: vk.DeviceSize = width * height * num_components;
-
-    self.has_transparency = false;
-    var i: u32 = 0;
-    while (i < image_size) : (i += num_components) {
-        const a: u8 = pixels[i + 3];
-        if (a < 255) {
-            self.has_transparency = true;
-            break;
-        }
-    }
-
-    // create an image on the gpu
-    self.image = try Image.init(
-        vk.MemoryPropertyFlags{ .device_local_bit = true },
-        &vk.ImageCreateInfo{
-            .flags = .{},
-            .image_type = .@"2d",
-            .format = format,
-            .extent = .{
-                .width = width,
-                .height = height,
-                .depth = 1,
-            },
-            .mip_levels = 1,
-            .array_layers = 1,
-            .samples = .{ .@"1_bit" = true },
-            .tiling = .optimal,
-            .usage = .{
-                .transfer_src_bit = true,
-                .transfer_dst_bit = true,
-                .color_attachment_bit = true,
-                .sampled_bit = true,
-            },
-            .sharing_mode = .exclusive,
-            .queue_family_index_count = 0,
-            .p_queue_family_indices = null,
-            .initial_layout = .undefined,
+    self.image = Image.acquire(.{
+        .name = config.image_name,
+        .format = .r8g8b8a8_srgb,
+        .usage = .{
+            .transfer_src_bit = true,
+            .transfer_dst_bit = true,
+            .color_attachment_bit = true,
+            .sampled_bit = true,
         },
-        @constCast(&vk.ImageViewCreateInfo{
-            .image = .null_handle,
-            .view_type = .@"2d",
-            .format = format,
-            .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
-            .subresource_range = .{
-                .aspect_mask = .{ .color_bit = true },
-                .base_mip_level = 0,
-                .level_count = 1,
-                .base_array_layer = 0,
-                .layer_count = 1,
-            },
-        }),
-    );
-    errdefer self.image.deinit();
+        .aspect_mask = .{ .color_bit = true },
+        .auto_release = config.auto_release,
+    }) catch Image.default;
 
-    // copy the pixels to the gpu
-    var staging_buffer = try Buffer.init(
-        null,
-        image_size,
-        .{ .transfer_src_bit = true },
-        .{ .host_visible_bit = true, .host_coherent_bit = true },
-        .{ .bind_on_create = true },
-    );
-    defer staging_buffer.deinit();
-
-    try staging_buffer.loadData(0, image_size, .{}, pixels);
-
-    var command_buffer = try CommandBuffer.initAndBeginSingleUse(Renderer.graphics_command_pool);
-
-    try self.image.pipelineImageBarrier(
-        &command_buffer,
-        .{ .top_of_pipe_bit = true },
-        .{},
-        .undefined,
-        .{ .transfer_bit = true },
-        .{ .transfer_write_bit = true },
-        .transfer_dst_optimal,
-    );
-
-    Renderer.device_api.cmdCopyBufferToImage(
-        command_buffer.handle,
-        staging_buffer.handle,
-        self.image.handle,
-        .transfer_dst_optimal,
-        1,
-        @ptrCast(&vk.BufferImageCopy{
-            .buffer_offset = 0,
-            .buffer_row_length = 0,
-            .buffer_image_height = 0,
-            .image_subresource = vk.ImageSubresourceLayers{
-                .aspect_mask = .{ .color_bit = true },
-                .mip_level = 0,
-                .base_array_layer = 0,
-                .layer_count = 1,
-            },
-            .image_offset = vk.Offset3D{
-                .x = 0,
-                .y = 0,
-                .z = 0,
-            },
-            .image_extent = self.image.extent,
-        }),
-    );
-
-    try self.image.pipelineImageBarrier(
-        &command_buffer,
-        .{ .transfer_bit = true },
-        .{ .transfer_write_bit = true },
-        .transfer_dst_optimal,
-        .{ .fragment_shader_bit = true },
-        .{ .shader_read_bit = true },
-        .shader_read_only_optimal,
-    );
-
-    try command_buffer.endSingleUseAndDeinit(Renderer.graphics_queue.handle);
-
-    // create the sampler
     self.sampler = try Renderer.device_api.createSampler(Renderer.device, &vk.SamplerCreateInfo{
         .mag_filter = .linear,
         .min_filter = .linear,
@@ -406,8 +245,11 @@ fn create(
 fn destroy(self: *Texture) void {
     Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
 
-    self.image.deinit();
     Renderer.device_api.destroySampler(Renderer.device, self.sampler, null);
+
+    if (!self.image.isNilOrDefault()) {
+        self.image.release();
+    }
 
     self.* = undefined;
 }

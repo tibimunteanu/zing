@@ -277,45 +277,23 @@ fn initImages(self: *Swapchain) !void {
     }
 
     // create the depth image
-    self.depth_image = try Image.init(
-        vk.MemoryPropertyFlags{ .device_local_bit = true },
-        &vk.ImageCreateInfo{
-            .flags = .{},
-            .image_type = .@"2d",
+    self.depth_image = try Image.create(
+        Image.Config{
+            .name = "Depth Image",
             .format = Renderer.physical_device.depth_format,
-            .extent = .{
-                .width = self.extent.width,
-                .height = self.extent.height,
-                .depth = 1,
-            },
-            .mip_levels = 1,
-            .array_layers = 1,
-            .samples = .{ .@"1_bit" = true },
-            .tiling = .optimal,
             .usage = .{ .depth_stencil_attachment_bit = true },
-            .sharing_mode = .exclusive,
-            .queue_family_index_count = 0,
-            .p_queue_family_indices = null,
-            .initial_layout = .undefined,
+            .aspect_mask = .{ .depth_bit = true },
+            .auto_release = false,
         },
-        @constCast(&vk.ImageViewCreateInfo{
-            .image = .null_handle,
-            .view_type = .@"2d",
-            .format = Renderer.physical_device.depth_format,
-            .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
-            .subresource_range = .{
-                .aspect_mask = .{ .depth_bit = true },
-                .base_mip_level = 0,
-                .level_count = 1,
-                .base_array_layer = 0,
-                .layer_count = 1,
-            },
-        }),
+        self.extent.width,
+        self.extent.height,
+        4,
+        null,
     );
 }
 
 fn deinitImages(self: *Swapchain) void {
-    self.depth_image.deinit();
+    self.depth_image.destroy();
 
     for (self.images.slice()) |*image| {
         image.deinit();

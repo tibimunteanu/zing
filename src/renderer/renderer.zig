@@ -515,7 +515,7 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
     if (material.instance_handle) |instance_handle| {
         try material.shader.bindInstance(instance_handle);
         try material.shader.setUniform("diffuse_color", material.diffuse_color);
-        try material.shader.setUniform("diffuse_texture", material.diffuse_map.texture);
+        try material.shader.setUniform("diffuse_texture", material.diffuse_texture);
         try material.shader.applyInstance();
     }
 

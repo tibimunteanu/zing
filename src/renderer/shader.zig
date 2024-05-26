@@ -11,7 +11,6 @@ const Texture = @import("texture.zig");
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
-// TODO: Texture.Map
 // TODO: keep sampler uniforms separate or index lookup
 // TODO: flags
 // TODO: descriptor pool free list
@@ -297,10 +296,11 @@ const ShaderPool = pool.Pool(16, 16, Shader, struct {
         for (0..shader.global_scope.uniform_sampler_count) |sampler_index| {
             const texture_handle = shader.global_state.textures.slice()[sampler_index];
             const texture = texture_handle.getOrDefault();
+            const image = texture.image.getOrDefault();
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,
-                .image_view = texture.image.view,
+                .image_view = image.view,
                 .sampler = texture.sampler,
             });
         }
@@ -376,10 +376,11 @@ const ShaderPool = pool.Pool(16, 16, Shader, struct {
         for (0..shader.instance_scope.uniform_sampler_count) |sampler_index| {
             const texture_handle = instance_state.textures.slice()[sampler_index];
             const texture = texture_handle.getOrDefault();
+            const image = texture.image.getOrDefault();
 
             try image_infos.append(vk.DescriptorImageInfo{
                 .image_layout = .shader_read_only_optimal,
-                .image_view = texture.image.view,
+                .image_view = image.view,
                 .sampler = texture.sampler,
             });
         }

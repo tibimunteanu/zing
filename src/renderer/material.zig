@@ -12,16 +12,11 @@ const Array = std.BoundedArray;
 
 const Material = @This();
 
-pub const Type = enum {
-    world,
-    ui,
-};
-
 pub const Config = struct {
     name: []const u8 = "New Material",
     shader_name: []const u8 = Shader.default_name,
     diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
-    diffuse_map_name: []const u8 = Texture.default_name,
+    diffuse_texture_name: []const u8 = Texture.default_name,
     auto_release: bool = false,
 };
 
@@ -120,7 +115,7 @@ var lookup: std.StringHashMap(Handle) = undefined;
 name: Array(u8, 256),
 shader: Shader.Handle,
 diffuse_color: math.Vec,
-diffuse_map: Texture.Map,
+diffuse_texture: Texture.Handle,
 generation: ?u32,
 instance_handle: ?Shader.InstanceHandle,
 
@@ -198,7 +193,7 @@ fn createDefault() !void {
         .name = default_name,
         .shader_name = Shader.default_name,
         .diffuse_color = math.Vec{ 1, 1, 1, 1 },
-        .diffuse_map_name = Texture.default_name,
+        .diffuse_texture_name = Texture.default_name,
         .auto_release = false,
     });
     material.generation = null; // NOTE: default material must have null generation
@@ -224,12 +219,7 @@ fn create(config: Config) !Material {
 
     self.diffuse_color = config.diffuse_color;
 
-    const diffuse_texture = Texture.acquire(config.diffuse_map_name, .{ .auto_release = true }) catch Texture.default;
-
-    self.diffuse_map = Texture.Map{
-        .use = .map_diffuse,
-        .texture = diffuse_texture,
-    };
+    self.diffuse_texture = Texture.acquire(config.diffuse_texture_name) catch Texture.default;
 
     self.generation = 0;
 
@@ -237,8 +227,8 @@ fn create(config: Config) !Material {
 }
 
 fn destroy(self: *Material) void {
-    if (!self.diffuse_map.texture.isNilOrDefault()) {
-        self.diffuse_map.texture.release();
+    if (!self.diffuse_texture.isNilOrDefault()) {
+        self.diffuse_texture.release();
     }
 
     if (self.instance_handle) |instance_handle| {
