@@ -291,30 +291,32 @@ const ShaderPool = pool.Pool(16, 16, Shader, struct {
         dst_binding += 1;
 
         // descriptor 1 - samplers
-        var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+        if (shader.global_scope.uniform_sampler_count > 0) {
+            var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
 
-        for (0..shader.global_scope.uniform_sampler_count) |sampler_index| {
-            const texture_handle = shader.global_state.textures.slice()[sampler_index];
-            const texture = texture_handle.getOrDefault();
-            const image = texture.image.getOrDefault();
+            for (0..shader.global_scope.uniform_sampler_count) |sampler_index| {
+                const texture_handle = shader.global_state.textures.slice()[sampler_index];
+                const texture = texture_handle.getOrDefault();
+                const image = texture.image.getOrDefault();
 
-            try image_infos.append(vk.DescriptorImageInfo{
-                .image_layout = .shader_read_only_optimal,
-                .image_view = image.view,
-                .sampler = texture.sampler,
+                try image_infos.append(vk.DescriptorImageInfo{
+                    .image_layout = .shader_read_only_optimal,
+                    .image_view = image.view,
+                    .sampler = texture.sampler,
+                });
+            }
+
+            try descriptor_writes.append(vk.WriteDescriptorSet{
+                .dst_set = descriptor_set,
+                .dst_binding = dst_binding,
+                .descriptor_type = .combined_image_sampler,
+                .descriptor_count = shader.global_scope.uniform_sampler_count,
+                .dst_array_element = 0,
+                .p_buffer_info = undefined,
+                .p_image_info = image_infos.slice().ptr,
+                .p_texel_buffer_view = undefined,
             });
         }
-
-        try descriptor_writes.append(vk.WriteDescriptorSet{
-            .dst_set = descriptor_set,
-            .dst_binding = dst_binding,
-            .descriptor_type = .combined_image_sampler,
-            .descriptor_count = shader.global_scope.uniform_sampler_count,
-            .dst_array_element = 0,
-            .p_buffer_info = undefined,
-            .p_image_info = image_infos.slice().ptr,
-            .p_texel_buffer_view = undefined,
-        });
 
         if (descriptor_writes.len > 0) {
             Renderer.device_api.updateDescriptorSets(
@@ -371,30 +373,32 @@ const ShaderPool = pool.Pool(16, 16, Shader, struct {
         dst_binding += 1;
 
         // descriptor 1 - samplers
-        var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
+        if (shader.instance_scope.uniform_sampler_count > 0) {
+            var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
 
-        for (0..shader.instance_scope.uniform_sampler_count) |sampler_index| {
-            const texture_handle = instance_state.textures.slice()[sampler_index];
-            const texture = texture_handle.getOrDefault();
-            const image = texture.image.getOrDefault();
+            for (0..shader.instance_scope.uniform_sampler_count) |sampler_index| {
+                const texture_handle = instance_state.textures.slice()[sampler_index];
+                const texture = texture_handle.getOrDefault();
+                const image = texture.image.getOrDefault();
 
-            try image_infos.append(vk.DescriptorImageInfo{
-                .image_layout = .shader_read_only_optimal,
-                .image_view = image.view,
-                .sampler = texture.sampler,
+                try image_infos.append(vk.DescriptorImageInfo{
+                    .image_layout = .shader_read_only_optimal,
+                    .image_view = image.view,
+                    .sampler = texture.sampler,
+                });
+            }
+
+            try descriptor_writes.append(vk.WriteDescriptorSet{
+                .dst_set = descriptor_set,
+                .dst_binding = dst_binding,
+                .descriptor_type = .combined_image_sampler,
+                .descriptor_count = shader.instance_scope.uniform_sampler_count,
+                .dst_array_element = 0,
+                .p_buffer_info = undefined,
+                .p_image_info = image_infos.slice().ptr,
+                .p_texel_buffer_view = undefined,
             });
         }
-
-        try descriptor_writes.append(vk.WriteDescriptorSet{
-            .dst_set = descriptor_set,
-            .dst_binding = dst_binding,
-            .descriptor_type = .combined_image_sampler,
-            .descriptor_count = shader.instance_scope.uniform_sampler_count,
-            .dst_array_element = 0,
-            .p_buffer_info = undefined,
-            .p_image_info = image_infos.slice().ptr,
-            .p_texel_buffer_view = undefined,
-        });
 
         if (descriptor_writes.len > 0) {
             Renderer.device_api.updateDescriptorSets(
@@ -822,31 +826,35 @@ fn create(shader_config: Config) !Shader {
         self.instance_scope.binding_count = instance_bindings.len;
     }
 
-    // create local push constant ranges
-    var push_constant_ranges = try Array(vk.PushConstantRange, 32).init(0);
-    var push_constant_offset: u32 = 0;
+    // create local push constant range
+    const push_constant_range = vk.PushConstantRange{
+        .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+        .offset = 0,
+        .size = 128,
+    };
 
-    for (self.uniforms.items) |uniform| {
-        if (uniform.scope == .local) {
-            const uniform_aligned_size = std.mem.alignForward(u32, uniform.size, 4);
-
-            try push_constant_ranges.append(vk.PushConstantRange{
-                .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-                .offset = push_constant_offset,
-                .size = uniform_aligned_size,
-            });
-
-            push_constant_offset += uniform_aligned_size;
-        }
-    }
+    // NOTE: we don't need to push individual ranges because we map the whole 128 bytes
+    // var push_constant_ranges = try Array(vk.PushConstantRange, 32).init(0);
+    // var push_constant_offset: u32 = 0;
+    // for (self.uniforms.items) |uniform| {
+    //     if (uniform.scope == .local) {
+    //         const uniform_aligned_size = std.mem.alignForward(u32, uniform.size, 4);
+    //         try push_constant_ranges.append(vk.PushConstantRange{
+    //             .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
+    //             .offset = push_constant_offset,
+    //             .size = uniform_aligned_size,
+    //         });
+    //         push_constant_offset += uniform_aligned_size;
+    //     }
+    // }
 
     // create pipeline layout
     self.pipeline_layout = try Renderer.device_api.createPipelineLayout(Renderer.device, &.{
         .flags = .{},
         .set_layout_count = self.descriptor_set_layouts.len,
         .p_set_layouts = self.descriptor_set_layouts.slice().ptr,
-        .push_constant_range_count = push_constant_ranges.len,
-        .p_push_constant_ranges = push_constant_ranges.slice().ptr,
+        .push_constant_range_count = 1,
+        .p_push_constant_ranges = @ptrCast(&push_constant_range),
     }, null);
 
     // create other pipeline state
