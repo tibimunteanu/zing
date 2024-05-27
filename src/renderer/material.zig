@@ -196,11 +196,9 @@ pub fn reload(name: []const u8) !void {
 // utils
 fn createDefault() !void {
     var diffuse_color = try std.ArrayList(std.json.Value).initCapacity(allocator, 4);
-    try diffuse_color.append(.{ .float = 1.0 });
-    try diffuse_color.append(.{ .float = 1.0 });
-    try diffuse_color.append(.{ .float = 1.0 });
-    try diffuse_color.append(.{ .float = 1.0 });
     defer diffuse_color.deinit();
+
+    try diffuse_color.appendNTimes(.{ .float = 1.0 }, 4);
 
     var material = try create(Config{
         .name = default_name,
