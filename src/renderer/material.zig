@@ -119,11 +119,9 @@ var lookup: std.StringHashMap(Handle) = undefined;
 
 name: Array(u8, 256),
 shader: Shader.Handle,
-
 properties: std.ArrayList(Property),
-
-generation: ?u32,
 instance_handle: ?Shader.InstanceHandle,
+generation: ?u32,
 
 pub fn initSystem(ally: Allocator) !void {
     allocator = ally;

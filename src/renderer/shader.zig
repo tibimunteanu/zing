@@ -445,6 +445,10 @@ pub const Scope = enum(u8) {
     global = 0,
     instance = 1,
     local = 2,
+
+    inline fn parse(scope: []const u8) !Scope {
+        return std.meta.stringToEnum(Scope, scope) orelse error.UnknownUniformScope;
+    }
 };
 
 pub const Attribute = struct {
@@ -488,6 +492,10 @@ pub const Attribute = struct {
                 .float32_3 => .r32g32b32_sfloat,
                 .float32_4 => .r32g32b32a32_sfloat,
             };
+        }
+
+        inline fn parse(data_type: []const u8) !Attribute.DataType {
+            return std.meta.stringToEnum(Attribute.DataType, data_type) orelse error.UnknownAttributeDataType;
         }
     };
 };
@@ -1088,7 +1096,7 @@ fn destroy(self: *Shader) void {
 
 fn addAttributes(self: *Shader, attribute_configs: []const AttributeConfig) !void {
     for (attribute_configs) |attribute_config| {
-        const attribute_data_type = try parseAttributeDataType(attribute_config.data_type);
+        const attribute_data_type = try Attribute.DataType.parse(attribute_config.data_type);
         const attribute_size = attribute_data_type.getSize();
 
         try self.attributes.append(Attribute{
@@ -1101,7 +1109,7 @@ fn addAttributes(self: *Shader, attribute_configs: []const AttributeConfig) !voi
 
 fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
     for (uniform_configs) |uniform_config| {
-        const scope = try parseUniformScope(uniform_config.scope);
+        const scope = try Scope.parse(uniform_config.scope);
 
         var scope_config = switch (scope) {
             .global => &self.global_scope,
@@ -1157,14 +1165,6 @@ fn createShaderModule(path: []const u8) !vk.ShaderModule {
 }
 
 // parse from config
-inline fn parseUniformScope(scope: []const u8) !Scope {
-    return std.meta.stringToEnum(Scope, scope) orelse error.UnknownUniformScope;
-}
-
-inline fn parseAttributeDataType(data_type: []const u8) !Attribute.DataType {
-    return std.meta.stringToEnum(Attribute.DataType, data_type) orelse error.UnknownAttributeDataType;
-}
-
 inline fn parseVkShaderStageFlags(stage_type: []const u8) !vk.ShaderStageFlags {
     if (std.mem.eql(u8, stage_type, "vertex")) return .{ .vertex_bit = true };
     if (std.mem.eql(u8, stage_type, "fragment")) return .{ .fragment_bit = true };
