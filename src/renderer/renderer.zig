@@ -515,20 +515,8 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
     if (material.instance_handle) |instance_handle| {
         try material.shader.bindInstance(instance_handle);
         for (material.properties.items) |prop| {
-            const name = prop.name.constSlice();
             switch (prop.value) {
-                .int8 => try material.shader.setUniform(name, prop.value.int8),
-                .uint8 => try material.shader.setUniform(name, prop.value.uint8),
-                .int16 => try material.shader.setUniform(name, prop.value.int16),
-                .uint16 => try material.shader.setUniform(name, prop.value.uint16),
-                .int32 => try material.shader.setUniform(name, prop.value.int32),
-                .uint32 => try material.shader.setUniform(name, prop.value.uint32),
-                .float32 => try material.shader.setUniform(name, prop.value.float32),
-                .float32_2 => try material.shader.setUniform(name, prop.value.float32_2),
-                .float32_3 => try material.shader.setUniform(name, prop.value.float32_3),
-                .float32_4 => try material.shader.setUniform(name, prop.value.float32_4),
-                .mat4 => try material.shader.setUniform(name, prop.value.mat4),
-                .sampler => try material.shader.setUniform(name, prop.value.sampler),
+                inline else => |v| try material.shader.setUniform(prop.name.constSlice(), v),
             }
         }
         try material.shader.applyInstance();
