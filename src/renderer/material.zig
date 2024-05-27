@@ -15,8 +15,8 @@ const Material = @This();
 pub const Config = struct {
     name: []const u8 = "New Material",
     shader_name: []const u8 = Shader.default_name,
-    auto_release: bool = false,
     properties: []const PropertyConfig = &[_]PropertyConfig{},
+    auto_release: bool = false,
 
     pub const PropertyConfig = struct {
         name: []const u8,
@@ -233,12 +233,13 @@ fn create(config: Config) !Material {
 
     self.name = try Array(u8, 256).fromSlice(config.name);
 
+    self.shader = Shader.acquire(config.shader_name) catch Shader.default;
+
     self.properties = try std.ArrayList(Property).initCapacity(allocator, config.properties.len);
     for (config.properties) |prop_config| {
         try self.properties.append(try Property.fromConfig(prop_config));
     }
 
-    self.shader = Shader.acquire(config.shader_name) catch Shader.default;
     self.instance_handle = try self.shader.createInstance();
 
     self.generation = 0;
@@ -247,21 +248,20 @@ fn create(config: Config) !Material {
 }
 
 fn destroy(self: *Material) void {
+    if (self.instance_handle) |instance_handle| {
+        self.shader.destroyInstance(instance_handle);
+    }
+
     for (self.properties.items) |property| {
         if (property.getDataType() == .sampler and !property.value.sampler.isNilOrDefault()) {
             property.value.sampler.release();
         }
     }
-
-    if (self.instance_handle) |instance_handle| {
-        self.shader.destroyInstance(instance_handle);
-    }
+    self.properties.deinit();
 
     if (!self.shader.isNilOrDefault()) {
         self.shader.release();
     }
-
-    self.properties.deinit();
 
     self.* = undefined;
 }

@@ -468,7 +468,7 @@ pub const Attribute = struct {
         float32_3,
         float32_4,
 
-        pub fn getSize(self: DataType) u32 {
+        inline fn getSize(self: DataType) u32 {
             return switch (self) {
                 .int8, .uint8 => 1,
                 .int16, .uint16 => 2,
@@ -479,7 +479,7 @@ pub const Attribute = struct {
             };
         }
 
-        fn toVkFormat(self: DataType) !vk.Format {
+        inline fn toVkFormat(self: DataType) !vk.Format {
             return switch (self) {
                 .int8 => .r8_sint,
                 .uint8 => .r8_uint,
@@ -521,7 +521,7 @@ pub const Uniform = struct {
         mat4,
         sampler,
 
-        pub fn getSize(self: DataType) u32 {
+        inline fn getSize(self: DataType) u32 {
             return switch (self) {
                 .sampler => 0,
                 .int8, .uint8 => 1,
@@ -534,7 +534,7 @@ pub const Uniform = struct {
             };
         }
 
-        pub fn parse(data_type: []const u8) !DataType {
+        pub inline fn parse(data_type: []const u8) !DataType {
             return std.meta.stringToEnum(DataType, data_type) orelse error.UnknownUniformDataType;
         }
     };

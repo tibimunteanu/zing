@@ -516,7 +516,7 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
         try material.shader.bindInstance(instance_handle);
         for (material.properties.items) |prop| {
             switch (prop.value) {
-                inline else => |v| try material.shader.setUniform(prop.name.constSlice(), v),
+                inline else => |value| try material.shader.setUniform(prop.name.constSlice(), value),
             }
         }
         try material.shader.applyInstance();
