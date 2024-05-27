@@ -1,8 +1,18 @@
 {
   "resource_type": "material",
   "name": "diffuse",
+  "auto_release": true,
   "shader_name": "phong",
-  "diffuse_color": [1.0, 1.0, 1.0, 1.0],
-  "diffuse_texture": "paving",
-  "auto_release": true
+  "properties": [
+    {
+      "name": "diffuse_color",
+      "data_type": "float32_4",
+      "value": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "name": "diffuse_texture",
+      "data_type": "sampler",
+      "value": "paving"
+    }
+  ]
 }

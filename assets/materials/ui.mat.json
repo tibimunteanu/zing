@@ -1,8 +1,18 @@
 {
   "resource_type": "material",
   "name": "ui",
+  "auto_release": true,
   "shader_name": "ui",
-  "diffuse_color": [1.0, 1.0, 1.0, 1.0],
-  "diffuse_texture": "orange_lines_512",
-  "auto_release": true
+  "properties": [
+    {
+      "name": "diffuse_color",
+      "data_type": "float32_4",
+      "value": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "name": "diffuse_texture",
+      "data_type": "sampler",
+      "value": "orange_lines_512"
+    }
+  ]
 }

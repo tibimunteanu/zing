@@ -15,11 +15,14 @@ const Material = @This();
 pub const Config = struct {
     name: []const u8 = "New Material",
     shader_name: []const u8 = Shader.default_name,
-    // TODO: change to material properties which configure type (uniform/sampler), name and value
-    // names should correspond to the ones in the shader
-    diffuse_color: math.Vec = math.Vec{ 1.0, 1.0, 1.0, 1.0 },
-    diffuse_texture: []const u8 = Texture.default_name,
     auto_release: bool = false,
+    properties: []const PropertyConfig = &[_]PropertyConfig{},
+
+    pub const PropertyConfig = struct {
+        name: []const u8,
+        data_type: []const u8,
+        value: std.json.Value,
+    };
 };
 
 const MaterialPool = pool.Pool(16, 16, Material, struct {
@@ -117,9 +120,7 @@ var lookup: std.StringHashMap(Handle) = undefined;
 name: Array(u8, 256),
 shader: Shader.Handle,
 
-// TODO: replace these with generic properties that map to shader uniforms
-diffuse_color: math.Vec,
-diffuse_texture: Texture.Handle,
+properties: std.ArrayList(Property),
 
 generation: ?u32,
 instance_handle: ?Shader.InstanceHandle,
@@ -194,11 +195,28 @@ pub fn reload(name: []const u8) !void {
 
 // utils
 fn createDefault() !void {
+    var diffuse_color = try std.ArrayList(std.json.Value).initCapacity(allocator, 4);
+    try diffuse_color.append(.{ .float = 1.0 });
+    try diffuse_color.append(.{ .float = 1.0 });
+    try diffuse_color.append(.{ .float = 1.0 });
+    try diffuse_color.append(.{ .float = 1.0 });
+    defer diffuse_color.deinit();
+
     var material = try create(Config{
         .name = default_name,
         .shader_name = Shader.default_name,
-        .diffuse_color = math.Vec{ 1, 1, 1, 1 },
-        .diffuse_texture = Texture.default_name,
+        .properties = &[_]Config.PropertyConfig{
+            .{
+                .name = "diffuse_color",
+                .data_type = "float32_4",
+                .value = std.json.Value{ .array = diffuse_color },
+            },
+            .{
+                .name = "diffuse_texture",
+                .data_type = "sampler",
+                .value = .{ .string = Texture.default_name },
+            },
+        },
         .auto_release = false,
     });
     material.generation = null; // NOTE: default material must have null generation
@@ -219,11 +237,13 @@ fn create(config: Config) !Material {
 
     self.name = try Array(u8, 256).fromSlice(config.name);
 
+    self.properties = try std.ArrayList(Property).initCapacity(allocator, config.properties.len);
+    for (config.properties) |prop_config| {
+        try self.properties.append(try Property.fromConfig(prop_config));
+    }
+
     self.shader = Shader.acquire(config.shader_name) catch Shader.default;
     self.instance_handle = try self.shader.createInstance();
-
-    self.diffuse_color = config.diffuse_color;
-    self.diffuse_texture = Texture.acquire(config.diffuse_texture) catch Texture.default;
 
     self.generation = 0;
 
@@ -231,8 +251,10 @@ fn create(config: Config) !Material {
 }
 
 fn destroy(self: *Material) void {
-    if (!self.diffuse_texture.isNilOrDefault()) {
-        self.diffuse_texture.release();
+    for (self.properties.items) |property| {
+        if (property.data_type == .sampler and !property.value.sampler.isNilOrDefault()) {
+            property.value.sampler.release();
+        }
     }
 
     if (self.instance_handle) |instance_handle| {
@@ -243,5 +265,85 @@ fn destroy(self: *Material) void {
         self.shader.release();
     }
 
+    self.properties.deinit();
+
     self.* = undefined;
 }
+
+pub const Property = struct {
+    name: Array(u8, 128),
+    data_type: Shader.Uniform.DataType,
+    value: Value,
+
+    pub const Value = union(Shader.Uniform.DataType) {
+        int8: i8,
+        uint8: u8,
+        int16: i16,
+        uint16: u16,
+        int32: i32,
+        uint32: u32,
+        float32: f32,
+        float32_2: [2]f32,
+        float32_3: [3]f32,
+        float32_4: [4]f32,
+        mat4: math.Mat,
+        sampler: Texture.Handle,
+    };
+
+    pub fn fromConfig(config: Config.PropertyConfig) !Property {
+        var self: Property = undefined;
+
+        self.name = try Array(u8, 128).fromSlice(config.name);
+        self.data_type = try Shader.Uniform.DataType.parse(config.data_type);
+
+        if (switch (self.data_type) {
+            .int8, .uint8, .int16, .uint16, .int32, .uint32 => config.value != .integer,
+            .float32 => config.value != .float,
+            .sampler => config.value != .string,
+            .float32_2, .float32_3, .float32_4, .mat4 => config.value != .array,
+        }) {
+            return error.IncompatibleDataType;
+        }
+
+        self.value = switch (self.data_type) {
+            .int8 => .{ .int8 = @intCast(config.value.integer) },
+            .uint8 => .{ .uint8 = @intCast(config.value.integer) },
+            .int16 => .{ .int16 = @intCast(config.value.integer) },
+            .uint16 => .{ .uint16 = @intCast(config.value.integer) },
+            .int32 => .{ .int32 = @intCast(config.value.integer) },
+            .uint32 => .{ .uint32 = @intCast(config.value.integer) },
+            .float32 => .{ .float32 = @floatCast(config.value.float) },
+            .float32_2 => blk: {
+                var value: [2]f32 = undefined;
+                for (config.value.array.items, 0..) |item, i| {
+                    value[i] = @floatCast(item.float);
+                }
+                break :blk .{ .float32_2 = value };
+            },
+            .float32_3 => blk: {
+                var value: [3]f32 = undefined;
+                for (config.value.array.items, 0..) |item, i| {
+                    value[i] = @floatCast(item.float);
+                }
+                break :blk .{ .float32_3 = value };
+            },
+            .float32_4 => blk: {
+                var value: [4]f32 = undefined;
+                for (config.value.array.items, 0..) |item, i| {
+                    value[i] = @floatCast(item.float);
+                }
+                break :blk .{ .float32_4 = value };
+            },
+            .mat4 => blk: {
+                var value: [16]f32 = undefined;
+                for (config.value.array.items, 0..) |item, i| {
+                    value[i] = @floatCast(item.float);
+                }
+                break :blk .{ .mat4 = math.matFromArr(value) };
+            },
+            .sampler => .{ .sampler = Texture.acquire(config.value.string) catch Texture.default },
+        };
+
+        return self;
+    }
+};

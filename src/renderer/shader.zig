@@ -525,6 +525,10 @@ pub const Uniform = struct {
                 .mat4 => 64,
             };
         }
+
+        pub fn parse(data_type: []const u8) !DataType {
+            return std.meta.stringToEnum(DataType, data_type) orelse error.UnknownUniformDataType;
+        }
     };
 };
 
@@ -1106,7 +1110,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
         };
 
         const uniform_handle: UniformHandle = @truncate(self.uniforms.items.len);
-        const uniform_data_type = try parseUniformDataType(uniform_config.data_type);
+        const uniform_data_type = try Uniform.DataType.parse(uniform_config.data_type);
         const uniform_size = uniform_data_type.getSize();
         const is_sampler = uniform_data_type == .sampler;
 
@@ -1155,10 +1159,6 @@ fn createShaderModule(path: []const u8) !vk.ShaderModule {
 // parse from config
 inline fn parseUniformScope(scope: []const u8) !Scope {
     return std.meta.stringToEnum(Scope, scope) orelse error.UnknownUniformScope;
-}
-
-inline fn parseUniformDataType(data_type: []const u8) !Uniform.DataType {
-    return std.meta.stringToEnum(Uniform.DataType, data_type) orelse error.UnknownUniformDataType;
 }
 
 inline fn parseAttributeDataType(data_type: []const u8) !Attribute.DataType {
