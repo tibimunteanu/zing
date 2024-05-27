@@ -250,7 +250,7 @@ fn create(config: Config) !Material {
 
 fn destroy(self: *Material) void {
     for (self.properties.items) |property| {
-        if (property.data_type == .sampler and !property.value.sampler.isNilOrDefault()) {
+        if (property.getDataType() == .sampler and !property.value.sampler.isNilOrDefault()) {
             property.value.sampler.release();
         }
     }
@@ -270,7 +270,6 @@ fn destroy(self: *Material) void {
 
 pub const Property = struct {
     name: Array(u8, 128),
-    data_type: Shader.Uniform.DataType,
     value: Value,
 
     pub const Value = union(Shader.Uniform.DataType) {
@@ -288,13 +287,17 @@ pub const Property = struct {
         sampler: Texture.Handle,
     };
 
+    pub fn getDataType(self: Property) Shader.Uniform.DataType {
+        return std.meta.activeTag(self.value);
+    }
+
     pub fn fromConfig(config: Config.PropertyConfig) !Property {
         var self: Property = undefined;
 
         self.name = try Array(u8, 128).fromSlice(config.name);
-        self.data_type = try Shader.Uniform.DataType.parse(config.data_type);
+        const data_type = try Shader.Uniform.DataType.parse(config.data_type);
 
-        if (switch (self.data_type) {
+        if (switch (data_type) {
             .int8, .uint8, .int16, .uint16, .int32, .uint32 => config.value != .integer,
             .float32 => config.value != .float,
             .sampler => config.value != .string,
@@ -303,7 +306,7 @@ pub const Property = struct {
             return error.IncompatibleDataType;
         }
 
-        self.value = switch (self.data_type) {
+        self.value = switch (data_type) {
             .int8 => .{ .int8 = @intCast(config.value.integer) },
             .uint8 => .{ .uint8 = @intCast(config.value.integer) },
             .int16 => .{ .int16 = @intCast(config.value.integer) },
