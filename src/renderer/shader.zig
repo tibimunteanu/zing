@@ -12,9 +12,10 @@ const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
 // TODO: keep sampler uniforms separate or index lookup
+// TODO: different types of samplers like cube and 3D
 // TODO: flags
 // TODO: descriptor pool free list
-// TODO: needs update
+// TODO: generation and needs update
 
 const Shader = @This();
 
@@ -646,7 +647,7 @@ pub fn acquire(name: []const u8) !Handle {
 
 pub fn reload(name: []const u8) !void {
     _ = name; // autofix
-    // TODO: implement this
+    // TODO: implement reload
 }
 
 fn createDefault() !void {

@@ -11,6 +11,7 @@ const Array = std.BoundedArray;
 
 const Texture = @This();
 
+// TODO: extract more configs
 pub const Config = struct {
     name: []const u8,
     image_name: []const u8,

@@ -184,20 +184,24 @@ pub var transfer_queue: Queue = undefined;
 
 pub var swapchain: Swapchain = undefined;
 
+// TODO: generic render targets
 pub var framebuffers: Array(vk.Framebuffer, config.swapchain_max_images) = undefined;
 pub var world_framebuffers: Array(vk.Framebuffer, config.swapchain_max_images) = undefined;
 
 pub var graphics_command_pool: vk.CommandPool = undefined;
 pub var graphics_command_buffers: Array(CommandBuffer, config.swapchain_max_images) = undefined;
 
+// TODO: generic render passes
 pub var world_render_pass: RenderPass = undefined;
 pub var ui_render_pass: RenderPass = undefined;
 
 pub var vertex_buffer: Buffer = undefined;
 pub var index_buffer: Buffer = undefined;
 
+// TODO: remove this
 pub var geometries: [geometry_max_count]Geometry.Data = undefined;
 
+// TODO: camera system
 pub var world_projection: math.Mat = undefined;
 pub var world_view: math.Mat = undefined;
 pub var ui_projection: math.Mat = undefined;
@@ -361,15 +365,11 @@ pub fn deinit() void {
 }
 
 pub fn getMemoryIndex(type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
-    // TODO: should we always get fresh memory properties from the device?
-    // const memory_properties = self.instance_api.getPhysicalDeviceMemoryProperties(self.physical_device.handle);
-
     for (0..physical_device.memory_properties.memory_type_count) |i| {
         if ((type_bits & std.math.shl(u32, 1, i) != 0) and physical_device.memory_properties.memory_types[i].property_flags.contains(flags)) {
             return @intCast(i);
         }
     }
-
     return error.GetMemoryIndexFailed;
 }
 
@@ -503,10 +503,9 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
     const geometry = try data.geometry.get();
     const material = geometry.material.getOrDefault();
 
-    // TODO: don't bind for each geometry
+    // TODO: don't bind and apply global for each geometry
     try material.shader.bind();
 
-    // TODO: don't bind and apply global for each geometry
     try material.shader.bindGlobal();
     try material.shader.setUniform("view", view);
     try material.shader.setUniform("projection", projection);

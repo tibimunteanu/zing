@@ -83,13 +83,7 @@ pub fn bind(self: *const Buffer, offset: vk.DeviceSize) !void {
 }
 
 pub fn lock(self: *const Buffer, offset: vk.DeviceSize, size: vk.DeviceSize, flags: vk.MemoryMapFlags) ![*]u8 {
-    return @as([*]u8, @ptrCast(try Renderer.device_api.mapMemory(
-        Renderer.device,
-        self.memory,
-        offset,
-        size,
-        flags,
-    )));
+    return @ptrCast(try Renderer.device_api.mapMemory(Renderer.device, self.memory, offset, size, flags));
 }
 
 pub fn unlock(self: *const Buffer) void {

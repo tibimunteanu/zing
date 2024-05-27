@@ -58,10 +58,7 @@ pub fn init(
 
     const image_sharing = self.getImageSharingInfo();
 
-    const device = Renderer.device;
-    const device_api = Renderer.device_api;
-
-    self.handle = try device_api.createSwapchainKHR(device, &.{
+    self.handle = try Renderer.device_api.createSwapchainKHR(Renderer.device, &.{
         .flags = .{},
         .surface = Renderer.surface,
         .min_image_count = 3, // NOTE: at least triple buffering
@@ -79,11 +76,11 @@ pub fn init(
         .clipped = vk.TRUE,
         .old_swapchain = options.old_handle,
     }, null);
-    errdefer device_api.destroySwapchainKHR(device, self.handle, null);
+    errdefer Renderer.device_api.destroySwapchainKHR(Renderer.device, self.handle, null);
 
     if (options.old_handle != .null_handle) {
         // the old swapchain handle still needs to be destroyed
-        device_api.destroySwapchainKHR(device, options.old_handle, null);
+        Renderer.device_api.destroySwapchainKHR(Renderer.device, options.old_handle, null);
     }
 
     try self.initImages();
@@ -92,8 +89,8 @@ pub fn init(
     // create an aux semaphore because we call acquireNextImage as the last step
     // in order to reference the current image while rendering.
     // since we can't know beforehand which image semaphore to signal, we swap in this aux.
-    self.next_image_acquired_semaphore = try device_api.createSemaphore(device, &.{}, null);
-    errdefer device_api.destroySemaphore(device, self.next_image_acquired_semaphore, null);
+    self.next_image_acquired_semaphore = try Renderer.device_api.createSemaphore(Renderer.device, &.{}, null);
+    errdefer Renderer.device_api.destroySemaphore(Renderer.device, self.next_image_acquired_semaphore, null);
 
     // if the first just created swapchain fails to acquire it's first image, let it crash.
     // when this gets called in present(), the caller handles .suboptimal and error.OutOfDateKHR

@@ -11,6 +11,7 @@ const Vertex2D = Renderer.Vertex2D;
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
+// TODO: load obj and gltf
 const Geometry = @This();
 
 pub const Data = struct {

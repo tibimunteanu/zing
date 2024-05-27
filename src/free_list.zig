@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+// TODO: move to a data structs folder
 const FreeList = @This();
 
 const Config = struct {
