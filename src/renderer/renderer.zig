@@ -489,28 +489,29 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
 
     const geometry = try Geometry.get(data.geometry);
     const material = Material.getOrDefault(geometry.material);
+    const shader = material.shader;
 
     // TODO: don't bind and apply global for each geometry
-    try Shader.bind(material.shader);
+    try Shader.bind(shader);
 
-    try Shader.bindGlobal(material.shader);
-    try Shader.setUniform(material.shader, "view", view);
-    try Shader.setUniform(material.shader, "projection", projection);
-    try Shader.applyGlobal(material.shader);
+    try Shader.bindGlobal(shader);
+    try Shader.setUniform(shader, "view", view);
+    try Shader.setUniform(shader, "projection", projection);
+    try Shader.applyGlobal(shader);
 
     if (material.instance_handle) |instance_handle| {
-        try Shader.bindInstance(material.shader, instance_handle);
+        try Shader.bindInstance(shader, instance_handle);
         for (material.properties.items) |prop| {
             switch (prop.value) {
-                inline else => |value| try Shader.setUniform(material.shader, prop.name.constSlice(), value),
+                inline else => |value| try Shader.setUniform(shader, prop.name.constSlice(), value),
             }
         }
-        try Shader.applyInstance(material.shader);
+        try Shader.applyInstance(shader);
     }
 
-    try Shader.bindLocal(material.shader);
-    try Shader.setUniform(material.shader, "model", data.model);
-    try Shader.applyLocal(material.shader);
+    try Shader.bindLocal(shader);
+    try Shader.setUniform(shader, "model", data.model);
+    try Shader.applyLocal(shader);
 
     device_api.cmdBindVertexBuffers(
         command_buffer.handle,

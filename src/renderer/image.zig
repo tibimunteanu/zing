@@ -255,7 +255,7 @@ fn createDefault() !void {
     std.log.info("Image: Create '{s}'", .{default_name});
 }
 
-// TODO: make swapchain use acquire and release and make these private
+// NOTE: swapchain can't use acquire and release because it's created before the image system
 pub fn create(
     config: Config,
     width: u32,
