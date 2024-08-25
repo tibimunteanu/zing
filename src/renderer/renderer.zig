@@ -500,30 +500,30 @@ pub fn drawFrame(packet: RenderPacket) !void {
 pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.Mat) !void {
     const command_buffer = getCurrentCommandBuffer();
 
-    const geometry = try data.geometry.get();
-    const material = geometry.material.getOrDefault();
+    const geometry = try Geometry.get(data.geometry);
+    const material = Material.getOrDefault(geometry.material);
 
     // TODO: don't bind and apply global for each geometry
-    try material.shader.bind();
+    try Shader.bind(material.shader);
 
-    try material.shader.bindGlobal();
-    try material.shader.setUniform("view", view);
-    try material.shader.setUniform("projection", projection);
-    try material.shader.applyGlobal();
+    try Shader.bindGlobal(material.shader);
+    try Shader.setUniform(material.shader, "view", view);
+    try Shader.setUniform(material.shader, "projection", projection);
+    try Shader.applyGlobal(material.shader);
 
     if (material.instance_handle) |instance_handle| {
-        try material.shader.bindInstance(instance_handle);
+        try Shader.bindInstance(material.shader, instance_handle);
         for (material.properties.items) |prop| {
             switch (prop.value) {
-                inline else => |value| try material.shader.setUniform(prop.name.constSlice(), value),
+                inline else => |value| try Shader.setUniform(material.shader, prop.name.constSlice(), value),
             }
         }
-        try material.shader.applyInstance();
+        try Shader.applyInstance(material.shader);
     }
 
-    try material.shader.bindLocal();
-    try material.shader.setUniform("model", data.model);
-    try material.shader.applyLocal();
+    try Shader.bindLocal(material.shader);
+    try Shader.setUniform(material.shader, "model", data.model);
+    try Shader.applyLocal(material.shader);
 
     const buffer_data = geometries[geometry.internal_id.?];
 

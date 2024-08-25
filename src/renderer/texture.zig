@@ -23,83 +23,6 @@ const TexturePool = pool.Pool(16, 16, Texture, struct {
     texture: Texture,
     reference_count: usize,
     auto_release: bool,
-}, struct {
-    pub fn acquire(self: Handle) !Handle {
-        if (self.eql(default)) {
-            return default;
-        }
-
-        const texture = try self.get();
-        const reference_count = textures.getColumnPtrAssumeLive(self, .reference_count);
-
-        reference_count.* +|= 1;
-
-        std.log.info("Texture: Acquire '{s}' ({})", .{ texture.name.slice(), reference_count.* });
-
-        return self;
-    }
-
-    pub fn release(self: Handle) void {
-        if (self.eql(default)) {
-            return;
-        }
-
-        if (self.getIfExists()) |texture| {
-            const reference_count = textures.getColumnPtrAssumeLive(self, .reference_count);
-            const auto_release = textures.getColumnAssumeLive(self, .auto_release);
-
-            if (reference_count.* == 0) {
-                std.log.warn("Texture: Release with ref count 0!", .{});
-                return;
-            }
-
-            reference_count.* -|= 1;
-
-            if (auto_release and reference_count.* == 0) {
-                self.remove();
-            } else {
-                std.log.info("Texture: Release '{s}' ({})", .{ texture.name.slice(), reference_count.* });
-            }
-        } else {
-            std.log.warn("Texture: Release invalid handle!", .{});
-        }
-    }
-
-    pub inline fn eql(self: Handle, other: Handle) bool {
-        return self.id == other.id;
-    }
-
-    pub inline fn isNilOrDefault(self: Handle) bool {
-        return self.eql(Handle.nil) or self.eql(default);
-    }
-
-    pub inline fn exists(self: Handle) bool {
-        return textures.isLiveHandle(self);
-    }
-
-    pub inline fn get(self: Handle) !*Texture {
-        return try textures.getColumnPtr(self, .texture);
-    }
-
-    pub inline fn getIfExists(self: Handle) ?*Texture {
-        return textures.getColumnPtrIfLive(self, .texture);
-    }
-
-    pub inline fn getOrDefault(self: Handle) *Texture {
-        return textures.getColumnPtrIfLive(self, .texture) //
-        orelse textures.getColumnPtrAssumeLive(default, .texture);
-    }
-
-    pub fn remove(self: Handle) void {
-        if (self.getIfExists()) |texture| {
-            std.log.info("Texture: Remove '{s}'", .{texture.name.slice()});
-
-            _ = lookup.remove(texture.name.slice());
-            textures.removeAssumeLive(self);
-
-            texture.destroy();
-        }
-    }
 });
 
 pub const Handle = TexturePool.Handle;
@@ -133,7 +56,7 @@ pub fn initSystem(ally: Allocator) !void {
 pub fn deinitSystem() void {
     var it = textures.liveHandles();
     while (it.next()) |handle| {
-        handle.remove();
+        remove(handle);
     }
 
     lookup.deinit();
@@ -142,7 +65,7 @@ pub fn deinitSystem() void {
 
 pub fn acquire(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
-        return handle.acquire();
+        return acquireExisting(handle);
     } else {
         var resource = try TextureResource.init(allocator, name);
         defer resource.deinit();
@@ -157,7 +80,7 @@ pub fn acquire(name: []const u8) !Handle {
         });
         errdefer textures.removeAssumeLive(handle);
 
-        const texture_ptr = try handle.get(); // NOTE: use name from ptr as key
+        const texture_ptr = try get(handle); // NOTE: use name from ptr as key
         try lookup.put(texture_ptr.name.constSlice(), handle);
 
         std.log.info("Texture: Create '{s}' (1)", .{name});
@@ -181,6 +104,84 @@ pub fn reload(name: []const u8) !void {
         }
     } else {
         return error.TextureDoesNotExist;
+    }
+}
+
+// handle
+pub fn acquireExisting(handle: Handle) !Handle {
+    if (eql(handle, default)) {
+        return default;
+    }
+
+    const texture = try get(handle);
+    const reference_count = textures.getColumnPtrAssumeLive(handle, .reference_count);
+
+    reference_count.* +|= 1;
+
+    std.log.info("Texture: Acquire '{s}' ({})", .{ texture.name.slice(), reference_count.* });
+
+    return handle;
+}
+
+pub fn release(handle: Handle) void {
+    if (eql(handle, default)) {
+        return;
+    }
+
+    if (getIfExists(handle)) |texture| {
+        const reference_count = textures.getColumnPtrAssumeLive(handle, .reference_count);
+        const auto_release = textures.getColumnAssumeLive(handle, .auto_release);
+
+        if (reference_count.* == 0) {
+            std.log.warn("Texture: Release with ref count 0!", .{});
+            return;
+        }
+
+        reference_count.* -|= 1;
+
+        if (auto_release and reference_count.* == 0) {
+            remove(handle);
+        } else {
+            std.log.info("Texture: Release '{s}' ({})", .{ texture.name.slice(), reference_count.* });
+        }
+    } else {
+        std.log.warn("Texture: Release invalid handle!", .{});
+    }
+}
+
+pub inline fn eql(left: Handle, right: Handle) bool {
+    return left.id == right.id;
+}
+
+pub inline fn isNilOrDefault(handle: Handle) bool {
+    return eql(handle, Handle.nil) or eql(handle, default);
+}
+
+pub inline fn exists(handle: Handle) bool {
+    return textures.isLiveHandle(handle);
+}
+
+pub inline fn get(handle: Handle) !*Texture {
+    return try textures.getColumnPtr(handle, .texture);
+}
+
+pub inline fn getIfExists(handle: Handle) ?*Texture {
+    return textures.getColumnPtrIfLive(handle, .texture);
+}
+
+pub inline fn getOrDefault(handle: Handle) *Texture {
+    return textures.getColumnPtrIfLive(handle, .texture) //
+    orelse textures.getColumnPtrAssumeLive(default, .texture);
+}
+
+pub fn remove(handle: Handle) void {
+    if (getIfExists(handle)) |texture| {
+        std.log.info("Texture: Remove '{s}'", .{texture.name.slice()});
+
+        _ = lookup.remove(texture.name.slice());
+        textures.removeAssumeLive(handle);
+
+        texture.destroy();
     }
 }
 
@@ -252,8 +253,8 @@ fn destroy(self: *Texture) void {
 
     Renderer.device_api.destroySampler(Renderer.device, self.sampler, null);
 
-    if (!self.image.isNilOrDefault()) {
-        self.image.release();
+    if (!Image.isNilOrDefault(self.image)) {
+        Image.release(self.image);
     }
 
     self.* = undefined;

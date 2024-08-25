@@ -29,83 +29,6 @@ const MaterialPool = pool.Pool(16, 16, Material, struct {
     material: Material,
     reference_count: usize,
     auto_release: bool,
-}, struct {
-    pub fn acquire(self: Handle) !Handle {
-        if (self.eql(default)) {
-            return default;
-        }
-
-        const material = try self.get();
-        const reference_count = materials.getColumnPtrAssumeLive(self, .reference_count);
-
-        reference_count.* +|= 1;
-
-        std.log.info("Material: Acquire '{s}' ({})", .{ material.name.slice(), reference_count.* });
-
-        return self;
-    }
-
-    pub fn release(self: Handle) void {
-        if (self.eql(default)) {
-            return;
-        }
-
-        if (self.getIfExists()) |material| {
-            const reference_count = materials.getColumnPtrAssumeLive(self, .reference_count);
-            const auto_release = materials.getColumnAssumeLive(self, .auto_release);
-
-            if (reference_count.* == 0) {
-                std.log.warn("Material: Release with ref count 0!", .{});
-                return;
-            }
-
-            reference_count.* -|= 1;
-
-            if (auto_release and reference_count.* == 0) {
-                self.remove();
-            } else {
-                std.log.info("Material: Release '{s}' ({})", .{ material.name.slice(), reference_count.* });
-            }
-        } else {
-            std.log.warn("Material: Release invalid handle!", .{});
-        }
-    }
-
-    pub inline fn eql(self: Handle, other: Handle) bool {
-        return self.id == other.id;
-    }
-
-    pub inline fn isNilOrDefault(self: Handle) bool {
-        return self.eql(Handle.nil) or self.eql(default);
-    }
-
-    pub inline fn exists(self: Handle) bool {
-        return materials.isLiveHandle(self);
-    }
-
-    pub inline fn get(self: Handle) !*Material {
-        return try materials.getColumnPtr(self, .material);
-    }
-
-    pub inline fn getIfExists(self: Handle) ?*Material {
-        return materials.getColumnPtrIfLive(self, .material);
-    }
-
-    pub inline fn getOrDefault(self: Handle) *Material {
-        return materials.getColumnPtrIfLive(self, .material) //
-        orelse materials.getColumnPtrAssumeLive(default, .material);
-    }
-
-    pub fn remove(self: Handle) void {
-        if (self.getIfExists()) |material| {
-            std.log.info("Material: Remove '{s}'", .{material.name.slice()});
-
-            _ = lookup.remove(material.name.slice());
-            materials.removeAssumeLive(self);
-
-            material.destroy();
-        }
-    }
 });
 
 pub const Handle = MaterialPool.Handle;
@@ -140,7 +63,7 @@ pub fn initSystem(ally: Allocator) !void {
 pub fn deinitSystem() void {
     var it = materials.liveHandles();
     while (it.next()) |handle| {
-        handle.remove();
+        remove(handle);
     }
 
     lookup.deinit();
@@ -149,7 +72,7 @@ pub fn deinitSystem() void {
 
 pub fn acquire(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
-        return handle.acquire();
+        return acquireExisting(handle);
     } else {
         var resource = try MaterialResource.init(allocator, name);
         defer resource.deinit();
@@ -164,7 +87,7 @@ pub fn acquire(name: []const u8) !Handle {
         });
         errdefer materials.removeAssumeLive(handle);
 
-        const material_ptr = try handle.get(); // NOTE: use name from ptr as key
+        const material_ptr = try get(handle); // NOTE: use name from ptr as key
         try lookup.put(material_ptr.name.constSlice(), handle);
 
         std.log.info("Material: Create '{s}' (1)", .{name});
@@ -188,6 +111,84 @@ pub fn reload(name: []const u8) !void {
         material.* = new_material;
     } else {
         return error.MaterialDoesNotExist;
+    }
+}
+
+// handle
+pub fn acquireExisting(handle: Handle) !Handle {
+    if (eql(handle, default)) {
+        return default;
+    }
+
+    const material = try get(handle);
+    const reference_count = materials.getColumnPtrAssumeLive(handle, .reference_count);
+
+    reference_count.* +|= 1;
+
+    std.log.info("Material: Acquire '{s}' ({})", .{ material.name.slice(), reference_count.* });
+
+    return handle;
+}
+
+pub fn release(handle: Handle) void {
+    if (eql(handle, default)) {
+        return;
+    }
+
+    if (getIfExists(handle)) |material| {
+        const reference_count = materials.getColumnPtrAssumeLive(handle, .reference_count);
+        const auto_release = materials.getColumnAssumeLive(handle, .auto_release);
+
+        if (reference_count.* == 0) {
+            std.log.warn("Material: Release with ref count 0!", .{});
+            return;
+        }
+
+        reference_count.* -|= 1;
+
+        if (auto_release and reference_count.* == 0) {
+            remove(handle);
+        } else {
+            std.log.info("Material: Release '{s}' ({})", .{ material.name.slice(), reference_count.* });
+        }
+    } else {
+        std.log.warn("Material: Release invalid handle!", .{});
+    }
+}
+
+pub inline fn eql(left: Handle, right: Handle) bool {
+    return left.id == right.id;
+}
+
+pub inline fn isNilOrDefault(handle: Handle) bool {
+    return eql(handle, Handle.nil) or eql(handle, default);
+}
+
+pub inline fn exists(handle: Handle) bool {
+    return materials.isLiveHandle(handle);
+}
+
+pub inline fn get(handle: Handle) !*Material {
+    return try materials.getColumnPtr(handle, .material);
+}
+
+pub inline fn getIfExists(handle: Handle) ?*Material {
+    return materials.getColumnPtrIfLive(handle, .material);
+}
+
+pub inline fn getOrDefault(handle: Handle) *Material {
+    return materials.getColumnPtrIfLive(handle, .material) //
+    orelse materials.getColumnPtrAssumeLive(default, .material);
+}
+
+pub fn remove(handle: Handle) void {
+    if (getIfExists(handle)) |material| {
+        std.log.info("Material: Remove '{s}'", .{material.name.slice()});
+
+        _ = lookup.remove(material.name.slice());
+        materials.removeAssumeLive(handle);
+
+        material.destroy();
     }
 }
 
@@ -240,7 +241,7 @@ fn create(config: Config) !Material {
         try self.properties.append(try Property.fromConfig(prop_config));
     }
 
-    self.instance_handle = try self.shader.createInstance();
+    self.instance_handle = try Shader.createInstance(self.shader);
 
     self.generation = 0;
 
@@ -249,18 +250,18 @@ fn create(config: Config) !Material {
 
 fn destroy(self: *Material) void {
     if (self.instance_handle) |instance_handle| {
-        self.shader.destroyInstance(instance_handle);
+        Shader.destroyInstance(self.shader, instance_handle);
     }
 
     for (self.properties.items) |property| {
-        if (property.getDataType() == .sampler and !property.value.sampler.isNilOrDefault()) {
-            property.value.sampler.release();
+        if (property.getDataType() == .sampler and !Texture.isNilOrDefault(property.value.sampler)) {
+            Texture.release(property.value.sampler);
         }
     }
     self.properties.deinit();
 
-    if (!self.shader.isNilOrDefault()) {
-        self.shader.release();
+    if (!Shader.isNilOrDefault(self.shader)) {
+        Shader.release(self.shader);
     }
 
     self.* = undefined;

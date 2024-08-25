@@ -29,87 +29,6 @@ const GeometryPool = pool.Pool(16, 16, Geometry, struct {
     geometry: Geometry,
     reference_count: usize,
     auto_release: bool,
-}, struct {
-    pub fn acquire(self: Handle) !Handle {
-        if (self.eql(default)) {
-            return default;
-        }
-
-        const geometry = try self.get();
-        const reference_count = geometries.getColumnPtrAssumeLive(self, .reference_count);
-
-        reference_count.* +|= 1;
-
-        std.log.info("Geometry: Acquire '{s}' ({})", .{ geometry.name.slice(), reference_count.* });
-
-        return self;
-    }
-
-    pub fn release(self: Handle) void {
-        if (self.eql(default)) {
-            return;
-        }
-
-        if (self.getIfExists()) |geometry| {
-            const reference_count = geometries.getColumnPtrAssumeLive(self, .reference_count);
-            const auto_release = geometries.getColumnAssumeLive(self, .auto_release);
-
-            if (reference_count.* == 0) {
-                std.log.warn("Geometry: Release with ref count 0!", .{});
-                return;
-            }
-
-            reference_count.* -|= 1;
-
-            if (auto_release and reference_count.* == 0) {
-                self.remove();
-            } else {
-                std.log.info("Geometry: Release '{s}' ({})", .{ geometry.name.slice(), reference_count.* });
-            }
-        } else {
-            std.log.warn("Geometry: Release invalid handle!", .{});
-        }
-    }
-
-    pub inline fn eql(self: Handle, other: Handle) bool {
-        return self.id == other.id;
-    }
-
-    pub inline fn exists(self: Handle) bool {
-        return geometries.isLiveHandle(self);
-    }
-
-    pub inline fn isNilOrDefault(self: Handle) bool {
-        return self.eql(Handle.nil) || self.eql(default) || self.eql(default_name_2d);
-    }
-
-    pub inline fn get(self: Handle) !*Geometry {
-        return try geometries.getColumnPtr(self, .geometry);
-    }
-
-    pub inline fn getIfExists(self: Handle) ?*Geometry {
-        return geometries.getColumnPtrIfLive(self, .geometry);
-    }
-
-    pub inline fn getOrDefault(self: Handle) *Geometry {
-        return geometries.getColumnPtrIfLive(self, .geometry) //
-        orelse geometries.getColumnPtrAssumeLive(default, .geometry);
-    }
-
-    pub inline fn getOrDefault2D(self: Handle) *Geometry {
-        return geometries.getColumnPtrIfLive(self, .geometry) //
-        orelse geometries.getColumnPtrAssumeLive(default_2d, .geometry);
-    }
-
-    pub fn remove(self: Handle) void {
-        if (self.getIfExists()) |geometry| {
-            std.log.info("Geometry: Remove '{s}'", .{geometry.name.slice()});
-
-            geometries.removeAssumeLive(self);
-
-            geometry.destroy();
-        }
-    }
 });
 
 pub const Handle = GeometryPool.Handle;
@@ -274,7 +193,7 @@ pub fn initSystem(ally: Allocator) !void {
 pub fn deinitSystem() void {
     var it = geometries.liveHandles();
     while (it.next()) |handle| {
-        handle.remove();
+        remove(handle);
     }
 
     geometries.deinit();
@@ -294,6 +213,88 @@ pub fn acquire(config: anytype) !Handle {
     std.log.info("Geometry: Create '{s}' (1)", .{config.name});
 
     return handle;
+}
+
+// handle
+pub fn acquireExisting(handle: Handle) !Handle {
+    if (eql(handle, default)) {
+        return default;
+    }
+
+    const geometry = try get(handle);
+    const reference_count = geometries.getColumnPtrAssumeLive(handle, .reference_count);
+
+    reference_count.* +|= 1;
+
+    std.log.info("Geometry: Acquire '{s}' ({})", .{ geometry.name.slice(), reference_count.* });
+
+    return handle;
+}
+
+pub fn release(handle: Handle) void {
+    if (eql(handle, default)) {
+        return;
+    }
+
+    if (getIfExists(handle)) |geometry| {
+        const reference_count = geometries.getColumnPtrAssumeLive(handle, .reference_count);
+        const auto_release = geometries.getColumnAssumeLive(handle, .auto_release);
+
+        if (reference_count.* == 0) {
+            std.log.warn("Geometry: Release with ref count 0!", .{});
+            return;
+        }
+
+        reference_count.* -|= 1;
+
+        if (auto_release and reference_count.* == 0) {
+            remove(handle);
+        } else {
+            std.log.info("Geometry: Release '{s}' ({})", .{ geometry.name.slice(), reference_count.* });
+        }
+    } else {
+        std.log.warn("Geometry: Release invalid handle!", .{});
+    }
+}
+
+pub inline fn eql(left: Handle, right: Handle) bool {
+    return left.id == right.id;
+}
+
+pub inline fn exists(handle: Handle) bool {
+    return geometries.isLiveHandle(handle);
+}
+
+pub inline fn isNilOrDefault(handle: Handle) bool {
+    return eql(handle, Handle.nil) || eql(handle, default) || eql(handle, default_name_2d);
+}
+
+pub inline fn get(handle: Handle) !*Geometry {
+    return try geometries.getColumnPtr(handle, .geometry);
+}
+
+pub inline fn getIfExists(handle: Handle) ?*Geometry {
+    return geometries.getColumnPtrIfLive(handle, .geometry);
+}
+
+pub inline fn getOrDefault(handle: Handle) *Geometry {
+    return geometries.getColumnPtrIfLive(handle, .geometry) //
+    orelse geometries.getColumnPtrAssumeLive(default, .geometry);
+}
+
+pub inline fn getOrDefault2D(handle: Handle) *Geometry {
+    return geometries.getColumnPtrIfLive(handle, .geometry) //
+    orelse geometries.getColumnPtrAssumeLive(default_2d, .geometry);
+}
+
+pub fn remove(handle: Handle) void {
+    if (getIfExists(handle)) |geometry| {
+        std.log.info("Geometry: Remove '{s}'", .{geometry.name.slice()});
+
+        geometries.removeAssumeLive(handle);
+
+        geometry.destroy();
+    }
 }
 
 // utils
@@ -397,8 +398,8 @@ fn create(config: anytype) !Geometry {
 }
 
 fn destroy(self: *Geometry) void {
-    if (!self.material.isNilOrDefault()) {
-        self.material.release();
+    if (!Material.isNilOrDefault(self.material)) {
+        Material.release(self.material);
     }
 
     if (self.internal_id != null) {

@@ -215,12 +215,12 @@ fn updateCamera(delta_time: f32) !void {
         choice += 1;
         choice %= names.len;
 
-        if (test_geometry.getIfExists()) |geometry| {
-            const material = try geometry.material.get();
+        if (Geometry.getIfExists(test_geometry)) |geometry| {
+            const material = try Material.get(geometry.material);
 
             const prev_texture = material.properties.items[1].value.sampler;
             material.properties.items[1].value.sampler = try Texture.acquire(names[choice]);
-            prev_texture.release();
+            Texture.release(prev_texture);
         }
     }
     prevPressN = pressN;

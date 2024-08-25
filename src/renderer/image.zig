@@ -24,83 +24,6 @@ const ImagePool = pool.Pool(16, 16, Image, struct {
     image: Image,
     reference_count: usize,
     auto_release: bool,
-}, struct {
-    pub fn acquire(self: Handle) !Handle {
-        if (self.eql(default)) {
-            return default;
-        }
-
-        const image = try self.get();
-        const reference_count = images.getColumnPtrAssumeLive(self, .reference_count);
-
-        reference_count.* +|= 1;
-
-        std.log.info("Image: Acquire '{s}' ({})", .{ image.name.slice(), reference_count.* });
-
-        return self;
-    }
-
-    pub fn release(self: Handle) void {
-        if (self.eql(default)) {
-            return;
-        }
-
-        if (self.getIfExists()) |image| {
-            const reference_count = images.getColumnPtrAssumeLive(self, .reference_count);
-            const auto_release = images.getColumnAssumeLive(self, .auto_release);
-
-            if (reference_count.* == 0) {
-                std.log.warn("Image: Release with ref count 0!", .{});
-                return;
-            }
-
-            reference_count.* -|= 1;
-
-            if (auto_release and reference_count.* == 0) {
-                self.remove();
-            } else {
-                std.log.info("Image: Release '{s}' ({})", .{ image.name.slice(), reference_count.* });
-            }
-        } else {
-            std.log.warn("Image: Release invalid handle!", .{});
-        }
-    }
-
-    pub inline fn eql(self: Handle, other: Handle) bool {
-        return self.id == other.id;
-    }
-
-    pub inline fn isNilOrDefault(self: Handle) bool {
-        return self.eql(Handle.nil) or self.eql(default);
-    }
-
-    pub inline fn exists(self: Handle) bool {
-        return images.isLiveHandle(self);
-    }
-
-    pub inline fn get(self: Handle) !*Image {
-        return try images.getColumnPtr(self, .image);
-    }
-
-    pub inline fn getIfExists(self: Handle) ?*Image {
-        return images.getColumnPtrIfLive(self, .image);
-    }
-
-    pub inline fn getOrDefault(self: Handle) *Image {
-        return images.getColumnPtrIfLive(self, .image) //
-        orelse images.getColumnPtrAssumeLive(default, .image);
-    }
-
-    pub fn remove(self: Handle) void {
-        if (self.getIfExists()) |image| {
-            std.log.info("Image: Remove '{s}'", .{image.name.slice()});
-
-            _ = lookup.remove(image.name.slice());
-            images.removeAssumeLive(self);
-
-            image.destroy();
-        }
-    }
 });
 
 pub const Handle = ImagePool.Handle;
@@ -137,7 +60,7 @@ pub fn initSystem(ally: Allocator) !void {
 pub fn deinitSystem() void {
     var it = images.liveHandles();
     while (it.next()) |handle| {
-        handle.remove();
+        remove(handle);
     }
 
     lookup.deinit();
@@ -146,7 +69,7 @@ pub fn deinitSystem() void {
 
 pub fn acquire(config: Config) !Handle {
     if (lookup.get(config.name)) |handle| {
-        return handle.acquire();
+        return acquireExisting(handle);
     } else {
         var resource = try ImageResource.init(allocator, config.name);
         defer resource.deinit();
@@ -167,7 +90,7 @@ pub fn acquire(config: Config) !Handle {
         });
         errdefer images.removeAssumeLive(handle);
 
-        const image_ptr = try handle.get(); // NOTE: use name from ptr as key
+        const image_ptr = try get(handle); // NOTE: use name from ptr as key
         try lookup.put(image_ptr.name.constSlice(), handle);
 
         std.log.info("Image: Create '{s}' (1)", .{config.name});
@@ -178,7 +101,7 @@ pub fn acquire(config: Config) !Handle {
 
 pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
-        if (handle.getIfExists()) |image| {
+        if (getIfExists(handle)) |image| {
             var resource = try ImageResource.init(allocator, name);
             defer resource.deinit();
 
@@ -198,6 +121,84 @@ pub fn reload(name: []const u8) !void {
         }
     } else {
         return error.ImageDoesNotExist;
+    }
+}
+
+// handle
+pub fn acquireExisting(handle: Handle) !Handle {
+    if (eql(handle, default)) {
+        return default;
+    }
+
+    const image = try get(handle);
+    const reference_count = images.getColumnPtrAssumeLive(handle, .reference_count);
+
+    reference_count.* +|= 1;
+
+    std.log.info("Image: Acquire '{s}' ({})", .{ image.name.slice(), reference_count.* });
+
+    return handle;
+}
+
+pub fn release(handle: Handle) void {
+    if (eql(handle, default)) {
+        return;
+    }
+
+    if (getIfExists(handle)) |image| {
+        const reference_count = images.getColumnPtrAssumeLive(handle, .reference_count);
+        const auto_release = images.getColumnAssumeLive(handle, .auto_release);
+
+        if (reference_count.* == 0) {
+            std.log.warn("Image: Release with ref count 0!", .{});
+            return;
+        }
+
+        reference_count.* -|= 1;
+
+        if (auto_release and reference_count.* == 0) {
+            remove(handle);
+        } else {
+            std.log.info("Image: Release '{s}' ({})", .{ image.name.slice(), reference_count.* });
+        }
+    } else {
+        std.log.warn("Image: Release invalid handle!", .{});
+    }
+}
+
+pub inline fn eql(left: Handle, right: Handle) bool {
+    return left.id == right.id;
+}
+
+pub inline fn isNilOrDefault(handle: Handle) bool {
+    return eql(handle, Handle.nil) or eql(handle, default);
+}
+
+pub inline fn exists(handle: Handle) bool {
+    return images.isLiveHandle(handle);
+}
+
+pub inline fn get(handle: Handle) !*Image {
+    return try images.getColumnPtr(handle, .image);
+}
+
+pub inline fn getIfExists(handle: Handle) ?*Image {
+    return images.getColumnPtrIfLive(handle, .image);
+}
+
+pub inline fn getOrDefault(handle: Handle) *Image {
+    return images.getColumnPtrIfLive(handle, .image) //
+    orelse images.getColumnPtrAssumeLive(default, .image);
+}
+
+pub fn remove(handle: Handle) void {
+    if (getIfExists(handle)) |image| {
+        std.log.info("Image: Remove '{s}'", .{image.name.slice()});
+
+        _ = lookup.remove(image.name.slice());
+        images.removeAssumeLive(handle);
+
+        image.destroy();
     }
 }
 
