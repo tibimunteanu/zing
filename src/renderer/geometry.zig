@@ -378,7 +378,7 @@ fn destroy(self: *Geometry) void {
         Material.release(self.material);
     }
 
-    Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
+    Renderer.waitIdle();
 
     Renderer.vertex_buffer.free(self.vertex_buffer_offset, self.vertex_count * self.vertex_size) catch unreachable;
 

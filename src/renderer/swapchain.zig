@@ -124,7 +124,7 @@ pub fn getCurrentImage(self: *const Swapchain) *const SwapchainImage {
     return &self.images.constSlice()[self.image_index];
 }
 
-pub fn waitForAllFences(self: *const Swapchain) !void {
+pub fn waitForAllFences(self: *const Swapchain) void {
     for (self.images.constSlice()) |image| {
         image.waitForFrameFence(.{}) catch {};
     }

@@ -331,7 +331,7 @@ pub fn init(ally: Allocator, window: glfw.Window) !void {
 }
 
 pub fn deinit() void {
-    device_api.deviceWaitIdle(device) catch {};
+    waitIdle();
 
     deinitCommandBuffers();
     device_api.destroyCommandPool(device, graphics_command_pool, null);
@@ -374,8 +374,8 @@ pub fn onResized(new_desired_extent: glfw.Window.Size) void {
     desired_extent_generation += 1;
 }
 
-pub fn waitIdle() !void {
-    try swapchain.waitForAllFences();
+pub fn waitIdle() void {
+    device_api.deviceWaitIdle(device) catch {};
 }
 
 pub fn getCurrentCommandBuffer() *const CommandBuffer {
@@ -770,7 +770,7 @@ fn reinitSwapchainFramebuffersAndCmdBuffers() !void {
         return;
     }
 
-    try device_api.deviceWaitIdle(device);
+    waitIdle();
 
     try swapchain.reinit();
     errdefer swapchain.deinit();

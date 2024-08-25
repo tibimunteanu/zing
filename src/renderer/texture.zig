@@ -249,7 +249,7 @@ fn create(config: Config) !Texture {
 }
 
 fn destroy(self: *Texture) void {
-    Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
+    Renderer.waitIdle();
 
     Renderer.device_api.destroySampler(Renderer.device, self.sampler, null);
 

@@ -102,6 +102,8 @@ pub const Uniform = struct {
     size: u32,
     offset: u32,
 
+    pub const Handle = u8;
+
     pub const DataType = enum(u8) {
         int8,
         uint8,
@@ -155,14 +157,12 @@ pub const InstancePool = pool.Pool(10, 22, InstanceState, struct {
 });
 pub const InstanceHandle = InstancePool.Handle;
 
-pub const UniformHandle = u8;
-
 name: Array(u8, 256),
 
 attributes: std.ArrayList(Attribute),
 
 uniforms: std.ArrayList(Uniform),
-uniform_lookup: std.StringHashMap(UniformHandle),
+uniform_lookup: std.StringHashMap(Uniform.Handle),
 
 global_scope: ScopeState,
 instance_scope: ScopeState,
@@ -359,13 +359,13 @@ pub fn createInstance(handle: Handle) !InstanceHandle {
             shader.descriptor_pool,
             instance_state.descriptor_sets.len,
             instance_state.descriptor_sets.slice().ptr,
-        ) catch {};
+        ) catch unreachable;
         instance_state.descriptor_sets.len = 0;
     }
 
     // allocate instance ubo range
     instance_state.ubo_offset = try shader.ubo.alloc(shader.instance_scope.stride);
-    errdefer shader.ubo.free(instance_state.ubo_offset, shader.instance_scope.stride) catch {};
+    errdefer shader.ubo.free(instance_state.ubo_offset, shader.instance_scope.stride) catch unreachable;
 
     // clear textures to default texture handle
     try instance_state.textures.resize(0);
@@ -384,14 +384,14 @@ pub fn destroyInstance(handle: Handle, instance_handle: InstanceHandle) void {
         if (shader.instance_state_pool.getColumnPtrIfLive(instance_handle, .instance_state)) |instance_state| {
             shader.instance_state_pool.removeAssumeLive(instance_handle);
 
-            shader.ubo.free(instance_state.ubo_offset, shader.instance_scope.stride) catch {};
+            shader.ubo.free(instance_state.ubo_offset, shader.instance_scope.stride) catch unreachable;
 
             Renderer.device_api.freeDescriptorSets(
                 Renderer.device,
                 shader.descriptor_pool,
                 instance_state.descriptor_sets.len,
                 instance_state.descriptor_sets.slice().ptr,
-            ) catch {};
+            ) catch unreachable;
             instance_state.descriptor_sets.len = 0;
 
             instance_state.* = undefined;
@@ -430,7 +430,7 @@ pub fn bindLocal(handle: Handle) !void {
     shader.bound_instance = InstanceHandle.nil;
 }
 
-pub fn getUniformHandle(handle: Handle, name: []const u8) !UniformHandle {
+pub fn getUniformHandle(handle: Handle, name: []const u8) !Uniform.Handle {
     var shader = try get(handle);
 
     return shader.uniform_lookup.get(name) orelse error.UniformNotFound;
@@ -439,7 +439,7 @@ pub fn getUniformHandle(handle: Handle, name: []const u8) !UniformHandle {
 pub fn setUniform(handle: Handle, uniform: anytype, value: anytype) !void {
     var shader = try get(handle);
 
-    const uniform_handle = if (@TypeOf(uniform) == UniformHandle)
+    const uniform_handle = if (@TypeOf(uniform) == Uniform.Handle)
         uniform
     else if (@typeInfo(@TypeOf(uniform)) == .Pointer and std.meta.Elem(@TypeOf(uniform)) == u8)
         try getUniformHandle(handle, uniform)
@@ -704,7 +704,7 @@ fn create(shader_config: Config) !Shader {
     try self.addAttributes(shader_config.attributes);
 
     self.uniforms = try std.ArrayList(Uniform).initCapacity(allocator, 8);
-    self.uniform_lookup = std.StringHashMap(UniformHandle).init(allocator);
+    self.uniform_lookup = std.StringHashMap(Uniform.Handle).init(allocator);
 
     // NOTE: this also sets scope states
     try self.addUniforms(shader_config.uniforms);
@@ -836,21 +836,6 @@ fn create(shader_config: Config) !Shader {
         .offset = 0,
         .size = 128,
     };
-
-    // NOTE: we don't need to push individual ranges because we map the whole 128 bytes
-    // var push_constant_ranges = try Array(vk.PushConstantRange, 32).init(0);
-    // var push_constant_offset: u32 = 0;
-    // for (self.uniforms.items) |uniform| {
-    //     if (uniform.scope == .local) {
-    //         const uniform_aligned_size = std.mem.alignForward(u32, uniform.size, 4);
-    //         try push_constant_ranges.append(vk.PushConstantRange{
-    //             .stage_flags = .{ .vertex_bit = true, .fragment_bit = true },
-    //             .offset = push_constant_offset,
-    //             .size = uniform_aligned_size,
-    //         });
-    //         push_constant_offset += uniform_aligned_size;
-    //     }
-    // }
 
     // create pipeline layout
     self.pipeline_layout = try Renderer.device_api.createPipelineLayout(Renderer.device, &.{
@@ -1052,7 +1037,7 @@ fn destroy(self: *Shader) void {
             self.descriptor_pool,
             self.global_state.descriptor_sets.len,
             self.global_state.descriptor_sets.slice().ptr,
-        ) catch {};
+        ) catch unreachable;
         self.global_state.descriptor_sets.len = 0;
     }
 
@@ -1129,7 +1114,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
             .local => &self.local_scope,
         };
 
-        const uniform_handle: UniformHandle = @truncate(self.uniforms.items.len);
+        const uniform_handle: Uniform.Handle = @truncate(self.uniforms.items.len);
         const uniform_data_type = try Uniform.DataType.parse(uniform_config.data_type);
         const uniform_size = uniform_data_type.getSize();
         const is_sampler = uniform_data_type == .sampler;
@@ -1142,6 +1127,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
             .offset = if (is_sampler) scope_config.uniform_sampler_count else scope_config.stride,
         });
 
+        // NOTE: dupe the name as pointers inside ArrayList are not stable
         try self.uniform_lookup.put(try allocator.dupe(u8, uniform_config.name), uniform_handle);
 
         if (is_sampler) {

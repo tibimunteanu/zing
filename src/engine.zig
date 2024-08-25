@@ -161,7 +161,7 @@ pub fn run() !void {
         glfw.pollEvents();
     }
 
-    try Renderer.waitIdle();
+    Renderer.waitIdle();
 }
 
 // utils

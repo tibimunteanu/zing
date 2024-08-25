@@ -384,7 +384,7 @@ pub fn create(
 }
 
 pub fn destroy(self: *Image) void {
-    Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
+    Renderer.waitIdle();
 
     if (self.view != .null_handle) {
         Renderer.device_api.destroyImageView(Renderer.device, self.view, null);
