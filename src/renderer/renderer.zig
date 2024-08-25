@@ -194,9 +194,6 @@ pub var ui_render_pass: RenderPass = undefined;
 pub var vertex_buffer: Buffer = undefined;
 pub var index_buffer: Buffer = undefined;
 
-// TODO: remove this
-pub var geometries: [geometry_max_count]Geometry.Data = undefined;
-
 // TODO: camera system
 pub var world_projection: math.Mat = undefined;
 pub var world_view: math.Mat = undefined;
@@ -318,12 +315,6 @@ pub fn init(ally: Allocator, window: glfw.Window) !void {
         .{ .managed = true, .bind_on_create = true },
     );
     errdefer index_buffer.deinit();
-
-    // reset geometry storage
-    for (&geometries) |*geometry| {
-        geometry.*.id = null;
-        geometry.*.generation = null;
-    }
 
     world_view = math.inverse(math.translation(0.0, 0.0, -30.0));
     ui_view = math.inverse(math.identity());
@@ -521,27 +512,25 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
     try Shader.setUniform(material.shader, "model", data.model);
     try Shader.applyLocal(material.shader);
 
-    const buffer_data = geometries[geometry.internal_id.?];
-
     device_api.cmdBindVertexBuffers(
         command_buffer.handle,
         0,
         1,
         @ptrCast(&vertex_buffer.handle),
-        @ptrCast(&buffer_data.vertex_buffer_offset),
+        @ptrCast(&geometry.vertex_buffer_offset),
     );
 
-    if (buffer_data.index_count > 0) {
+    if (geometry.index_count > 0) {
         device_api.cmdBindIndexBuffer(
             command_buffer.handle,
             index_buffer.handle,
-            buffer_data.index_buffer_offset,
+            geometry.index_buffer_offset,
             .uint32,
         );
 
-        device_api.cmdDrawIndexed(command_buffer.handle, buffer_data.index_count, 1, 0, 0, 0);
+        device_api.cmdDrawIndexed(command_buffer.handle, geometry.index_count, 1, 0, 0, 0);
     } else {
-        device_api.cmdDraw(command_buffer.handle, buffer_data.vertex_count, 1, 0, 0);
+        device_api.cmdDraw(command_buffer.handle, geometry.vertex_count, 1, 0, 0);
     }
 }
 

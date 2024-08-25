@@ -14,18 +14,6 @@ const Array = std.BoundedArray;
 // TODO: load obj and gltf
 const Geometry = @This();
 
-// TODO: why don't we just store these in the actual geometry?
-pub const Data = struct {
-    id: ?u32,
-    generation: ?u32,
-    vertex_count: u32,
-    vertex_size: u64,
-    vertex_buffer_offset: u64,
-    index_count: u32,
-    index_size: u64,
-    index_buffer_offset: u64,
-};
-
 const GeometryPool = pool.Pool(16, 16, Geometry, struct {
     geometry: Geometry,
     reference_count: usize,
@@ -180,7 +168,12 @@ var geometries: GeometryPool = undefined;
 name: Array(u8, 256),
 material: Material.Handle,
 generation: ?u32,
-internal_id: ?u32,
+vertex_count: u32,
+vertex_size: u64,
+vertex_buffer_offset: u64,
+index_count: u32,
+index_size: u64,
+index_buffer_offset: u64,
 
 pub fn initSystem(ally: Allocator) !void {
     allocator = ally;
@@ -357,43 +350,25 @@ fn createDefault() !void {
 
 fn create(config: anytype) !Geometry {
     var self: Geometry = undefined;
-    self.name = try Array(u8, 256).fromSlice(config.name);
-    self.generation = 0;
-    self.internal_id = null;
 
     if (config.vertices.len == 0) {
         return error.VerticesCannotBeEmpty;
     }
 
+    self.name = try Array(u8, 256).fromSlice(config.name);
     self.material = Material.acquire(config.material_name) catch Material.default;
 
-    var internal_data: ?*Data = null;
+    self.vertex_count = @truncate(config.vertices.len);
+    self.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(config.vertices)));
+    self.vertex_buffer_offset = try Renderer.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(config.vertices));
 
-    for (&Renderer.geometries, 0..) |*slot, i| {
-        if (slot.id == null) {
-            const id: u32 = @truncate(i);
-            self.internal_id = id;
-            slot.*.id = id;
-            internal_data = slot;
-            break;
-        }
+    if (config.indices.len > 0) {
+        self.index_count = @truncate(config.indices.len);
+        self.index_size = @sizeOf(std.meta.Elem(@TypeOf(config.indices)));
+        self.index_buffer_offset = try Renderer.index_buffer.allocAndUpload(std.mem.sliceAsBytes(config.indices));
     }
 
-    if (internal_data) |data| {
-        data.vertex_count = @truncate(config.vertices.len);
-        data.vertex_size = @sizeOf(std.meta.Elem(@TypeOf(config.vertices)));
-        data.vertex_buffer_offset = try Renderer.vertex_buffer.allocAndUpload(std.mem.sliceAsBytes(config.vertices));
-
-        if (config.indices.len > 0) {
-            data.index_count = @truncate(config.indices.len);
-            data.index_size = @sizeOf(std.meta.Elem(@TypeOf(config.indices)));
-            data.index_buffer_offset = try Renderer.index_buffer.allocAndUpload(std.mem.sliceAsBytes(config.indices));
-        }
-
-        data.generation = if (self.generation) |g| g +% 1 else 0;
-    } else {
-        return error.FaildToReserveInternalData;
-    }
+    self.generation = 0;
 
     return self;
 }
@@ -403,26 +378,12 @@ fn destroy(self: *Geometry) void {
         Material.release(self.material);
     }
 
-    if (self.internal_id != null) {
-        Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
+    Renderer.device_api.deviceWaitIdle(Renderer.device) catch {};
 
-        const internal_data = &Renderer.geometries[self.internal_id.?];
+    Renderer.vertex_buffer.free(self.vertex_buffer_offset, self.vertex_count * self.vertex_size) catch unreachable;
 
-        Renderer.vertex_buffer.free(
-            internal_data.vertex_buffer_offset,
-            internal_data.vertex_size,
-        ) catch unreachable;
-
-        if (internal_data.index_size > 0) {
-            Renderer.index_buffer.free(
-                internal_data.index_buffer_offset,
-                internal_data.index_size,
-            ) catch unreachable;
-        }
-
-        internal_data.* = undefined;
-        internal_data.id = null;
-        internal_data.generation = null;
+    if (self.index_size > 0) {
+        Renderer.index_buffer.free(self.index_buffer_offset, self.index_count * self.index_size) catch unreachable;
     }
 
     self.* = undefined;
