@@ -255,6 +255,7 @@ fn createDefault() !void {
     std.log.info("Image: Create '{s}'", .{default_name});
 }
 
+// TODO: make swapchain use acquire and release and make these private
 pub fn create(
     config: Config,
     width: u32,

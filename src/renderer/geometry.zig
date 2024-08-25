@@ -14,6 +14,7 @@ const Array = std.BoundedArray;
 // TODO: load obj and gltf
 const Geometry = @This();
 
+// TODO: why don't we just store these in the actual geometry?
 pub const Data = struct {
     id: ?u32,
     generation: ?u32,

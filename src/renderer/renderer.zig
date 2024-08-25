@@ -528,7 +528,7 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
         0,
         1,
         @ptrCast(&vertex_buffer.handle),
-        @ptrCast(&[_]u64{buffer_data.vertex_buffer_offset}),
+        @ptrCast(&buffer_data.vertex_buffer_offset),
     );
 
     if (buffer_data.index_count > 0) {
