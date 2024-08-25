@@ -466,19 +466,19 @@ pub fn setUniform(handle: Handle, uniform: anytype, value: anytype) !void {
         }
     } else {
         switch (p_uniform.scope) {
-            .local => {
-                const local_offset_ptr: [*]u8 = @ptrFromInt(
-                    @intFromPtr(shader.local_push_constant_buffer.slice().ptr) + p_uniform.offset,
-                );
-
-                @memcpy(local_offset_ptr, &std.mem.toBytes(value));
-            },
             .global, .instance => {
                 const ubo_offset_ptr = @as([*]u8, @ptrFromInt(
                     @intFromPtr(shader.ubo_ptr) + shader.bound_ubo_offset + p_uniform.offset,
                 ));
 
                 @memcpy(ubo_offset_ptr, &std.mem.toBytes(value));
+            },
+            .local => {
+                const local_offset_ptr: [*]u8 = @ptrFromInt(
+                    @intFromPtr(shader.local_push_constant_buffer.slice().ptr) + p_uniform.offset,
+                );
+
+                @memcpy(local_offset_ptr, &std.mem.toBytes(value));
             },
         }
     }
@@ -495,6 +495,7 @@ pub fn applyGlobal(handle: Handle) !void {
 
     var dst_binding: u32 = 0;
 
+    // TODO: this buffer_info never changes so it can be set just once
     // descriptor 0 - uniform buffer
     const buffer_info = vk.DescriptorBufferInfo{
         .buffer = shader.ubo.handle,
@@ -515,6 +516,7 @@ pub fn applyGlobal(handle: Handle) !void {
 
     dst_binding += 1;
 
+    // TODO: only do descriptor writes for samplers that actually changed
     // descriptor 1 - samplers
     if (shader.global_scope.uniform_sampler_count > 0) {
         var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
@@ -577,6 +579,7 @@ pub fn applyInstance(handle: Handle) !void {
 
     var dst_binding: u32 = 0;
 
+    // TODO: this buffer_info never changes so it can be set just once per instance
     // descriptor 0 - uniform buffer
     const buffer_info = vk.DescriptorBufferInfo{
         .buffer = shader.ubo.handle,
@@ -597,6 +600,7 @@ pub fn applyInstance(handle: Handle) !void {
 
     dst_binding += 1;
 
+    // TODO: only do descriptor writes for samplers that actually changed
     // descriptor 1 - samplers
     if (shader.instance_scope.uniform_sampler_count > 0) {
         var image_infos = try Array(vk.DescriptorImageInfo, config.shader_max_instance_textures).init(0);
