@@ -12,14 +12,24 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    const zmath_dep = b.dependency("zmath", .{ .enable_cross_platform_determinism = true });
+    const zmath_dep = b.dependency("zmath", .{
+        .enable_cross_platform_determinism = true,
+        .target = target,
+        .optimize = optimize,
+    });
     exe.root_module.addImport("zmath", zmath_dep.module("root"));
 
-    const zstbi_dep = b.dependency("zstbi", .{});
+    const zstbi_dep = b.dependency("zstbi", .{
+        .target = target,
+        .optimize = optimize,
+    });
     exe.root_module.addImport("zstbi", zstbi_dep.module("root"));
     exe.linkLibrary(zstbi_dep.artifact("zstbi"));
 
-    const zpool_dep = b.dependency("zpool", .{});
+    const zpool_dep = b.dependency("zpool", .{
+        .target = target,
+        .optimize = optimize,
+    });
     exe.root_module.addImport("zpool", zpool_dep.module("root"));
 
     const glfw_dep = b.dependency("mach_glfw", .{

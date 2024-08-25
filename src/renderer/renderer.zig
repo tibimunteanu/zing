@@ -5,7 +5,6 @@ const math = @import("zmath");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 
-const Engine = @import("../engine.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
 const RenderPass = @import("renderpass.zig");
@@ -14,9 +13,6 @@ const Swapchain = @import("swapchain.zig");
 const Material = @import("material.zig");
 const Geometry = @import("geometry.zig");
 const Shader = @import("shader.zig");
-
-const resources_image = @import("../resources/image_resource.zig");
-const resources_material = @import("../resources/material_resource.zig");
 
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;

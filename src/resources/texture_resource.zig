@@ -1,5 +1,6 @@
 const std = @import("std");
 const stbi = @import("zstbi");
+
 const Texture = @import("../renderer/texture.zig");
 
 const Allocator = std.mem.Allocator;

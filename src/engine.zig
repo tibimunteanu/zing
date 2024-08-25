@@ -2,15 +2,14 @@ const std = @import("std");
 const builtin = @import("builtin");
 const math = @import("zmath");
 const glfw = @import("glfw");
-
 const utils = @import("utils.zig");
+
 const Renderer = @import("renderer/renderer.zig");
 const Image = @import("renderer/image.zig");
 const Texture = @import("renderer/texture.zig");
 const Material = @import("renderer/material.zig");
 const Geometry = @import("renderer/geometry.zig");
 const Shader = @import("renderer/shader.zig");
-const ShaderResource = @import("resources/shader_resource.zig");
 
 const RenderPacket = Renderer.RenderPacket;
 const GeometryRenderData = Renderer.GeometryRenderData;
