@@ -5,7 +5,7 @@ const vk = @import("vk.zig");
 const Renderer = @import("renderer.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const ImageResource = @import("../resources/image_resource.zig");
+const ImageLoader = @import("../loaders/image_loader.zig");
 
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
@@ -71,7 +71,7 @@ pub fn acquire(config: Config) !Handle {
     if (lookup.get(config.name)) |handle| {
         return acquireExisting(handle);
     } else {
-        var resource = try ImageResource.init(allocator, config.name);
+        var resource = try ImageLoader.init(allocator, config.name);
         defer resource.deinit();
 
         var image = try create(
@@ -102,7 +102,7 @@ pub fn acquire(config: Config) !Handle {
 pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
         if (getIfExists(handle)) |image| {
-            var resource = try ImageResource.init(allocator, name);
+            var resource = try ImageLoader.init(allocator, name);
             defer resource.deinit();
 
             var new_image = try create(

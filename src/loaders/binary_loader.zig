@@ -3,13 +3,13 @@ const config = @import("../config.zig");
 
 const Allocator = std.mem.Allocator;
 
-const BinaryResource = @This();
+const BinaryLoader = @This();
 
 allocator: Allocator,
 full_path: []const u8,
 bytes: []u8,
 
-pub fn init(allocator: Allocator, path: []const u8) !BinaryResource {
+pub fn init(allocator: Allocator, path: []const u8) !BinaryLoader {
     const path_format = "assets/{s}";
 
     var file_path_buf: [config.max_path_length]u8 = undefined;
@@ -29,7 +29,7 @@ pub fn init(allocator: Allocator, path: []const u8) !BinaryResource {
     };
 }
 
-pub fn deinit(self: *BinaryResource) void {
+pub fn deinit(self: *BinaryLoader) void {
     self.allocator.free(self.full_path);
     self.allocator.free(self.bytes);
     self.* = undefined;

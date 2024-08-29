@@ -4,7 +4,7 @@ const vk = @import("vk.zig");
 
 const Renderer = @import("renderer.zig");
 const Image = @import("image.zig");
-const TextureResource = @import("../resources/texture_resource.zig");
+const TextureLoader = @import("../loaders/texture_loader.zig");
 
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
@@ -67,7 +67,7 @@ pub fn acquire(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
         return acquireExisting(handle);
     } else {
-        var resource = try TextureResource.init(allocator, name);
+        var resource = try TextureLoader.init(allocator, name);
         defer resource.deinit();
 
         var texture = try create(resource.config.value);
@@ -92,7 +92,7 @@ pub fn acquire(name: []const u8) !Handle {
 pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
         if (handle.getIfExists()) |texture| {
-            var resource = try TextureResource.init(allocator, name);
+            var resource = try TextureLoader.init(allocator, name);
             defer resource.deinit();
 
             var new_texture = try create(resource.config.value);

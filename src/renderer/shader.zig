@@ -5,8 +5,8 @@ const config = @import("../config.zig");
 
 const Renderer = @import("renderer.zig");
 const Buffer = @import("buffer.zig");
-const BinaryResource = @import("../resources/binary_resource.zig");
-const ShaderResource = @import("../resources/shader_resource.zig");
+const BinaryLoader = @import("../loaders/binary_loader.zig");
+const ShaderLoader = @import("../loaders/shader_loader.zig");
 const Texture = @import("texture.zig");
 const Image = @import("image.zig");
 
@@ -213,7 +213,7 @@ pub fn acquire(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
         return acquireExisting(handle);
     } else {
-        var resource = try ShaderResource.init(allocator, name);
+        var resource = try ShaderLoader.init(allocator, name);
         defer resource.deinit();
 
         var shader = try create(resource.config.value);
@@ -444,7 +444,7 @@ pub fn setUniform(handle: Handle, uniform: anytype, value: anytype) !void {
     else if (@typeInfo(@TypeOf(uniform)) == .Pointer and std.meta.Elem(@TypeOf(uniform)) == u8)
         try getUniformHandle(handle, uniform)
     else
-        unreachable;
+        return error.InvalidUniformType;
 
     const p_uniform = &shader.uniforms.items[uniform_handle];
 
@@ -1152,7 +1152,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
 }
 
 fn createShaderModule(path: []const u8) !vk.ShaderModule {
-    var binary_resource = try BinaryResource.init(allocator, path);
+    var binary_resource = try BinaryLoader.init(allocator, path);
     defer binary_resource.deinit();
 
     return try Renderer.device_api.createShaderModule(

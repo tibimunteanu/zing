@@ -5,14 +5,14 @@ const Texture = @import("../renderer/texture.zig");
 
 const Allocator = std.mem.Allocator;
 
-const TextureResource = @This();
+const TextureLoader = @This();
 
 allocator: Allocator,
 name: []const u8,
 full_path: []const u8,
 config: std.json.Parsed(Texture.Config),
 
-pub fn init(allocator: Allocator, name: []const u8) !TextureResource {
+pub fn init(allocator: Allocator, name: []const u8) !TextureLoader {
     const path_format = "assets/textures/{s}.texture.json";
 
     const file_path = try std.fmt.allocPrintZ(allocator, path_format, .{name});
@@ -44,7 +44,7 @@ pub fn init(allocator: Allocator, name: []const u8) !TextureResource {
     };
 }
 
-pub fn deinit(self: *TextureResource) void {
+pub fn deinit(self: *TextureLoader) void {
     self.allocator.free(self.name);
     self.allocator.free(self.full_path);
     self.config.deinit();
