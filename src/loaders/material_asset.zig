@@ -4,14 +4,14 @@ const Material = @import("../renderer/material.zig");
 
 const Allocator = std.mem.Allocator;
 
-const MaterialLoader = @This();
+const MaterialAsset = @This();
 
 allocator: Allocator,
 name: []const u8,
 full_path: []const u8,
 config: std.json.Parsed(Material.Config),
 
-pub fn init(allocator: Allocator, name: []const u8) !MaterialLoader {
+pub fn init(allocator: Allocator, name: []const u8) !MaterialAsset {
     const path_format = "assets/materials/{s}.mat.json";
 
     const file_path = try std.fmt.allocPrintZ(allocator, path_format, .{name});
@@ -43,7 +43,7 @@ pub fn init(allocator: Allocator, name: []const u8) !MaterialLoader {
     };
 }
 
-pub fn deinit(self: *MaterialLoader) void {
+pub fn deinit(self: *MaterialAsset) void {
     self.allocator.free(self.name);
     self.allocator.free(self.full_path);
     self.config.deinit();

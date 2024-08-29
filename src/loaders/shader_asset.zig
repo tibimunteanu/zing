@@ -4,14 +4,14 @@ const Shader = @import("../renderer/shader.zig");
 
 const Allocator = std.mem.Allocator;
 
-const ShaderLoader = @This();
+const ShaderAsset = @This();
 
 allocator: Allocator,
 name: []const u8,
 full_path: []const u8,
 config: std.json.Parsed(Shader.Config),
 
-pub fn init(allocator: Allocator, name: []const u8) !ShaderLoader {
+pub fn init(allocator: Allocator, name: []const u8) !ShaderAsset {
     const path_format = "assets/shaders/{s}.shader.json";
 
     const file_path = try std.fmt.allocPrintZ(allocator, path_format, .{name});
@@ -43,7 +43,7 @@ pub fn init(allocator: Allocator, name: []const u8) !ShaderLoader {
     };
 }
 
-pub fn deinit(self: *ShaderLoader) void {
+pub fn deinit(self: *ShaderAsset) void {
     self.allocator.free(self.name);
     self.allocator.free(self.full_path);
     self.config.deinit();

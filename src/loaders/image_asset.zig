@@ -3,14 +3,14 @@ const stbi = @import("zstbi");
 
 const Allocator = std.mem.Allocator;
 
-const ImageLoader = @This();
+const ImageAsset = @This();
 
 allocator: Allocator,
 name: []const u8,
 full_path: []const u8,
 image: stbi.Image,
 
-pub fn init(allocator: Allocator, name: []const u8) !ImageLoader {
+pub fn init(allocator: Allocator, name: []const u8) !ImageAsset {
     stbi.init(allocator);
 
     const path_format = "assets/textures/{s}{s}";
@@ -31,7 +31,7 @@ pub fn init(allocator: Allocator, name: []const u8) !ImageLoader {
     };
 }
 
-pub fn deinit(self: *ImageLoader) void {
+pub fn deinit(self: *ImageAsset) void {
     self.allocator.free(self.name);
     self.allocator.free(self.full_path);
     self.image.deinit();

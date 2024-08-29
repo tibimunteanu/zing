@@ -5,8 +5,8 @@ const config = @import("../config.zig");
 
 const Renderer = @import("renderer.zig");
 const Buffer = @import("buffer.zig");
-const BinaryLoader = @import("../loaders/binary_loader.zig");
-const ShaderLoader = @import("../loaders/shader_loader.zig");
+const BinaryAsset = @import("../loaders/binary_asset.zig");
+const ShaderAsset = @import("../loaders/shader_asset.zig");
 const Texture = @import("texture.zig");
 const Image = @import("image.zig");
 
@@ -213,16 +213,16 @@ pub fn acquire(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
         return acquireExisting(handle);
     } else {
-        var resource = try ShaderLoader.init(allocator, name);
-        defer resource.deinit();
+        var asset = try ShaderAsset.init(allocator, name);
+        defer asset.deinit();
 
-        var shader = try create(resource.config.value);
+        var shader = try create(asset.config.value);
         errdefer shader.destroy();
 
         const handle = try shaders.add(.{
             .shader = shader,
             .reference_count = 1,
-            .auto_release = resource.config.value.auto_release,
+            .auto_release = asset.config.value.auto_release,
         });
         errdefer shaders.removeAssumeLive(handle);
 
@@ -1152,15 +1152,15 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
 }
 
 fn createShaderModule(path: []const u8) !vk.ShaderModule {
-    var binary_resource = try BinaryLoader.init(allocator, path);
-    defer binary_resource.deinit();
+    var binary_asset = try BinaryAsset.init(allocator, path);
+    defer binary_asset.deinit();
 
     return try Renderer.device_api.createShaderModule(
         Renderer.device,
         &vk.ShaderModuleCreateInfo{
             .flags = .{},
-            .code_size = binary_resource.bytes.len,
-            .p_code = @ptrCast(@alignCast(binary_resource.bytes.ptr)),
+            .code_size = binary_asset.bytes.len,
+            .p_code = @ptrCast(@alignCast(binary_asset.bytes.ptr)),
         },
         null,
     );

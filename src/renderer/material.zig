@@ -4,7 +4,7 @@ const math = @import("zmath");
 
 const Texture = @import("texture.zig");
 const Shader = @import("shader.zig");
-const MaterialLoader = @import("../loaders/material_loader.zig");
+const MaterialAsset = @import("../loaders/material_asset.zig");
 
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
@@ -73,16 +73,16 @@ pub fn acquire(name: []const u8) !Handle {
     if (lookup.get(name)) |handle| {
         return acquireExisting(handle);
     } else {
-        var resource = try MaterialLoader.init(allocator, name);
-        defer resource.deinit();
+        var asset = try MaterialAsset.init(allocator, name);
+        defer asset.deinit();
 
-        var material = try create(resource.config.value);
+        var material = try create(asset.config.value);
         errdefer material.destroy();
 
         const handle = try materials.add(.{
             .material = material,
             .reference_count = 1,
-            .auto_release = resource.config.value.auto_release,
+            .auto_release = asset.config.value.auto_release,
         });
         errdefer materials.removeAssumeLive(handle);
 
@@ -99,7 +99,7 @@ pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
         var material = try handle.get();
 
-        var resource = try MaterialLoader.init(allocator, name);
+        var resource = try MaterialAsset.init(allocator, name);
         defer resource.deinit();
 
         var new_material = try create(resource.config);

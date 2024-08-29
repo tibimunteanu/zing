@@ -5,7 +5,7 @@ const vk = @import("vk.zig");
 const Renderer = @import("renderer.zig");
 const Buffer = @import("buffer.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const ImageLoader = @import("../loaders/image_loader.zig");
+const ImageAsset = @import("../loaders/image_asset.zig");
 
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
@@ -71,15 +71,15 @@ pub fn acquire(config: Config) !Handle {
     if (lookup.get(config.name)) |handle| {
         return acquireExisting(handle);
     } else {
-        var resource = try ImageLoader.init(allocator, config.name);
-        defer resource.deinit();
+        var asset = try ImageAsset.init(allocator, config.name);
+        defer asset.deinit();
 
         var image = try create(
             config,
-            resource.image.width,
-            resource.image.height,
-            resource.image.num_components,
-            resource.image.data,
+            asset.image.width,
+            asset.image.height,
+            asset.image.num_components,
+            asset.image.data,
         );
         errdefer image.destroy();
 
@@ -102,7 +102,7 @@ pub fn acquire(config: Config) !Handle {
 pub fn reload(name: []const u8) !void {
     if (lookup.get(name)) |handle| {
         if (getIfExists(handle)) |image| {
-            var resource = try ImageLoader.init(allocator, name);
+            var resource = try ImageAsset.init(allocator, name);
             defer resource.deinit();
 
             var new_image = try create(
