@@ -1152,15 +1152,15 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
 }
 
 fn createShaderModule(path: []const u8) !vk.ShaderModule {
-    var binary_asset = try BinaryAsset.init(allocator, path);
-    defer binary_asset.deinit();
+    var asset = try BinaryAsset.init(allocator, path);
+    defer asset.deinit();
 
     return try Renderer.device_api.createShaderModule(
         Renderer.device,
         &vk.ShaderModuleCreateInfo{
             .flags = .{},
-            .code_size = binary_asset.bytes.len,
-            .p_code = @ptrCast(@alignCast(binary_asset.bytes.ptr)),
+            .code_size = asset.bytes.len,
+            .p_code = @ptrCast(@alignCast(asset.bytes.ptr)),
         },
         null,
     );
