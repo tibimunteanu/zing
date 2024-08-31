@@ -141,7 +141,7 @@ pub const ScopeState = struct {
     size: u32 = 0,
     stride: u32 = 0,
     binding_count: u32 = 0,
-    uniform_count: u32 = 0,
+    uniform_count: u16 = 0,
     uniform_sampler_count: u16 = 0,
 };
 
@@ -960,9 +960,17 @@ fn create(shader_config: Config) !Shader {
     );
 
     // create descriptor pool
+    // TODO: only create sizes if the shader has instances
     const descriptor_pool_sizes = [_]vk.DescriptorPoolSize{
-        vk.DescriptorPoolSize{ .type = .uniform_buffer, .descriptor_count = 1024 },
-        vk.DescriptorPoolSize{ .type = .combined_image_sampler, .descriptor_count = 4096 },
+        vk.DescriptorPoolSize{
+            .type = .uniform_buffer,
+            .descriptor_count = Renderer.swapchain.images.len * (1 + config.shader_max_instances),
+        },
+
+        vk.DescriptorPoolSize{
+            .type = .combined_image_sampler,
+            .descriptor_count = Renderer.swapchain.images.len * (self.global_scope.uniform_sampler_count + config.shader_max_instances * self.instance_scope.uniform_sampler_count),
+        },
     };
 
     self.descriptor_pool = try Renderer.device_api.createDescriptorPool(
