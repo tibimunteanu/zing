@@ -215,7 +215,7 @@ pub fn init(ally: Allocator, window: glfw.Window) !void {
     desired_extent_generation = 0;
 
     // load base api
-    const base_loader = @as(vk.PfnGetInstanceProcAddr, @ptrCast(&glfw.getInstanceProcAddress));
+    const base_loader: vk.PfnGetInstanceProcAddr = @ptrCast(&glfw.getInstanceProcAddress);
     base_api = try BaseAPI.load(base_loader);
 
     // create instance and load instance api
@@ -559,6 +559,7 @@ fn createInstance(app_name: [*:0]const u8) !vk.Instance {
 
     for (optional_instance_extensions) |optional_inst_ext| {
         for (existing_instance_extensions) |existing_inst_ext| {
+            // this covers both 0 terminated strings and string slices
             const len = std.mem.indexOfScalar(u8, &existing_inst_ext.extension_name, 0) //
             orelse existing_inst_ext.extension_name.len;
 

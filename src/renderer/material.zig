@@ -233,12 +233,12 @@ fn create(config: Config) !Material {
 
     self.name = try Array(u8, 256).fromSlice(config.name);
 
-    self.shader = Shader.acquire(config.shader_name) catch Shader.default;
-
     self.properties = try std.ArrayList(Property).initCapacity(allocator, config.properties.len);
     for (config.properties) |prop_config| {
         try self.properties.append(try Property.fromConfig(prop_config));
     }
+
+    self.shader = Shader.acquire(config.shader_name) catch Shader.default;
 
     self.instance_handle = try Shader.createInstance(self.shader);
 
@@ -252,16 +252,16 @@ fn destroy(self: *Material) void {
         Shader.destroyInstance(self.shader, instance_handle);
     }
 
+    if (!Shader.isNilOrDefault(self.shader)) {
+        Shader.release(self.shader);
+    }
+
     for (self.properties.items) |property| {
         if (property.getDataType() == .sampler and !Texture.isNilOrDefault(property.value.sampler)) {
             Texture.release(property.value.sampler);
         }
     }
     self.properties.deinit();
-
-    if (!Shader.isNilOrDefault(self.shader)) {
-        Shader.release(self.shader);
-    }
 
     self.* = undefined;
 }

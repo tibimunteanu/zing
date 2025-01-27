@@ -13,11 +13,12 @@ const Image = @import("image.zig");
 const Allocator = std.mem.Allocator;
 const Array = std.BoundedArray;
 
-// TODO: keep sampler uniforms separate or index lookup
+// TODO: separate bindings for sampler uniforms
 // TODO: different types of samplers like cube and 3D
 // TODO: flags
 // TODO: descriptor pool free list
 // TODO: generation and needs update
+// TODO: parse SPIR-V
 
 const Shader = @This();
 
@@ -668,7 +669,7 @@ pub fn applyLocal(handle: Handle) !void {
 fn create(shader_config: Config) !Shader {
     var self: Shader = undefined;
 
-    // initialize everything so we can only do an errdefer self.deinit();
+    // initialize everything so we can only do an errdefer self.destroy();
     self.attributes.capacity = 0;
 
     self.uniforms.capacity = 0;
@@ -703,11 +704,11 @@ fn create(shader_config: Config) !Shader {
     self.name = try Array(u8, 256).fromSlice(shader_config.name);
 
     // parse attributes and uniforms from config
-    self.attributes = try std.ArrayList(Attribute).initCapacity(allocator, 8);
+    self.attributes = try std.ArrayList(Attribute).initCapacity(allocator, shader_config.attributes.len);
 
     try self.addAttributes(shader_config.attributes);
 
-    self.uniforms = try std.ArrayList(Uniform).initCapacity(allocator, 8);
+    self.uniforms = try std.ArrayList(Uniform).initCapacity(allocator, shader_config.uniforms.len);
     self.uniform_lookup = std.StringHashMap(Uniform.Handle).init(allocator);
 
     // NOTE: this also sets scope states

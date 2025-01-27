@@ -20,17 +20,6 @@ const Allocator = std.mem.Allocator;
 
 const Engine = @This();
 
-// TODO: temporary
-var choice: usize = 2;
-const names = [_][]const u8{
-    "cobblestone",
-    "paving2",
-    "paving",
-};
-var test_geometry = Geometry.Handle.nil;
-var test_ui_geometry = Geometry.Handle.nil;
-// TODO: end temporary
-
 var window: glfw.Window = undefined;
 var last_time: f64 = 0;
 
@@ -76,37 +65,7 @@ pub fn init(allocator: Allocator) !void {
     try Geometry.initSystem(allocator);
     errdefer Geometry.deinitSystem();
 
-    // TODO: temporary
-    var test_plane_config = try Geometry.Config(Vertex3D, u32).initPlane(.{
-        .name = "plane",
-        .material_name = "diffuse",
-        .width = 20,
-        .height = 20,
-        .segment_count_x = 4,
-        .segment_count_y = 4,
-        .tile_x = 2,
-        .tile_y = 2,
-        .auto_release = true,
-    });
-    defer test_plane_config.deinit();
-
-    test_geometry = try Geometry.acquire(test_plane_config);
-
-    var test_ui_plane_config = try Geometry.Config(Vertex2D, u32).initPlane(.{
-        .name = "ui_plane",
-        .material_name = "ui",
-        .width = 512,
-        .height = 512,
-        .segment_count_x = 1,
-        .segment_count_y = 1,
-        .tile_x = 1,
-        .tile_y = 1,
-        .auto_release = true,
-    });
-    defer test_ui_plane_config.deinit();
-
-    test_ui_geometry = try Geometry.acquire(test_ui_plane_config);
-    // TODO: end temporary
+    try tempTest();
 }
 
 pub fn deinit() void {
@@ -250,3 +209,46 @@ fn cameraYaw(amount: f32) void {
 fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
     std.log.err("glfw: {}: {s}\n", .{ error_code, description });
 }
+
+// TODO: temporary
+var choice: usize = 2;
+const names = [_][]const u8{
+    "cobblestone",
+    "paving2",
+    "paving",
+};
+var test_geometry = Geometry.Handle.nil;
+var test_ui_geometry = Geometry.Handle.nil;
+
+fn tempTest() !void {
+    var test_plane_config = try Geometry.Config(Vertex3D, u32).initPlane(.{
+        .name = "plane",
+        .material_name = "diffuse",
+        .width = 20,
+        .height = 20,
+        .segment_count_x = 4,
+        .segment_count_y = 4,
+        .tile_x = 2,
+        .tile_y = 2,
+        .auto_release = true,
+    });
+    defer test_plane_config.deinit();
+
+    test_geometry = try Geometry.acquire(test_plane_config);
+
+    var test_ui_plane_config = try Geometry.Config(Vertex2D, u32).initPlane(.{
+        .name = "ui_plane",
+        .material_name = "ui",
+        .width = 512,
+        .height = 512,
+        .segment_count_x = 1,
+        .segment_count_y = 1,
+        .tile_x = 1,
+        .tile_y = 1,
+        .auto_release = true,
+    });
+    defer test_ui_plane_config.deinit();
+
+    test_ui_geometry = try Geometry.acquire(test_ui_plane_config);
+}
+// TODO: end temporary
