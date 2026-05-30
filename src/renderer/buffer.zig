@@ -3,7 +3,7 @@ const vk = @import("vk.zig");
 
 const Renderer = @import("renderer.zig");
 const CommandBuffer = @import("command_buffer.zig");
-const FreeList = @import("../free_list.zig");
+const FreeList = @import("../data_structures/free_list.zig");
 
 const Allocator = std.mem.Allocator;
 

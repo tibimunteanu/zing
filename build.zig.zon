@@ -1,11 +1,8 @@
 .{
-    .name = "Zing engine",
+    .name = .zing_engine,
     .version = "0.0.1",
+    .fingerprint = 0x988045c5d2be0cab,
     .paths = .{""},
     .dependencies = .{
-        .zmath = .{ .path = "../zig-gamedev/libs/zmath" },
-        .zstbi = .{ .path = "../zig-gamedev/libs/zstbi" },
-        .zpool = .{ .path = "../zig-gamedev/libs/zpool" },
-        .mach_glfw = .{ .path = "../mach-glfw" },
     },
 }

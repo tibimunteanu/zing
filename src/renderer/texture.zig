@@ -1,5 +1,5 @@
 const std = @import("std");
-const pool = @import("zpool");
+const pool = @import("../data_structures/pool/pool.zig");
 const vk = @import("vk.zig");
 
 const Renderer = @import("renderer.zig");
@@ -7,7 +7,7 @@ const Image = @import("image.zig");
 const TextureAsset = @import("../loaders/texture_asset.zig");
 
 const Allocator = std.mem.Allocator;
-const Array = std.BoundedArray;
+const Array = @import("../data_structures/bounded_array.zig").BoundedArray;
 
 const Texture = @This();
 

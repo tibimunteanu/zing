@@ -1,6 +1,6 @@
 const std = @import("std");
-const pool = @import("zpool");
-const math = @import("zmath");
+const pool = @import("../data_structures/pool/pool.zig");
+const math = @import("../math.zig");
 
 const Renderer = @import("renderer.zig");
 const Material = @import("material.zig");
@@ -9,7 +9,7 @@ const Vertex3D = Renderer.Vertex3D;
 const Vertex2D = Renderer.Vertex2D;
 
 const Allocator = std.mem.Allocator;
-const Array = std.BoundedArray;
+const Array = @import("../data_structures/bounded_array.zig").BoundedArray;
 
 // TODO: load obj and gltf
 const Geometry = @This();

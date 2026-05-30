@@ -1,5 +1,6 @@
 const std = @import("std");
 const config = @import("../config.zig");
+const file = @import("file.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -15,11 +16,7 @@ pub fn init(allocator: Allocator, path: []const u8) !BinaryAsset {
     var file_path_buf: [config.max_path_length]u8 = undefined;
     const file_path = try std.fmt.bufPrintZ(&file_path_buf, path_format, .{path});
 
-    const file = try std.fs.cwd().openFile(file_path, .{ .mode = .read_only });
-    defer file.close();
-
-    const stat = try file.stat();
-    const bytes = try file.readToEndAlloc(allocator, stat.size);
+    const bytes = try file.readAlloc(allocator, file_path);
     errdefer allocator.free(bytes);
 
     return .{

@@ -1,5 +1,5 @@
 const std = @import("std");
-const pool = @import("zpool");
+const pool = @import("../data_structures/pool/pool.zig");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 
@@ -11,7 +11,7 @@ const Texture = @import("texture.zig");
 const Image = @import("image.zig");
 
 const Allocator = std.mem.Allocator;
-const Array = std.BoundedArray;
+const Array = @import("../data_structures/bounded_array.zig").BoundedArray;
 
 // TODO: separate bindings for sampler uniforms
 // TODO: different types of samplers like cube and 3D
@@ -342,7 +342,7 @@ pub fn createInstance(handle: Handle) !InstanceHandle {
 
     const instance_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = shader.descriptor_pool,
-        .descriptor_set_count = instance_ubo_layouts.len,
+        .descriptor_set_count = @intCast(instance_ubo_layouts.len),
         .p_set_layouts = instance_ubo_layouts.slice().ptr,
     };
 
@@ -358,7 +358,7 @@ pub fn createInstance(handle: Handle) !InstanceHandle {
         Renderer.device_api.freeDescriptorSets(
             Renderer.device,
             shader.descriptor_pool,
-            instance_state.descriptor_sets.len,
+            @intCast(instance_state.descriptor_sets.len),
             instance_state.descriptor_sets.slice().ptr,
         ) catch unreachable;
         instance_state.descriptor_sets.len = 0;
@@ -390,7 +390,7 @@ pub fn destroyInstance(handle: Handle, instance_handle: InstanceHandle) void {
             Renderer.device_api.freeDescriptorSets(
                 Renderer.device,
                 shader.descriptor_pool,
-                instance_state.descriptor_sets.len,
+                @intCast(instance_state.descriptor_sets.len),
                 instance_state.descriptor_sets.slice().ptr,
             ) catch unreachable;
             instance_state.descriptor_sets.len = 0;
@@ -442,7 +442,7 @@ pub fn setUniform(handle: Handle, uniform: anytype, value: anytype) !void {
 
     const uniform_handle = if (@TypeOf(uniform) == Uniform.Handle)
         uniform
-    else if (@typeInfo(@TypeOf(uniform)) == .Pointer and std.meta.Elem(@TypeOf(uniform)) == u8)
+    else if (isU8Pointer(@TypeOf(uniform)))
         try getUniformHandle(handle, uniform)
     else
         return error.InvalidUniformType;
@@ -483,6 +483,19 @@ pub fn setUniform(handle: Handle, uniform: anytype, value: anytype) !void {
             },
         }
     }
+}
+
+fn isU8Pointer(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .pointer => |pointer| switch (pointer.size) {
+            .one => switch (@typeInfo(pointer.child)) {
+                .array => |array| array.child == u8,
+                else => pointer.child == u8,
+            },
+            .many, .slice, .c => pointer.child == u8,
+        },
+        else => false,
+    };
 }
 
 pub fn applyGlobal(handle: Handle) !void {
@@ -549,7 +562,7 @@ pub fn applyGlobal(handle: Handle) !void {
     if (descriptor_writes.len > 0) {
         Renderer.device_api.updateDescriptorSets(
             Renderer.device,
-            descriptor_writes.len,
+            @intCast(descriptor_writes.len),
             descriptor_writes.slice().ptr,
             0,
             null,
@@ -633,7 +646,7 @@ pub fn applyInstance(handle: Handle) !void {
     if (descriptor_writes.len > 0) {
         Renderer.device_api.updateDescriptorSets(
             Renderer.device,
-            descriptor_writes.len,
+            @intCast(descriptor_writes.len),
             descriptor_writes.slice().ptr,
             0,
             null,
@@ -690,7 +703,7 @@ fn create(shader_config: Config) !Shader {
         .descriptor_sets = try Array(vk.DescriptorSet, config.swapchain_max_images).init(0),
         .textures = try Array(Texture.Handle, config.shader_max_instance_textures).init(0),
     };
-    self.instance_state_pool._storage.capacity = 0;
+    self.instance_state_pool = InstancePool.init(allocator);
 
     self.ubo.handle = .null_handle;
     self.local_push_constant_buffer = try Array(u8, 128).init(128);
@@ -755,7 +768,7 @@ fn create(shader_config: Config) !Shader {
             .stride = offset,
             .input_rate = .vertex,
         }),
-        .vertex_attribute_description_count = attribute_descriptions.len,
+        .vertex_attribute_description_count = @intCast(attribute_descriptions.len),
         .p_vertex_attribute_descriptions = attribute_descriptions.slice().ptr,
     };
 
@@ -789,13 +802,13 @@ fn create(shader_config: Config) !Shader {
     try self.descriptor_set_layouts.append(try Renderer.device_api.createDescriptorSetLayout(
         Renderer.device,
         &vk.DescriptorSetLayoutCreateInfo{
-            .binding_count = global_bindings.len,
+            .binding_count = @intCast(global_bindings.len),
             .p_bindings = global_bindings.slice().ptr,
         },
         null,
     ));
 
-    self.global_scope.binding_count = global_bindings.len;
+    self.global_scope.binding_count = @intCast(global_bindings.len);
 
     // create instance descriptor set layouts
     if (self.instance_scope.uniform_count + self.instance_scope.uniform_sampler_count > 0) {
@@ -826,13 +839,13 @@ fn create(shader_config: Config) !Shader {
         try self.descriptor_set_layouts.append(try Renderer.device_api.createDescriptorSetLayout(
             Renderer.device,
             &vk.DescriptorSetLayoutCreateInfo{
-                .binding_count = instance_bindings.len,
+                .binding_count = @intCast(instance_bindings.len),
                 .p_bindings = instance_bindings.slice().ptr,
             },
             null,
         ));
 
-        self.instance_scope.binding_count = instance_bindings.len;
+        self.instance_scope.binding_count = @intCast(instance_bindings.len);
     }
 
     // create local push constant range
@@ -845,7 +858,7 @@ fn create(shader_config: Config) !Shader {
     // create pipeline layout
     self.pipeline_layout = try Renderer.device_api.createPipelineLayout(Renderer.device, &.{
         .flags = .{},
-        .set_layout_count = self.descriptor_set_layouts.len,
+        .set_layout_count = @intCast(self.descriptor_set_layouts.len),
         .p_set_layouts = self.descriptor_set_layouts.slice().ptr,
         .push_constant_range_count = 1,
         .p_push_constant_ranges = @ptrCast(&push_constant_range),
@@ -926,14 +939,14 @@ fn create(shader_config: Config) !Shader {
     const dynamic_state_props = [_]vk.DynamicState{ .viewport, .scissor, .line_width };
     const dynamic_state = vk.PipelineDynamicStateCreateInfo{
         .flags = .{},
-        .dynamic_state_count = dynamic_state_props.len,
+        .dynamic_state_count = @intCast(dynamic_state_props.len),
         .p_dynamic_states = &dynamic_state_props,
     };
 
     // create pipeline
     const pipeline_create_info = vk.GraphicsPipelineCreateInfo{
         .flags = .{},
-        .stage_count = shader_stages.len,
+        .stage_count = @intCast(shader_stages.len),
         .p_stages = shader_stages.slice().ptr,
         .p_viewport_state = &viewport_state,
         .p_vertex_input_state = &vertex_input_state,
@@ -965,12 +978,12 @@ fn create(shader_config: Config) !Shader {
     const descriptor_pool_sizes = [_]vk.DescriptorPoolSize{
         vk.DescriptorPoolSize{
             .type = .uniform_buffer,
-            .descriptor_count = Renderer.swapchain.images.len * (1 + config.shader_max_instances),
+            .descriptor_count = @intCast(Renderer.swapchain.images.len * (1 + config.shader_max_instances)),
         },
 
         vk.DescriptorPoolSize{
             .type = .combined_image_sampler,
-            .descriptor_count = Renderer.swapchain.images.len * (self.global_scope.uniform_sampler_count + config.shader_max_instances * self.instance_scope.uniform_sampler_count),
+            .descriptor_count = @intCast(Renderer.swapchain.images.len * (self.global_scope.uniform_sampler_count + config.shader_max_instances * self.instance_scope.uniform_sampler_count)),
         },
     };
 
@@ -978,7 +991,7 @@ fn create(shader_config: Config) !Shader {
         Renderer.device,
         &vk.DescriptorPoolCreateInfo{
             .flags = .{ .free_descriptor_set_bit = true },
-            .pool_size_count = descriptor_pool_sizes.len,
+            .pool_size_count = @intCast(descriptor_pool_sizes.len),
             .p_pool_sizes = &descriptor_pool_sizes,
             .max_sets = config.shader_max_descriptor_sets_allocate,
         },
@@ -1014,7 +1027,7 @@ fn create(shader_config: Config) !Shader {
 
     const global_ubo_descriptor_set_alloc_info = vk.DescriptorSetAllocateInfo{
         .descriptor_pool = self.descriptor_pool,
-        .descriptor_set_count = global_ubo_layouts.len,
+        .descriptor_set_count = @intCast(global_ubo_layouts.len),
         .p_set_layouts = global_ubo_layouts.slice().ptr,
     };
 
@@ -1048,7 +1061,7 @@ fn destroy(self: *Shader) void {
         Renderer.device_api.freeDescriptorSets(
             Renderer.device,
             self.descriptor_pool,
-            self.global_state.descriptor_sets.len,
+            @intCast(self.global_state.descriptor_sets.len),
             self.global_state.descriptor_sets.slice().ptr,
         ) catch unreachable;
         self.global_state.descriptor_sets.len = 0;
@@ -1094,11 +1107,11 @@ fn destroy(self: *Shader) void {
     }
 
     if (self.uniforms.capacity > 0) {
-        self.uniforms.deinit();
+        self.uniforms.deinit(allocator);
     }
 
     if (self.attributes.capacity > 0) {
-        self.attributes.deinit();
+        self.attributes.deinit(allocator);
     }
 
     self.* = undefined;
@@ -1109,7 +1122,7 @@ fn addAttributes(self: *Shader, attribute_configs: []const AttributeConfig) !voi
         const attribute_data_type = try Attribute.DataType.parse(attribute_config.data_type);
         const attribute_size = attribute_data_type.getSize();
 
-        try self.attributes.append(Attribute{
+        try self.attributes.append(allocator, Attribute{
             .name = try Array(u8, 256).fromSlice(attribute_config.name),
             .data_type = attribute_data_type,
             .size = attribute_size,
@@ -1132,7 +1145,7 @@ fn addUniforms(self: *Shader, uniform_configs: []const UniformConfig) !void {
         const uniform_size = uniform_data_type.getSize();
         const is_sampler = uniform_data_type == .sampler;
 
-        try self.uniforms.append(Uniform{
+        try self.uniforms.append(allocator, Uniform{
             .scope = scope,
             .name = try Array(u8, 256).fromSlice(uniform_config.name),
             .data_type = uniform_data_type,

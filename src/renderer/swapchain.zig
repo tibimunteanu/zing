@@ -1,5 +1,5 @@
 const std = @import("std");
-const glfw = @import("glfw");
+const glfw = @import("../wrappers/glfw.zig");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 
@@ -7,7 +7,7 @@ const Renderer = @import("renderer.zig");
 const Image = @import("image.zig");
 
 const Allocator = std.mem.Allocator;
-const Array = std.BoundedArray;
+const Array = @import("../data_structures/bounded_array.zig").BoundedArray;
 
 const maxInt = std.math.maxInt;
 

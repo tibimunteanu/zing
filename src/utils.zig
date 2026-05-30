@@ -1,5 +1,5 @@
 const std = @import("std");
-const math = @import("zmath");
+const math = @import("math.zig");
 
 pub fn getForwardVec(mat: math.Mat) math.Vec {
     return math.normalize3(math.Vec{ -mat[0][2], -mat[1][2], -mat[2][2], 0.0 });

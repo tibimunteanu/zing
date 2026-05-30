@@ -4,39 +4,26 @@ const builtin = @import("builtin");
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const vulkan_sdk = b.option([]const u8, "vulkan-sdk", "Path to the macOS Vulkan SDK") orelse "";
 
-    const exe = b.addExecutable(.{
-        .name = "zing",
+    const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-
-    const zmath_dep = b.dependency("zmath", .{
-        .enable_cross_platform_determinism = true,
-        .target = target,
-        .optimize = optimize,
+    const exe = b.addExecutable(.{
+        .name = "zing",
+        .root_module = exe_mod,
     });
-    exe.root_module.addImport("zmath", zmath_dep.module("root"));
 
-    const zstbi_dep = b.dependency("zstbi", .{
-        .target = target,
-        .optimize = optimize,
+    exe.root_module.addIncludePath(b.path("vendor/stb"));
+    exe.root_module.addCSourceFile(.{
+        .file = b.path("vendor/stb/stb_image.c"),
+        .flags = &.{ "-std=c99", "-fno-sanitize=undefined" },
     });
-    exe.root_module.addImport("zstbi", zstbi_dep.module("root"));
-    exe.linkLibrary(zstbi_dep.artifact("zstbi"));
+    exe.root_module.link_libc = true;
 
-    const zpool_dep = b.dependency("zpool", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("zpool", zpool_dep.module("root"));
-
-    const glfw_dep = b.dependency("mach_glfw", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("glfw", glfw_dep.module("mach-glfw"));
+    addGlfw(b, exe, target.result.os.tag, vulkan_sdk);
 
     const copy_assets = b.addSystemCommand(switch (builtin.os.tag) {
         .windows => &.{ "xcopy", "assets", "zig-out\\bin\\assets\\", "/E/D/Y" },
@@ -45,19 +32,22 @@ pub fn build(b: *std.Build) !void {
         else => unreachable,
     });
 
-    const shader_steps = try compileShaders(b, &.{
+    compileShaders(b, &copy_assets.step, &.{
         "phong",
         "ui",
     });
-    for (shader_steps.items) |step| {
-        copy_assets.step.dependOn(step);
-    }
 
     exe.step.dependOn(&copy_assets.step);
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
+    if (vulkan_sdk.len > 0) {
+        run_cmd.setEnvironmentVariable("VULKAN_SDK", vulkan_sdk);
+        run_cmd.setEnvironmentVariable("VK_ICD_FILENAMES", b.fmt("{s}/share/vulkan/icd.d/MoltenVK_icd.json", .{vulkan_sdk}));
+        run_cmd.setEnvironmentVariable("VK_DRIVER_FILES", b.fmt("{s}/share/vulkan/icd.d/MoltenVK_icd.json", .{vulkan_sdk}));
+        run_cmd.setEnvironmentVariable("VK_ADD_LAYER_PATH", b.fmt("{s}/share/vulkan/explicit_layer.d", .{vulkan_sdk}));
+    }
 
     if (b.args) |args| {
         run_cmd.addArgs(args);
@@ -66,10 +56,13 @@ pub fn build(b: *std.Build) !void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const unit_tests = b.addTest(.{
+    const unit_tests_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    const unit_tests = b.addTest(.{
+        .root_module = unit_tests_mod,
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
@@ -78,10 +71,119 @@ pub fn build(b: *std.Build) !void {
     test_step.dependOn(&run_unit_tests.step);
 }
 
-fn compileShaders(b: *std.Build, comptime shaders: []const []const u8) !std.ArrayList(*std.Build.Step) {
-    const shader_types = [_][]const u8{ "vertex", "fragment" };
+fn addGlfw(b: *std.Build, exe: *std.Build.Step.Compile, os_tag: std.Target.Os.Tag, vulkan_sdk: []const u8) void {
+    exe.root_module.addIncludePath(b.path("vendor/glfw/include"));
+    exe.root_module.addIncludePath(b.path("vendor/glfw/src"));
 
-    var steps = std.ArrayList(*std.Build.Step).init(b.allocator);
+    switch (os_tag) {
+        .macos => {
+            const vulkan_library = if (vulkan_sdk.len > 0)
+                b.fmt("{s}/lib/libvulkan.1.dylib", .{vulkan_sdk})
+            else
+                "libvulkan.1.dylib";
+            const flags = &.{
+                "-std=c99",
+                "-D_GLFW_COCOA",
+                b.fmt("-D_GLFW_VULKAN_LIBRARY=\"{s}\"", .{vulkan_library}),
+            };
+
+            exe.root_module.addCSourceFiles(.{
+                .files = &glfw_common_sources,
+                .flags = flags,
+            });
+            exe.root_module.addCSourceFiles(.{
+                .files = &glfw_macos_sources,
+                .flags = flags,
+            });
+            exe.root_module.linkFramework("Cocoa", .{});
+            exe.root_module.linkFramework("IOKit", .{});
+            exe.root_module.linkFramework("CoreFoundation", .{});
+        },
+        .windows => {
+            const flags = &.{ "-std=c99", "-D_GLFW_WIN32" };
+            exe.root_module.addCSourceFiles(.{
+                .files = &glfw_common_sources,
+                .flags = flags,
+            });
+            exe.root_module.addCSourceFiles(.{
+                .files = &glfw_windows_sources,
+                .flags = flags,
+            });
+            exe.root_module.linkSystemLibrary("gdi32", .{});
+            exe.root_module.linkSystemLibrary("user32", .{});
+            exe.root_module.linkSystemLibrary("shell32", .{});
+        },
+        .linux => {
+            const flags = &.{ "-std=c99", "-D_GLFW_X11" };
+            exe.root_module.addCSourceFiles(.{
+                .files = &glfw_common_sources,
+                .flags = flags,
+            });
+            exe.root_module.addCSourceFiles(.{
+                .files = &glfw_linux_x11_sources,
+                .flags = flags,
+            });
+            exe.root_module.linkSystemLibrary("dl", .{});
+            exe.root_module.linkSystemLibrary("pthread", .{});
+            exe.root_module.linkSystemLibrary("m", .{});
+        },
+        else => @panic("unsupported GLFW target OS"),
+    }
+}
+
+const glfw_common_sources = [_][]const u8{
+    "vendor/glfw/src/context.c",
+    "vendor/glfw/src/init.c",
+    "vendor/glfw/src/input.c",
+    "vendor/glfw/src/monitor.c",
+    "vendor/glfw/src/platform.c",
+    "vendor/glfw/src/vulkan.c",
+    "vendor/glfw/src/window.c",
+    "vendor/glfw/src/egl_context.c",
+    "vendor/glfw/src/osmesa_context.c",
+    "vendor/glfw/src/null_init.c",
+    "vendor/glfw/src/null_monitor.c",
+    "vendor/glfw/src/null_window.c",
+    "vendor/glfw/src/null_joystick.c",
+};
+
+const glfw_macos_sources = [_][]const u8{
+    "vendor/glfw/src/cocoa_time.c",
+    "vendor/glfw/src/posix_module.c",
+    "vendor/glfw/src/posix_thread.c",
+    "vendor/glfw/src/cocoa_init.m",
+    "vendor/glfw/src/cocoa_joystick.m",
+    "vendor/glfw/src/cocoa_monitor.m",
+    "vendor/glfw/src/cocoa_window.m",
+    "vendor/glfw/src/nsgl_context.m",
+};
+
+const glfw_windows_sources = [_][]const u8{
+    "vendor/glfw/src/win32_init.c",
+    "vendor/glfw/src/win32_joystick.c",
+    "vendor/glfw/src/win32_module.c",
+    "vendor/glfw/src/win32_monitor.c",
+    "vendor/glfw/src/win32_thread.c",
+    "vendor/glfw/src/win32_time.c",
+    "vendor/glfw/src/win32_window.c",
+    "vendor/glfw/src/wgl_context.c",
+};
+
+const glfw_linux_x11_sources = [_][]const u8{
+    "vendor/glfw/src/posix_module.c",
+    "vendor/glfw/src/posix_poll.c",
+    "vendor/glfw/src/posix_thread.c",
+    "vendor/glfw/src/posix_time.c",
+    "vendor/glfw/src/linux_joystick.c",
+    "vendor/glfw/src/x11_init.c",
+    "vendor/glfw/src/x11_monitor.c",
+    "vendor/glfw/src/x11_window.c",
+    "vendor/glfw/src/xkb_unicode.c",
+    "vendor/glfw/src/glx_context.c",
+};
+
+fn compileShaders(b: *std.Build, copy_assets: *std.Build.Step, comptime shaders: []const []const u8) void {
+    const shader_types = [_][]const u8{ "vertex", "fragment" };
 
     inline for (shader_types) |shader_type| {
         inline for (shaders) |shader| {
@@ -96,9 +198,7 @@ fn compileShaders(b: *std.Build, comptime shaders: []const []const u8) !std.Arra
                 shader_path ++ ".spv",
             });
 
-            try steps.append(&compile_shader.step);
+            copy_assets.dependOn(&compile_shader.step);
         }
     }
-
-    return steps;
 }

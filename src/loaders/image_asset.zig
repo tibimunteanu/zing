@@ -1,5 +1,5 @@
 const std = @import("std");
-const stbi = @import("zstbi");
+const stbi = @import("../wrappers/stb_image.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -11,11 +11,9 @@ full_path: []const u8,
 image: stbi.Image,
 
 pub fn init(allocator: Allocator, name: []const u8) !ImageAsset {
-    stbi.init(allocator);
-
     const path_format = "assets/textures/{s}{s}";
 
-    const texture_path = try std.fmt.allocPrintZ(allocator, path_format, .{ name, ".png" });
+    const texture_path = try std.fmt.allocPrintSentinel(allocator, path_format, .{ name, ".png" }, 0);
     defer allocator.free(texture_path);
 
     stbi.setFlipVerticallyOnLoad(true);
@@ -37,5 +35,4 @@ pub fn deinit(self: *ImageAsset) void {
     self.image.deinit();
     self.* = undefined;
 
-    stbi.deinit();
 }

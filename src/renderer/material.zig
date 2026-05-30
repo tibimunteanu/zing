@@ -1,13 +1,13 @@
 const std = @import("std");
-const pool = @import("zpool");
-const math = @import("zmath");
+const pool = @import("../data_structures/pool/pool.zig");
+const math = @import("../math.zig");
 
 const Texture = @import("texture.zig");
 const Shader = @import("shader.zig");
 const MaterialAsset = @import("../loaders/material_asset.zig");
 
 const Allocator = std.mem.Allocator;
-const Array = std.BoundedArray;
+const Array = @import("../data_structures/bounded_array.zig").BoundedArray;
 
 const Material = @This();
 
@@ -193,7 +193,7 @@ pub fn remove(handle: Handle) void {
 
 // utils
 fn createDefault() !void {
-    var diffuse_color = try std.ArrayList(std.json.Value).initCapacity(allocator, 4);
+    var diffuse_color = try std.json.Array.initCapacity(allocator, 4);
     defer diffuse_color.deinit();
 
     try diffuse_color.appendNTimes(.{ .float = 1.0 }, 4);
@@ -235,7 +235,7 @@ fn create(config: Config) !Material {
 
     self.properties = try std.ArrayList(Property).initCapacity(allocator, config.properties.len);
     for (config.properties) |prop_config| {
-        try self.properties.append(try Property.fromConfig(prop_config));
+        try self.properties.append(allocator, try Property.fromConfig(prop_config));
     }
 
     self.shader = Shader.acquire(config.shader_name) catch Shader.default;
@@ -261,7 +261,7 @@ fn destroy(self: *Material) void {
             Texture.release(property.value.sampler);
         }
     }
-    self.properties.deinit();
+    self.properties.deinit(allocator);
 
     self.* = undefined;
 }

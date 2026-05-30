@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const math = @import("zmath");
-const glfw = @import("glfw");
+const math = @import("math.zig");
+const glfw = @import("wrappers/glfw.zig");
 const utils = @import("utils.zig");
 
 const Renderer = @import("renderer/renderer.zig");

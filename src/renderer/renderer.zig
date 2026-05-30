@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const glfw = @import("glfw");
-const math = @import("zmath");
+const glfw = @import("../wrappers/glfw.zig");
+const math = @import("../math.zig");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 
@@ -15,7 +15,7 @@ const Geometry = @import("geometry.zig");
 const Shader = @import("shader.zig");
 
 const Allocator = std.mem.Allocator;
-const Array = std.BoundedArray;
+const Array = @import("../data_structures/bounded_array.zig").BoundedArray;
 
 const Renderer = @This();
 
@@ -232,7 +232,8 @@ pub fn init(ally: Allocator, window: glfw.Window) !void {
     // pick a suitable physical device
     physical_device = try pickPhysicalDevice();
 
-    std.log.info("Graphics device: {?s}", .{physical_device.properties.device_name});
+    const device_name_len = std.mem.indexOfScalar(u8, &physical_device.properties.device_name, 0) orelse physical_device.properties.device_name.len;
+    std.log.info("Graphics device: {s}", .{physical_device.properties.device_name[0..device_name_len]});
 
     // create logical device and load device api
     device = try createDevice();
@@ -545,9 +546,9 @@ fn createInstance(app_name: [*:0]const u8) !vk.Instance {
         allocator,
         required_instance_extensions.len + optional_instance_extensions.len,
     );
-    defer instance_extensions.deinit();
+    defer instance_extensions.deinit(allocator);
 
-    try instance_extensions.appendSlice(required_instance_extensions);
+    try instance_extensions.appendSlice(allocator, required_instance_extensions);
 
     var count: u32 = undefined;
     _ = try base_api.enumerateInstanceExtensionProperties(null, &count, null);
@@ -564,7 +565,7 @@ fn createInstance(app_name: [*:0]const u8) !vk.Instance {
             orelse existing_inst_ext.extension_name.len;
 
             if (std.mem.eql(u8, existing_inst_ext.extension_name[0..len], std.mem.span(optional_inst_ext))) {
-                try instance_extensions.append(optional_inst_ext);
+                try instance_extensions.append(allocator, optional_inst_ext);
                 break;
             }
         }
@@ -644,11 +645,11 @@ fn createDevice() !vk.Device {
         allocator,
         required_device_extensions.len + optional_device_extensions.len,
     );
-    defer device_extensions.deinit();
+    defer device_extensions.deinit(allocator);
 
     // list of extensions to be requested when creating the device
     // includes all required extensions and optional extensions that the device supports
-    try device_extensions.appendSlice(required_device_extensions[0..]);
+    try device_extensions.appendSlice(allocator, required_device_extensions[0..]);
 
     var count: u32 = undefined;
     _ = try instance_api.enumerateDeviceExtensionProperties(physical_device.handle, null, &count, null);
@@ -663,7 +664,7 @@ fn createDevice() !vk.Device {
             const len = std.mem.indexOfScalar(existing_ext.extension_name, 0) orelse existing_ext.extension_name.len;
 
             if (std.mem.eql(u8, existing_ext.extension_name[0..len], std.mem.span(optional_ext))) {
-                try device_extensions.append(optional_ext);
+                try device_extensions.append(allocator, optional_ext);
                 break;
             }
         }

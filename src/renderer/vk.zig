@@ -5,19 +5,23 @@ const builtin = @import("builtin");
 const root = @import("root");
 const vk = @This();
 
+comptime {
+    @setEvalBranchQuota(100_000);
+}
+
 pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .x86)
-    .Stdcall
+    .winapi
 else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
     // On Android 32-bit ARM targets, Vulkan functions use the "hardfloat"
     // calling convention, i.e. float parameters are passed in registers. This
     // is true even if the rest of the application passes floats on the stack,
     // as it does by default when compiling for the armeabi-v7a NDK ABI.
-    .AAPCSVFP
+    .{ .arm_aapcs_vfp = .{} }
 else
-    .C;
+    .c;
 pub fn FlagsMixin(comptime FlagsType: type) type {
     return struct {
-        pub const IntType = @typeInfo(FlagsType).Struct.backing_integer.?;
+        pub const IntType = @typeInfo(FlagsType).@"struct".backing_integer.?;
         pub fn toInt(self: FlagsType) IntType {
             return @bitCast(self);
         }
@@ -39,7 +43,14 @@ pub fn FlagsMixin(comptime FlagsType: type) type {
         pub fn contains(lhs: FlagsType, rhs: FlagsType) bool {
             return toInt(intersect(lhs, rhs)) == toInt(rhs);
         }
-        pub usingnamespace FlagFormatMixin(FlagsType);
+        pub fn format(
+            self: FlagsType,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            return FlagFormatMixin(FlagsType).format(self, fmt, options, writer);
+        }
     };
 }
 fn FlagFormatMixin(comptime FlagsType: type) type {
@@ -169,158 +180,438 @@ pub const Flags = u32;
 pub const Flags64 = u64;
 pub const DeviceSize = u64;
 pub const DeviceAddress = u64;
-pub const QueryPoolCreateFlags = packed struct {
+pub const QueryPoolCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(QueryPoolCreateFlags);
+    pub const IntType = FlagsMixin(QueryPoolCreateFlags).IntType;
+    pub fn toInt(self: QueryPoolCreateFlags) IntType { return FlagsMixin(QueryPoolCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) QueryPoolCreateFlags { return FlagsMixin(QueryPoolCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: QueryPoolCreateFlags, rhs: QueryPoolCreateFlags) QueryPoolCreateFlags { return FlagsMixin(QueryPoolCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: QueryPoolCreateFlags, rhs: QueryPoolCreateFlags) QueryPoolCreateFlags { return FlagsMixin(QueryPoolCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: QueryPoolCreateFlags) QueryPoolCreateFlags { return FlagsMixin(QueryPoolCreateFlags).complement(self); }
+    pub fn subtract(lhs: QueryPoolCreateFlags, rhs: QueryPoolCreateFlags) QueryPoolCreateFlags { return FlagsMixin(QueryPoolCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: QueryPoolCreateFlags, rhs: QueryPoolCreateFlags) bool { return FlagsMixin(QueryPoolCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: QueryPoolCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(QueryPoolCreateFlags).format(self, fmt, options, writer); }
 };
-pub const PipelineDynamicStateCreateFlags = packed struct {
+pub const PipelineDynamicStateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineDynamicStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineDynamicStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineDynamicStateCreateFlags) IntType { return FlagsMixin(PipelineDynamicStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineDynamicStateCreateFlags { return FlagsMixin(PipelineDynamicStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineDynamicStateCreateFlags, rhs: PipelineDynamicStateCreateFlags) PipelineDynamicStateCreateFlags { return FlagsMixin(PipelineDynamicStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineDynamicStateCreateFlags, rhs: PipelineDynamicStateCreateFlags) PipelineDynamicStateCreateFlags { return FlagsMixin(PipelineDynamicStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineDynamicStateCreateFlags) PipelineDynamicStateCreateFlags { return FlagsMixin(PipelineDynamicStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineDynamicStateCreateFlags, rhs: PipelineDynamicStateCreateFlags) PipelineDynamicStateCreateFlags { return FlagsMixin(PipelineDynamicStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineDynamicStateCreateFlags, rhs: PipelineDynamicStateCreateFlags) bool { return FlagsMixin(PipelineDynamicStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineDynamicStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineDynamicStateCreateFlags).format(self, fmt, options, writer); }
 };
-pub const PipelineMultisampleStateCreateFlags = packed struct {
+pub const PipelineMultisampleStateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineMultisampleStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineMultisampleStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineMultisampleStateCreateFlags) IntType { return FlagsMixin(PipelineMultisampleStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineMultisampleStateCreateFlags { return FlagsMixin(PipelineMultisampleStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineMultisampleStateCreateFlags, rhs: PipelineMultisampleStateCreateFlags) PipelineMultisampleStateCreateFlags { return FlagsMixin(PipelineMultisampleStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineMultisampleStateCreateFlags, rhs: PipelineMultisampleStateCreateFlags) PipelineMultisampleStateCreateFlags { return FlagsMixin(PipelineMultisampleStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineMultisampleStateCreateFlags) PipelineMultisampleStateCreateFlags { return FlagsMixin(PipelineMultisampleStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineMultisampleStateCreateFlags, rhs: PipelineMultisampleStateCreateFlags) PipelineMultisampleStateCreateFlags { return FlagsMixin(PipelineMultisampleStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineMultisampleStateCreateFlags, rhs: PipelineMultisampleStateCreateFlags) bool { return FlagsMixin(PipelineMultisampleStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineMultisampleStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineMultisampleStateCreateFlags).format(self, fmt, options, writer); }
 };
-pub const PipelineRasterizationStateCreateFlags = packed struct {
+pub const PipelineRasterizationStateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineRasterizationStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineRasterizationStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineRasterizationStateCreateFlags) IntType { return FlagsMixin(PipelineRasterizationStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineRasterizationStateCreateFlags { return FlagsMixin(PipelineRasterizationStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineRasterizationStateCreateFlags, rhs: PipelineRasterizationStateCreateFlags) PipelineRasterizationStateCreateFlags { return FlagsMixin(PipelineRasterizationStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineRasterizationStateCreateFlags, rhs: PipelineRasterizationStateCreateFlags) PipelineRasterizationStateCreateFlags { return FlagsMixin(PipelineRasterizationStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineRasterizationStateCreateFlags) PipelineRasterizationStateCreateFlags { return FlagsMixin(PipelineRasterizationStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineRasterizationStateCreateFlags, rhs: PipelineRasterizationStateCreateFlags) PipelineRasterizationStateCreateFlags { return FlagsMixin(PipelineRasterizationStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineRasterizationStateCreateFlags, rhs: PipelineRasterizationStateCreateFlags) bool { return FlagsMixin(PipelineRasterizationStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineRasterizationStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineRasterizationStateCreateFlags).format(self, fmt, options, writer); }
 };
-pub const PipelineViewportStateCreateFlags = packed struct {
+pub const PipelineViewportStateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineViewportStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineViewportStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineViewportStateCreateFlags) IntType { return FlagsMixin(PipelineViewportStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineViewportStateCreateFlags { return FlagsMixin(PipelineViewportStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineViewportStateCreateFlags, rhs: PipelineViewportStateCreateFlags) PipelineViewportStateCreateFlags { return FlagsMixin(PipelineViewportStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineViewportStateCreateFlags, rhs: PipelineViewportStateCreateFlags) PipelineViewportStateCreateFlags { return FlagsMixin(PipelineViewportStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineViewportStateCreateFlags) PipelineViewportStateCreateFlags { return FlagsMixin(PipelineViewportStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineViewportStateCreateFlags, rhs: PipelineViewportStateCreateFlags) PipelineViewportStateCreateFlags { return FlagsMixin(PipelineViewportStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineViewportStateCreateFlags, rhs: PipelineViewportStateCreateFlags) bool { return FlagsMixin(PipelineViewportStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineViewportStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineViewportStateCreateFlags).format(self, fmt, options, writer); }
 };
-pub const PipelineTessellationStateCreateFlags = packed struct {
+pub const PipelineTessellationStateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineTessellationStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineTessellationStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineTessellationStateCreateFlags) IntType { return FlagsMixin(PipelineTessellationStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineTessellationStateCreateFlags { return FlagsMixin(PipelineTessellationStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineTessellationStateCreateFlags, rhs: PipelineTessellationStateCreateFlags) PipelineTessellationStateCreateFlags { return FlagsMixin(PipelineTessellationStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineTessellationStateCreateFlags, rhs: PipelineTessellationStateCreateFlags) PipelineTessellationStateCreateFlags { return FlagsMixin(PipelineTessellationStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineTessellationStateCreateFlags) PipelineTessellationStateCreateFlags { return FlagsMixin(PipelineTessellationStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineTessellationStateCreateFlags, rhs: PipelineTessellationStateCreateFlags) PipelineTessellationStateCreateFlags { return FlagsMixin(PipelineTessellationStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineTessellationStateCreateFlags, rhs: PipelineTessellationStateCreateFlags) bool { return FlagsMixin(PipelineTessellationStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineTessellationStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineTessellationStateCreateFlags).format(self, fmt, options, writer); }
 };
-pub const PipelineInputAssemblyStateCreateFlags = packed struct {
+pub const PipelineInputAssemblyStateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineInputAssemblyStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineInputAssemblyStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineInputAssemblyStateCreateFlags) IntType { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineInputAssemblyStateCreateFlags { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineInputAssemblyStateCreateFlags, rhs: PipelineInputAssemblyStateCreateFlags) PipelineInputAssemblyStateCreateFlags { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineInputAssemblyStateCreateFlags, rhs: PipelineInputAssemblyStateCreateFlags) PipelineInputAssemblyStateCreateFlags { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineInputAssemblyStateCreateFlags) PipelineInputAssemblyStateCreateFlags { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineInputAssemblyStateCreateFlags, rhs: PipelineInputAssemblyStateCreateFlags) PipelineInputAssemblyStateCreateFlags { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineInputAssemblyStateCreateFlags, rhs: PipelineInputAssemblyStateCreateFlags) bool { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineInputAssemblyStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineInputAssemblyStateCreateFlags).format(self, fmt, options, writer); }
 };
-pub const PipelineVertexInputStateCreateFlags = packed struct {
+pub const PipelineVertexInputStateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineVertexInputStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineVertexInputStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineVertexInputStateCreateFlags) IntType { return FlagsMixin(PipelineVertexInputStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineVertexInputStateCreateFlags { return FlagsMixin(PipelineVertexInputStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineVertexInputStateCreateFlags, rhs: PipelineVertexInputStateCreateFlags) PipelineVertexInputStateCreateFlags { return FlagsMixin(PipelineVertexInputStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineVertexInputStateCreateFlags, rhs: PipelineVertexInputStateCreateFlags) PipelineVertexInputStateCreateFlags { return FlagsMixin(PipelineVertexInputStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineVertexInputStateCreateFlags) PipelineVertexInputStateCreateFlags { return FlagsMixin(PipelineVertexInputStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineVertexInputStateCreateFlags, rhs: PipelineVertexInputStateCreateFlags) PipelineVertexInputStateCreateFlags { return FlagsMixin(PipelineVertexInputStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineVertexInputStateCreateFlags, rhs: PipelineVertexInputStateCreateFlags) bool { return FlagsMixin(PipelineVertexInputStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineVertexInputStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineVertexInputStateCreateFlags).format(self, fmt, options, writer); }
 };
-pub const BufferViewCreateFlags = packed struct {
+pub const BufferViewCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(BufferViewCreateFlags);
+    pub const IntType = FlagsMixin(BufferViewCreateFlags).IntType;
+    pub fn toInt(self: BufferViewCreateFlags) IntType { return FlagsMixin(BufferViewCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) BufferViewCreateFlags { return FlagsMixin(BufferViewCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: BufferViewCreateFlags, rhs: BufferViewCreateFlags) BufferViewCreateFlags { return FlagsMixin(BufferViewCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: BufferViewCreateFlags, rhs: BufferViewCreateFlags) BufferViewCreateFlags { return FlagsMixin(BufferViewCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: BufferViewCreateFlags) BufferViewCreateFlags { return FlagsMixin(BufferViewCreateFlags).complement(self); }
+    pub fn subtract(lhs: BufferViewCreateFlags, rhs: BufferViewCreateFlags) BufferViewCreateFlags { return FlagsMixin(BufferViewCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: BufferViewCreateFlags, rhs: BufferViewCreateFlags) bool { return FlagsMixin(BufferViewCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: BufferViewCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(BufferViewCreateFlags).format(self, fmt, options, writer); }
 };
-pub const DeviceCreateFlags = packed struct {
+pub const DeviceCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DeviceCreateFlags);
+    pub const IntType = FlagsMixin(DeviceCreateFlags).IntType;
+    pub fn toInt(self: DeviceCreateFlags) IntType { return FlagsMixin(DeviceCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DeviceCreateFlags { return FlagsMixin(DeviceCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: DeviceCreateFlags, rhs: DeviceCreateFlags) DeviceCreateFlags { return FlagsMixin(DeviceCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DeviceCreateFlags, rhs: DeviceCreateFlags) DeviceCreateFlags { return FlagsMixin(DeviceCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DeviceCreateFlags) DeviceCreateFlags { return FlagsMixin(DeviceCreateFlags).complement(self); }
+    pub fn subtract(lhs: DeviceCreateFlags, rhs: DeviceCreateFlags) DeviceCreateFlags { return FlagsMixin(DeviceCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DeviceCreateFlags, rhs: DeviceCreateFlags) bool { return FlagsMixin(DeviceCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: DeviceCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DeviceCreateFlags).format(self, fmt, options, writer); }
 };
-pub const SemaphoreCreateFlags = packed struct {
+pub const SemaphoreCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(SemaphoreCreateFlags);
+    pub const IntType = FlagsMixin(SemaphoreCreateFlags).IntType;
+    pub fn toInt(self: SemaphoreCreateFlags) IntType { return FlagsMixin(SemaphoreCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SemaphoreCreateFlags { return FlagsMixin(SemaphoreCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: SemaphoreCreateFlags, rhs: SemaphoreCreateFlags) SemaphoreCreateFlags { return FlagsMixin(SemaphoreCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SemaphoreCreateFlags, rhs: SemaphoreCreateFlags) SemaphoreCreateFlags { return FlagsMixin(SemaphoreCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SemaphoreCreateFlags) SemaphoreCreateFlags { return FlagsMixin(SemaphoreCreateFlags).complement(self); }
+    pub fn subtract(lhs: SemaphoreCreateFlags, rhs: SemaphoreCreateFlags) SemaphoreCreateFlags { return FlagsMixin(SemaphoreCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SemaphoreCreateFlags, rhs: SemaphoreCreateFlags) bool { return FlagsMixin(SemaphoreCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: SemaphoreCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SemaphoreCreateFlags).format(self, fmt, options, writer); }
 };
-pub const ShaderModuleCreateFlags = packed struct {
+pub const ShaderModuleCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(ShaderModuleCreateFlags);
+    pub const IntType = FlagsMixin(ShaderModuleCreateFlags).IntType;
+    pub fn toInt(self: ShaderModuleCreateFlags) IntType { return FlagsMixin(ShaderModuleCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ShaderModuleCreateFlags { return FlagsMixin(ShaderModuleCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: ShaderModuleCreateFlags, rhs: ShaderModuleCreateFlags) ShaderModuleCreateFlags { return FlagsMixin(ShaderModuleCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ShaderModuleCreateFlags, rhs: ShaderModuleCreateFlags) ShaderModuleCreateFlags { return FlagsMixin(ShaderModuleCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ShaderModuleCreateFlags) ShaderModuleCreateFlags { return FlagsMixin(ShaderModuleCreateFlags).complement(self); }
+    pub fn subtract(lhs: ShaderModuleCreateFlags, rhs: ShaderModuleCreateFlags) ShaderModuleCreateFlags { return FlagsMixin(ShaderModuleCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ShaderModuleCreateFlags, rhs: ShaderModuleCreateFlags) bool { return FlagsMixin(ShaderModuleCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: ShaderModuleCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ShaderModuleCreateFlags).format(self, fmt, options, writer); }
 };
-pub const DescriptorPoolResetFlags = packed struct {
+pub const DescriptorPoolResetFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DescriptorPoolResetFlags);
+    pub const IntType = FlagsMixin(DescriptorPoolResetFlags).IntType;
+    pub fn toInt(self: DescriptorPoolResetFlags) IntType { return FlagsMixin(DescriptorPoolResetFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DescriptorPoolResetFlags { return FlagsMixin(DescriptorPoolResetFlags).fromInt(flags); }
+    pub fn merge(lhs: DescriptorPoolResetFlags, rhs: DescriptorPoolResetFlags) DescriptorPoolResetFlags { return FlagsMixin(DescriptorPoolResetFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DescriptorPoolResetFlags, rhs: DescriptorPoolResetFlags) DescriptorPoolResetFlags { return FlagsMixin(DescriptorPoolResetFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DescriptorPoolResetFlags) DescriptorPoolResetFlags { return FlagsMixin(DescriptorPoolResetFlags).complement(self); }
+    pub fn subtract(lhs: DescriptorPoolResetFlags, rhs: DescriptorPoolResetFlags) DescriptorPoolResetFlags { return FlagsMixin(DescriptorPoolResetFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DescriptorPoolResetFlags, rhs: DescriptorPoolResetFlags) bool { return FlagsMixin(DescriptorPoolResetFlags).contains(lhs, rhs); }
+    pub fn format(self: DescriptorPoolResetFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DescriptorPoolResetFlags).format(self, fmt, options, writer); }
 };
 pub const GeometryFlagsNV = GeometryFlagsKHR;
 pub const GeometryInstanceFlagsNV = GeometryInstanceFlagsKHR;
 pub const BuildAccelerationStructureFlagsNV = BuildAccelerationStructureFlagsKHR;
-pub const PrivateDataSlotCreateFlags = packed struct {
+pub const PrivateDataSlotCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PrivateDataSlotCreateFlags);
+    pub const IntType = FlagsMixin(PrivateDataSlotCreateFlags).IntType;
+    pub fn toInt(self: PrivateDataSlotCreateFlags) IntType { return FlagsMixin(PrivateDataSlotCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PrivateDataSlotCreateFlags { return FlagsMixin(PrivateDataSlotCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PrivateDataSlotCreateFlags, rhs: PrivateDataSlotCreateFlags) PrivateDataSlotCreateFlags { return FlagsMixin(PrivateDataSlotCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PrivateDataSlotCreateFlags, rhs: PrivateDataSlotCreateFlags) PrivateDataSlotCreateFlags { return FlagsMixin(PrivateDataSlotCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PrivateDataSlotCreateFlags) PrivateDataSlotCreateFlags { return FlagsMixin(PrivateDataSlotCreateFlags).complement(self); }
+    pub fn subtract(lhs: PrivateDataSlotCreateFlags, rhs: PrivateDataSlotCreateFlags) PrivateDataSlotCreateFlags { return FlagsMixin(PrivateDataSlotCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PrivateDataSlotCreateFlags, rhs: PrivateDataSlotCreateFlags) bool { return FlagsMixin(PrivateDataSlotCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PrivateDataSlotCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PrivateDataSlotCreateFlags).format(self, fmt, options, writer); }
 };
 pub const PrivateDataSlotCreateFlagsEXT = PrivateDataSlotCreateFlags;
-pub const DescriptorUpdateTemplateCreateFlags = packed struct {
+pub const DescriptorUpdateTemplateCreateFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DescriptorUpdateTemplateCreateFlags);
+    pub const IntType = FlagsMixin(DescriptorUpdateTemplateCreateFlags).IntType;
+    pub fn toInt(self: DescriptorUpdateTemplateCreateFlags) IntType { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DescriptorUpdateTemplateCreateFlags { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: DescriptorUpdateTemplateCreateFlags, rhs: DescriptorUpdateTemplateCreateFlags) DescriptorUpdateTemplateCreateFlags { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DescriptorUpdateTemplateCreateFlags, rhs: DescriptorUpdateTemplateCreateFlags) DescriptorUpdateTemplateCreateFlags { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DescriptorUpdateTemplateCreateFlags) DescriptorUpdateTemplateCreateFlags { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).complement(self); }
+    pub fn subtract(lhs: DescriptorUpdateTemplateCreateFlags, rhs: DescriptorUpdateTemplateCreateFlags) DescriptorUpdateTemplateCreateFlags { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DescriptorUpdateTemplateCreateFlags, rhs: DescriptorUpdateTemplateCreateFlags) bool { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: DescriptorUpdateTemplateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DescriptorUpdateTemplateCreateFlags).format(self, fmt, options, writer); }
 };
 pub const DescriptorUpdateTemplateCreateFlagsKHR = DescriptorUpdateTemplateCreateFlags;
 pub const PipelineCreationFeedbackFlagsEXT = PipelineCreationFeedbackFlags;
 pub const SemaphoreWaitFlagsKHR = SemaphoreWaitFlags;
 pub const AccessFlags2KHR = AccessFlags2;
 pub const PipelineStageFlags2KHR = PipelineStageFlags2;
-pub const AccelerationStructureMotionInfoFlagsNV = packed struct {
+pub const AccelerationStructureMotionInfoFlagsNV = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(AccelerationStructureMotionInfoFlagsNV);
+    pub const IntType = FlagsMixin(AccelerationStructureMotionInfoFlagsNV).IntType;
+    pub fn toInt(self: AccelerationStructureMotionInfoFlagsNV) IntType { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) AccelerationStructureMotionInfoFlagsNV { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: AccelerationStructureMotionInfoFlagsNV, rhs: AccelerationStructureMotionInfoFlagsNV) AccelerationStructureMotionInfoFlagsNV { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: AccelerationStructureMotionInfoFlagsNV, rhs: AccelerationStructureMotionInfoFlagsNV) AccelerationStructureMotionInfoFlagsNV { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: AccelerationStructureMotionInfoFlagsNV) AccelerationStructureMotionInfoFlagsNV { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).complement(self); }
+    pub fn subtract(lhs: AccelerationStructureMotionInfoFlagsNV, rhs: AccelerationStructureMotionInfoFlagsNV) AccelerationStructureMotionInfoFlagsNV { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: AccelerationStructureMotionInfoFlagsNV, rhs: AccelerationStructureMotionInfoFlagsNV) bool { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: AccelerationStructureMotionInfoFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AccelerationStructureMotionInfoFlagsNV).format(self, fmt, options, writer); }
 };
-pub const AccelerationStructureMotionInstanceFlagsNV = packed struct {
+pub const AccelerationStructureMotionInstanceFlagsNV = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(AccelerationStructureMotionInstanceFlagsNV);
+    pub const IntType = FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).IntType;
+    pub fn toInt(self: AccelerationStructureMotionInstanceFlagsNV) IntType { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) AccelerationStructureMotionInstanceFlagsNV { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: AccelerationStructureMotionInstanceFlagsNV, rhs: AccelerationStructureMotionInstanceFlagsNV) AccelerationStructureMotionInstanceFlagsNV { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: AccelerationStructureMotionInstanceFlagsNV, rhs: AccelerationStructureMotionInstanceFlagsNV) AccelerationStructureMotionInstanceFlagsNV { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: AccelerationStructureMotionInstanceFlagsNV) AccelerationStructureMotionInstanceFlagsNV { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).complement(self); }
+    pub fn subtract(lhs: AccelerationStructureMotionInstanceFlagsNV, rhs: AccelerationStructureMotionInstanceFlagsNV) AccelerationStructureMotionInstanceFlagsNV { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: AccelerationStructureMotionInstanceFlagsNV, rhs: AccelerationStructureMotionInstanceFlagsNV) bool { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: AccelerationStructureMotionInstanceFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AccelerationStructureMotionInstanceFlagsNV).format(self, fmt, options, writer); }
 };
 pub const FormatFeatureFlags2KHR = FormatFeatureFlags2;
 pub const RenderingFlagsKHR = RenderingFlags;
-pub const DirectDriverLoadingFlagsLUNARG = packed struct {
+pub const DirectDriverLoadingFlagsLUNARG = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DirectDriverLoadingFlagsLUNARG);
+    pub const IntType = FlagsMixin(DirectDriverLoadingFlagsLUNARG).IntType;
+    pub fn toInt(self: DirectDriverLoadingFlagsLUNARG) IntType { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).toInt(self); }
+    pub fn fromInt(flags: IntType) DirectDriverLoadingFlagsLUNARG { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).fromInt(flags); }
+    pub fn merge(lhs: DirectDriverLoadingFlagsLUNARG, rhs: DirectDriverLoadingFlagsLUNARG) DirectDriverLoadingFlagsLUNARG { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).merge(lhs, rhs); }
+    pub fn intersect(lhs: DirectDriverLoadingFlagsLUNARG, rhs: DirectDriverLoadingFlagsLUNARG) DirectDriverLoadingFlagsLUNARG { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).intersect(lhs, rhs); }
+    pub fn complement(self: DirectDriverLoadingFlagsLUNARG) DirectDriverLoadingFlagsLUNARG { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).complement(self); }
+    pub fn subtract(lhs: DirectDriverLoadingFlagsLUNARG, rhs: DirectDriverLoadingFlagsLUNARG) DirectDriverLoadingFlagsLUNARG { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).subtract(lhs, rhs); }
+    pub fn contains(lhs: DirectDriverLoadingFlagsLUNARG, rhs: DirectDriverLoadingFlagsLUNARG) bool { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).contains(lhs, rhs); }
+    pub fn format(self: DirectDriverLoadingFlagsLUNARG, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DirectDriverLoadingFlagsLUNARG).format(self, fmt, options, writer); }
 };
-pub const DisplayModeCreateFlagsKHR = packed struct {
+pub const DisplayModeCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DisplayModeCreateFlagsKHR);
+    pub const IntType = FlagsMixin(DisplayModeCreateFlagsKHR).IntType;
+    pub fn toInt(self: DisplayModeCreateFlagsKHR) IntType { return FlagsMixin(DisplayModeCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) DisplayModeCreateFlagsKHR { return FlagsMixin(DisplayModeCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: DisplayModeCreateFlagsKHR, rhs: DisplayModeCreateFlagsKHR) DisplayModeCreateFlagsKHR { return FlagsMixin(DisplayModeCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: DisplayModeCreateFlagsKHR, rhs: DisplayModeCreateFlagsKHR) DisplayModeCreateFlagsKHR { return FlagsMixin(DisplayModeCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: DisplayModeCreateFlagsKHR) DisplayModeCreateFlagsKHR { return FlagsMixin(DisplayModeCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: DisplayModeCreateFlagsKHR, rhs: DisplayModeCreateFlagsKHR) DisplayModeCreateFlagsKHR { return FlagsMixin(DisplayModeCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: DisplayModeCreateFlagsKHR, rhs: DisplayModeCreateFlagsKHR) bool { return FlagsMixin(DisplayModeCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: DisplayModeCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DisplayModeCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const DisplaySurfaceCreateFlagsKHR = packed struct {
+pub const DisplaySurfaceCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DisplaySurfaceCreateFlagsKHR);
+    pub const IntType = FlagsMixin(DisplaySurfaceCreateFlagsKHR).IntType;
+    pub fn toInt(self: DisplaySurfaceCreateFlagsKHR) IntType { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) DisplaySurfaceCreateFlagsKHR { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: DisplaySurfaceCreateFlagsKHR, rhs: DisplaySurfaceCreateFlagsKHR) DisplaySurfaceCreateFlagsKHR { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: DisplaySurfaceCreateFlagsKHR, rhs: DisplaySurfaceCreateFlagsKHR) DisplaySurfaceCreateFlagsKHR { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: DisplaySurfaceCreateFlagsKHR) DisplaySurfaceCreateFlagsKHR { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: DisplaySurfaceCreateFlagsKHR, rhs: DisplaySurfaceCreateFlagsKHR) DisplaySurfaceCreateFlagsKHR { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: DisplaySurfaceCreateFlagsKHR, rhs: DisplaySurfaceCreateFlagsKHR) bool { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: DisplaySurfaceCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DisplaySurfaceCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const AndroidSurfaceCreateFlagsKHR = packed struct {
+pub const AndroidSurfaceCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(AndroidSurfaceCreateFlagsKHR);
+    pub const IntType = FlagsMixin(AndroidSurfaceCreateFlagsKHR).IntType;
+    pub fn toInt(self: AndroidSurfaceCreateFlagsKHR) IntType { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) AndroidSurfaceCreateFlagsKHR { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: AndroidSurfaceCreateFlagsKHR, rhs: AndroidSurfaceCreateFlagsKHR) AndroidSurfaceCreateFlagsKHR { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: AndroidSurfaceCreateFlagsKHR, rhs: AndroidSurfaceCreateFlagsKHR) AndroidSurfaceCreateFlagsKHR { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: AndroidSurfaceCreateFlagsKHR) AndroidSurfaceCreateFlagsKHR { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: AndroidSurfaceCreateFlagsKHR, rhs: AndroidSurfaceCreateFlagsKHR) AndroidSurfaceCreateFlagsKHR { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: AndroidSurfaceCreateFlagsKHR, rhs: AndroidSurfaceCreateFlagsKHR) bool { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: AndroidSurfaceCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AndroidSurfaceCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const ViSurfaceCreateFlagsNN = packed struct {
+pub const ViSurfaceCreateFlagsNN = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(ViSurfaceCreateFlagsNN);
+    pub const IntType = FlagsMixin(ViSurfaceCreateFlagsNN).IntType;
+    pub fn toInt(self: ViSurfaceCreateFlagsNN) IntType { return FlagsMixin(ViSurfaceCreateFlagsNN).toInt(self); }
+    pub fn fromInt(flags: IntType) ViSurfaceCreateFlagsNN { return FlagsMixin(ViSurfaceCreateFlagsNN).fromInt(flags); }
+    pub fn merge(lhs: ViSurfaceCreateFlagsNN, rhs: ViSurfaceCreateFlagsNN) ViSurfaceCreateFlagsNN { return FlagsMixin(ViSurfaceCreateFlagsNN).merge(lhs, rhs); }
+    pub fn intersect(lhs: ViSurfaceCreateFlagsNN, rhs: ViSurfaceCreateFlagsNN) ViSurfaceCreateFlagsNN { return FlagsMixin(ViSurfaceCreateFlagsNN).intersect(lhs, rhs); }
+    pub fn complement(self: ViSurfaceCreateFlagsNN) ViSurfaceCreateFlagsNN { return FlagsMixin(ViSurfaceCreateFlagsNN).complement(self); }
+    pub fn subtract(lhs: ViSurfaceCreateFlagsNN, rhs: ViSurfaceCreateFlagsNN) ViSurfaceCreateFlagsNN { return FlagsMixin(ViSurfaceCreateFlagsNN).subtract(lhs, rhs); }
+    pub fn contains(lhs: ViSurfaceCreateFlagsNN, rhs: ViSurfaceCreateFlagsNN) bool { return FlagsMixin(ViSurfaceCreateFlagsNN).contains(lhs, rhs); }
+    pub fn format(self: ViSurfaceCreateFlagsNN, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ViSurfaceCreateFlagsNN).format(self, fmt, options, writer); }
 };
-pub const WaylandSurfaceCreateFlagsKHR = packed struct {
+pub const WaylandSurfaceCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(WaylandSurfaceCreateFlagsKHR);
+    pub const IntType = FlagsMixin(WaylandSurfaceCreateFlagsKHR).IntType;
+    pub fn toInt(self: WaylandSurfaceCreateFlagsKHR) IntType { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) WaylandSurfaceCreateFlagsKHR { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: WaylandSurfaceCreateFlagsKHR, rhs: WaylandSurfaceCreateFlagsKHR) WaylandSurfaceCreateFlagsKHR { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: WaylandSurfaceCreateFlagsKHR, rhs: WaylandSurfaceCreateFlagsKHR) WaylandSurfaceCreateFlagsKHR { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: WaylandSurfaceCreateFlagsKHR) WaylandSurfaceCreateFlagsKHR { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: WaylandSurfaceCreateFlagsKHR, rhs: WaylandSurfaceCreateFlagsKHR) WaylandSurfaceCreateFlagsKHR { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: WaylandSurfaceCreateFlagsKHR, rhs: WaylandSurfaceCreateFlagsKHR) bool { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: WaylandSurfaceCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(WaylandSurfaceCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const Win32SurfaceCreateFlagsKHR = packed struct {
+pub const Win32SurfaceCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(Win32SurfaceCreateFlagsKHR);
+    pub const IntType = FlagsMixin(Win32SurfaceCreateFlagsKHR).IntType;
+    pub fn toInt(self: Win32SurfaceCreateFlagsKHR) IntType { return FlagsMixin(Win32SurfaceCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) Win32SurfaceCreateFlagsKHR { return FlagsMixin(Win32SurfaceCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: Win32SurfaceCreateFlagsKHR, rhs: Win32SurfaceCreateFlagsKHR) Win32SurfaceCreateFlagsKHR { return FlagsMixin(Win32SurfaceCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: Win32SurfaceCreateFlagsKHR, rhs: Win32SurfaceCreateFlagsKHR) Win32SurfaceCreateFlagsKHR { return FlagsMixin(Win32SurfaceCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: Win32SurfaceCreateFlagsKHR) Win32SurfaceCreateFlagsKHR { return FlagsMixin(Win32SurfaceCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: Win32SurfaceCreateFlagsKHR, rhs: Win32SurfaceCreateFlagsKHR) Win32SurfaceCreateFlagsKHR { return FlagsMixin(Win32SurfaceCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: Win32SurfaceCreateFlagsKHR, rhs: Win32SurfaceCreateFlagsKHR) bool { return FlagsMixin(Win32SurfaceCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: Win32SurfaceCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(Win32SurfaceCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const XlibSurfaceCreateFlagsKHR = packed struct {
+pub const XlibSurfaceCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(XlibSurfaceCreateFlagsKHR);
+    pub const IntType = FlagsMixin(XlibSurfaceCreateFlagsKHR).IntType;
+    pub fn toInt(self: XlibSurfaceCreateFlagsKHR) IntType { return FlagsMixin(XlibSurfaceCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) XlibSurfaceCreateFlagsKHR { return FlagsMixin(XlibSurfaceCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: XlibSurfaceCreateFlagsKHR, rhs: XlibSurfaceCreateFlagsKHR) XlibSurfaceCreateFlagsKHR { return FlagsMixin(XlibSurfaceCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: XlibSurfaceCreateFlagsKHR, rhs: XlibSurfaceCreateFlagsKHR) XlibSurfaceCreateFlagsKHR { return FlagsMixin(XlibSurfaceCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: XlibSurfaceCreateFlagsKHR) XlibSurfaceCreateFlagsKHR { return FlagsMixin(XlibSurfaceCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: XlibSurfaceCreateFlagsKHR, rhs: XlibSurfaceCreateFlagsKHR) XlibSurfaceCreateFlagsKHR { return FlagsMixin(XlibSurfaceCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: XlibSurfaceCreateFlagsKHR, rhs: XlibSurfaceCreateFlagsKHR) bool { return FlagsMixin(XlibSurfaceCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: XlibSurfaceCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(XlibSurfaceCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const XcbSurfaceCreateFlagsKHR = packed struct {
+pub const XcbSurfaceCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(XcbSurfaceCreateFlagsKHR);
+    pub const IntType = FlagsMixin(XcbSurfaceCreateFlagsKHR).IntType;
+    pub fn toInt(self: XcbSurfaceCreateFlagsKHR) IntType { return FlagsMixin(XcbSurfaceCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) XcbSurfaceCreateFlagsKHR { return FlagsMixin(XcbSurfaceCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: XcbSurfaceCreateFlagsKHR, rhs: XcbSurfaceCreateFlagsKHR) XcbSurfaceCreateFlagsKHR { return FlagsMixin(XcbSurfaceCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: XcbSurfaceCreateFlagsKHR, rhs: XcbSurfaceCreateFlagsKHR) XcbSurfaceCreateFlagsKHR { return FlagsMixin(XcbSurfaceCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: XcbSurfaceCreateFlagsKHR) XcbSurfaceCreateFlagsKHR { return FlagsMixin(XcbSurfaceCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: XcbSurfaceCreateFlagsKHR, rhs: XcbSurfaceCreateFlagsKHR) XcbSurfaceCreateFlagsKHR { return FlagsMixin(XcbSurfaceCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: XcbSurfaceCreateFlagsKHR, rhs: XcbSurfaceCreateFlagsKHR) bool { return FlagsMixin(XcbSurfaceCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: XcbSurfaceCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(XcbSurfaceCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const DirectFBSurfaceCreateFlagsEXT = packed struct {
+pub const DirectFBSurfaceCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DirectFBSurfaceCreateFlagsEXT);
+    pub const IntType = FlagsMixin(DirectFBSurfaceCreateFlagsEXT).IntType;
+    pub fn toInt(self: DirectFBSurfaceCreateFlagsEXT) IntType { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DirectFBSurfaceCreateFlagsEXT { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DirectFBSurfaceCreateFlagsEXT, rhs: DirectFBSurfaceCreateFlagsEXT) DirectFBSurfaceCreateFlagsEXT { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DirectFBSurfaceCreateFlagsEXT, rhs: DirectFBSurfaceCreateFlagsEXT) DirectFBSurfaceCreateFlagsEXT { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DirectFBSurfaceCreateFlagsEXT) DirectFBSurfaceCreateFlagsEXT { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DirectFBSurfaceCreateFlagsEXT, rhs: DirectFBSurfaceCreateFlagsEXT) DirectFBSurfaceCreateFlagsEXT { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DirectFBSurfaceCreateFlagsEXT, rhs: DirectFBSurfaceCreateFlagsEXT) bool { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DirectFBSurfaceCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DirectFBSurfaceCreateFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const IOSSurfaceCreateFlagsMVK = packed struct {
+pub const IOSSurfaceCreateFlagsMVK = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(IOSSurfaceCreateFlagsMVK);
+    pub const IntType = FlagsMixin(IOSSurfaceCreateFlagsMVK).IntType;
+    pub fn toInt(self: IOSSurfaceCreateFlagsMVK) IntType { return FlagsMixin(IOSSurfaceCreateFlagsMVK).toInt(self); }
+    pub fn fromInt(flags: IntType) IOSSurfaceCreateFlagsMVK { return FlagsMixin(IOSSurfaceCreateFlagsMVK).fromInt(flags); }
+    pub fn merge(lhs: IOSSurfaceCreateFlagsMVK, rhs: IOSSurfaceCreateFlagsMVK) IOSSurfaceCreateFlagsMVK { return FlagsMixin(IOSSurfaceCreateFlagsMVK).merge(lhs, rhs); }
+    pub fn intersect(lhs: IOSSurfaceCreateFlagsMVK, rhs: IOSSurfaceCreateFlagsMVK) IOSSurfaceCreateFlagsMVK { return FlagsMixin(IOSSurfaceCreateFlagsMVK).intersect(lhs, rhs); }
+    pub fn complement(self: IOSSurfaceCreateFlagsMVK) IOSSurfaceCreateFlagsMVK { return FlagsMixin(IOSSurfaceCreateFlagsMVK).complement(self); }
+    pub fn subtract(lhs: IOSSurfaceCreateFlagsMVK, rhs: IOSSurfaceCreateFlagsMVK) IOSSurfaceCreateFlagsMVK { return FlagsMixin(IOSSurfaceCreateFlagsMVK).subtract(lhs, rhs); }
+    pub fn contains(lhs: IOSSurfaceCreateFlagsMVK, rhs: IOSSurfaceCreateFlagsMVK) bool { return FlagsMixin(IOSSurfaceCreateFlagsMVK).contains(lhs, rhs); }
+    pub fn format(self: IOSSurfaceCreateFlagsMVK, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(IOSSurfaceCreateFlagsMVK).format(self, fmt, options, writer); }
 };
-pub const MacOSSurfaceCreateFlagsMVK = packed struct {
+pub const MacOSSurfaceCreateFlagsMVK = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(MacOSSurfaceCreateFlagsMVK);
+    pub const IntType = FlagsMixin(MacOSSurfaceCreateFlagsMVK).IntType;
+    pub fn toInt(self: MacOSSurfaceCreateFlagsMVK) IntType { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).toInt(self); }
+    pub fn fromInt(flags: IntType) MacOSSurfaceCreateFlagsMVK { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).fromInt(flags); }
+    pub fn merge(lhs: MacOSSurfaceCreateFlagsMVK, rhs: MacOSSurfaceCreateFlagsMVK) MacOSSurfaceCreateFlagsMVK { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).merge(lhs, rhs); }
+    pub fn intersect(lhs: MacOSSurfaceCreateFlagsMVK, rhs: MacOSSurfaceCreateFlagsMVK) MacOSSurfaceCreateFlagsMVK { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).intersect(lhs, rhs); }
+    pub fn complement(self: MacOSSurfaceCreateFlagsMVK) MacOSSurfaceCreateFlagsMVK { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).complement(self); }
+    pub fn subtract(lhs: MacOSSurfaceCreateFlagsMVK, rhs: MacOSSurfaceCreateFlagsMVK) MacOSSurfaceCreateFlagsMVK { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).subtract(lhs, rhs); }
+    pub fn contains(lhs: MacOSSurfaceCreateFlagsMVK, rhs: MacOSSurfaceCreateFlagsMVK) bool { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).contains(lhs, rhs); }
+    pub fn format(self: MacOSSurfaceCreateFlagsMVK, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MacOSSurfaceCreateFlagsMVK).format(self, fmt, options, writer); }
 };
-pub const MetalSurfaceCreateFlagsEXT = packed struct {
+pub const MetalSurfaceCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(MetalSurfaceCreateFlagsEXT);
+    pub const IntType = FlagsMixin(MetalSurfaceCreateFlagsEXT).IntType;
+    pub fn toInt(self: MetalSurfaceCreateFlagsEXT) IntType { return FlagsMixin(MetalSurfaceCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) MetalSurfaceCreateFlagsEXT { return FlagsMixin(MetalSurfaceCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: MetalSurfaceCreateFlagsEXT, rhs: MetalSurfaceCreateFlagsEXT) MetalSurfaceCreateFlagsEXT { return FlagsMixin(MetalSurfaceCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: MetalSurfaceCreateFlagsEXT, rhs: MetalSurfaceCreateFlagsEXT) MetalSurfaceCreateFlagsEXT { return FlagsMixin(MetalSurfaceCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: MetalSurfaceCreateFlagsEXT) MetalSurfaceCreateFlagsEXT { return FlagsMixin(MetalSurfaceCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: MetalSurfaceCreateFlagsEXT, rhs: MetalSurfaceCreateFlagsEXT) MetalSurfaceCreateFlagsEXT { return FlagsMixin(MetalSurfaceCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: MetalSurfaceCreateFlagsEXT, rhs: MetalSurfaceCreateFlagsEXT) bool { return FlagsMixin(MetalSurfaceCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: MetalSurfaceCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MetalSurfaceCreateFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const ImagePipeSurfaceCreateFlagsFUCHSIA = packed struct {
+pub const ImagePipeSurfaceCreateFlagsFUCHSIA = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA);
+    pub const IntType = FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).IntType;
+    pub fn toInt(self: ImagePipeSurfaceCreateFlagsFUCHSIA) IntType { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).toInt(self); }
+    pub fn fromInt(flags: IntType) ImagePipeSurfaceCreateFlagsFUCHSIA { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).fromInt(flags); }
+    pub fn merge(lhs: ImagePipeSurfaceCreateFlagsFUCHSIA, rhs: ImagePipeSurfaceCreateFlagsFUCHSIA) ImagePipeSurfaceCreateFlagsFUCHSIA { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImagePipeSurfaceCreateFlagsFUCHSIA, rhs: ImagePipeSurfaceCreateFlagsFUCHSIA) ImagePipeSurfaceCreateFlagsFUCHSIA { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).intersect(lhs, rhs); }
+    pub fn complement(self: ImagePipeSurfaceCreateFlagsFUCHSIA) ImagePipeSurfaceCreateFlagsFUCHSIA { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).complement(self); }
+    pub fn subtract(lhs: ImagePipeSurfaceCreateFlagsFUCHSIA, rhs: ImagePipeSurfaceCreateFlagsFUCHSIA) ImagePipeSurfaceCreateFlagsFUCHSIA { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImagePipeSurfaceCreateFlagsFUCHSIA, rhs: ImagePipeSurfaceCreateFlagsFUCHSIA) bool { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).contains(lhs, rhs); }
+    pub fn format(self: ImagePipeSurfaceCreateFlagsFUCHSIA, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImagePipeSurfaceCreateFlagsFUCHSIA).format(self, fmt, options, writer); }
 };
-pub const StreamDescriptorSurfaceCreateFlagsGGP = packed struct {
+pub const StreamDescriptorSurfaceCreateFlagsGGP = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP);
+    pub const IntType = FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).IntType;
+    pub fn toInt(self: StreamDescriptorSurfaceCreateFlagsGGP) IntType { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).toInt(self); }
+    pub fn fromInt(flags: IntType) StreamDescriptorSurfaceCreateFlagsGGP { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).fromInt(flags); }
+    pub fn merge(lhs: StreamDescriptorSurfaceCreateFlagsGGP, rhs: StreamDescriptorSurfaceCreateFlagsGGP) StreamDescriptorSurfaceCreateFlagsGGP { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).merge(lhs, rhs); }
+    pub fn intersect(lhs: StreamDescriptorSurfaceCreateFlagsGGP, rhs: StreamDescriptorSurfaceCreateFlagsGGP) StreamDescriptorSurfaceCreateFlagsGGP { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).intersect(lhs, rhs); }
+    pub fn complement(self: StreamDescriptorSurfaceCreateFlagsGGP) StreamDescriptorSurfaceCreateFlagsGGP { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).complement(self); }
+    pub fn subtract(lhs: StreamDescriptorSurfaceCreateFlagsGGP, rhs: StreamDescriptorSurfaceCreateFlagsGGP) StreamDescriptorSurfaceCreateFlagsGGP { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).subtract(lhs, rhs); }
+    pub fn contains(lhs: StreamDescriptorSurfaceCreateFlagsGGP, rhs: StreamDescriptorSurfaceCreateFlagsGGP) bool { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).contains(lhs, rhs); }
+    pub fn format(self: StreamDescriptorSurfaceCreateFlagsGGP, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(StreamDescriptorSurfaceCreateFlagsGGP).format(self, fmt, options, writer); }
 };
-pub const HeadlessSurfaceCreateFlagsEXT = packed struct {
+pub const HeadlessSurfaceCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(HeadlessSurfaceCreateFlagsEXT);
+    pub const IntType = FlagsMixin(HeadlessSurfaceCreateFlagsEXT).IntType;
+    pub fn toInt(self: HeadlessSurfaceCreateFlagsEXT) IntType { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) HeadlessSurfaceCreateFlagsEXT { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: HeadlessSurfaceCreateFlagsEXT, rhs: HeadlessSurfaceCreateFlagsEXT) HeadlessSurfaceCreateFlagsEXT { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: HeadlessSurfaceCreateFlagsEXT, rhs: HeadlessSurfaceCreateFlagsEXT) HeadlessSurfaceCreateFlagsEXT { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: HeadlessSurfaceCreateFlagsEXT) HeadlessSurfaceCreateFlagsEXT { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: HeadlessSurfaceCreateFlagsEXT, rhs: HeadlessSurfaceCreateFlagsEXT) HeadlessSurfaceCreateFlagsEXT { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: HeadlessSurfaceCreateFlagsEXT, rhs: HeadlessSurfaceCreateFlagsEXT) bool { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: HeadlessSurfaceCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(HeadlessSurfaceCreateFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const ScreenSurfaceCreateFlagsQNX = packed struct {
+pub const ScreenSurfaceCreateFlagsQNX = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(ScreenSurfaceCreateFlagsQNX);
+    pub const IntType = FlagsMixin(ScreenSurfaceCreateFlagsQNX).IntType;
+    pub fn toInt(self: ScreenSurfaceCreateFlagsQNX) IntType { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).toInt(self); }
+    pub fn fromInt(flags: IntType) ScreenSurfaceCreateFlagsQNX { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).fromInt(flags); }
+    pub fn merge(lhs: ScreenSurfaceCreateFlagsQNX, rhs: ScreenSurfaceCreateFlagsQNX) ScreenSurfaceCreateFlagsQNX { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).merge(lhs, rhs); }
+    pub fn intersect(lhs: ScreenSurfaceCreateFlagsQNX, rhs: ScreenSurfaceCreateFlagsQNX) ScreenSurfaceCreateFlagsQNX { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).intersect(lhs, rhs); }
+    pub fn complement(self: ScreenSurfaceCreateFlagsQNX) ScreenSurfaceCreateFlagsQNX { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).complement(self); }
+    pub fn subtract(lhs: ScreenSurfaceCreateFlagsQNX, rhs: ScreenSurfaceCreateFlagsQNX) ScreenSurfaceCreateFlagsQNX { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).subtract(lhs, rhs); }
+    pub fn contains(lhs: ScreenSurfaceCreateFlagsQNX, rhs: ScreenSurfaceCreateFlagsQNX) bool { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).contains(lhs, rhs); }
+    pub fn format(self: ScreenSurfaceCreateFlagsQNX, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ScreenSurfaceCreateFlagsQNX).format(self, fmt, options, writer); }
 };
 pub const PeerMemoryFeatureFlagsKHR = PeerMemoryFeatureFlags;
 pub const MemoryAllocateFlagsKHR = MemoryAllocateFlags;
-pub const CommandPoolTrimFlags = packed struct {
+pub const CommandPoolTrimFlags = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(CommandPoolTrimFlags);
+    pub const IntType = FlagsMixin(CommandPoolTrimFlags).IntType;
+    pub fn toInt(self: CommandPoolTrimFlags) IntType { return FlagsMixin(CommandPoolTrimFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) CommandPoolTrimFlags { return FlagsMixin(CommandPoolTrimFlags).fromInt(flags); }
+    pub fn merge(lhs: CommandPoolTrimFlags, rhs: CommandPoolTrimFlags) CommandPoolTrimFlags { return FlagsMixin(CommandPoolTrimFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: CommandPoolTrimFlags, rhs: CommandPoolTrimFlags) CommandPoolTrimFlags { return FlagsMixin(CommandPoolTrimFlags).intersect(lhs, rhs); }
+    pub fn complement(self: CommandPoolTrimFlags) CommandPoolTrimFlags { return FlagsMixin(CommandPoolTrimFlags).complement(self); }
+    pub fn subtract(lhs: CommandPoolTrimFlags, rhs: CommandPoolTrimFlags) CommandPoolTrimFlags { return FlagsMixin(CommandPoolTrimFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: CommandPoolTrimFlags, rhs: CommandPoolTrimFlags) bool { return FlagsMixin(CommandPoolTrimFlags).contains(lhs, rhs); }
+    pub fn format(self: CommandPoolTrimFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(CommandPoolTrimFlags).format(self, fmt, options, writer); }
 };
 pub const CommandPoolTrimFlagsKHR = CommandPoolTrimFlags;
 pub const ExternalMemoryHandleTypeFlagsKHR = ExternalMemoryHandleTypeFlags;
@@ -331,81 +622,225 @@ pub const SemaphoreImportFlagsKHR = SemaphoreImportFlags;
 pub const ExternalFenceHandleTypeFlagsKHR = ExternalFenceHandleTypeFlags;
 pub const ExternalFenceFeatureFlagsKHR = ExternalFenceFeatureFlags;
 pub const FenceImportFlagsKHR = FenceImportFlags;
-pub const PipelineViewportSwizzleStateCreateFlagsNV = packed struct {
+pub const PipelineViewportSwizzleStateCreateFlagsNV = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV);
+    pub const IntType = FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).IntType;
+    pub fn toInt(self: PipelineViewportSwizzleStateCreateFlagsNV) IntType { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineViewportSwizzleStateCreateFlagsNV { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: PipelineViewportSwizzleStateCreateFlagsNV, rhs: PipelineViewportSwizzleStateCreateFlagsNV) PipelineViewportSwizzleStateCreateFlagsNV { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineViewportSwizzleStateCreateFlagsNV, rhs: PipelineViewportSwizzleStateCreateFlagsNV) PipelineViewportSwizzleStateCreateFlagsNV { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineViewportSwizzleStateCreateFlagsNV) PipelineViewportSwizzleStateCreateFlagsNV { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).complement(self); }
+    pub fn subtract(lhs: PipelineViewportSwizzleStateCreateFlagsNV, rhs: PipelineViewportSwizzleStateCreateFlagsNV) PipelineViewportSwizzleStateCreateFlagsNV { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineViewportSwizzleStateCreateFlagsNV, rhs: PipelineViewportSwizzleStateCreateFlagsNV) bool { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: PipelineViewportSwizzleStateCreateFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineViewportSwizzleStateCreateFlagsNV).format(self, fmt, options, writer); }
 };
-pub const PipelineDiscardRectangleStateCreateFlagsEXT = packed struct {
+pub const PipelineDiscardRectangleStateCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT);
+    pub const IntType = FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).IntType;
+    pub fn toInt(self: PipelineDiscardRectangleStateCreateFlagsEXT) IntType { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineDiscardRectangleStateCreateFlagsEXT { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: PipelineDiscardRectangleStateCreateFlagsEXT, rhs: PipelineDiscardRectangleStateCreateFlagsEXT) PipelineDiscardRectangleStateCreateFlagsEXT { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineDiscardRectangleStateCreateFlagsEXT, rhs: PipelineDiscardRectangleStateCreateFlagsEXT) PipelineDiscardRectangleStateCreateFlagsEXT { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineDiscardRectangleStateCreateFlagsEXT) PipelineDiscardRectangleStateCreateFlagsEXT { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: PipelineDiscardRectangleStateCreateFlagsEXT, rhs: PipelineDiscardRectangleStateCreateFlagsEXT) PipelineDiscardRectangleStateCreateFlagsEXT { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineDiscardRectangleStateCreateFlagsEXT, rhs: PipelineDiscardRectangleStateCreateFlagsEXT) bool { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: PipelineDiscardRectangleStateCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineDiscardRectangleStateCreateFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const PipelineCoverageToColorStateCreateFlagsNV = packed struct {
+pub const PipelineCoverageToColorStateCreateFlagsNV = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV);
+    pub const IntType = FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).IntType;
+    pub fn toInt(self: PipelineCoverageToColorStateCreateFlagsNV) IntType { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCoverageToColorStateCreateFlagsNV { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: PipelineCoverageToColorStateCreateFlagsNV, rhs: PipelineCoverageToColorStateCreateFlagsNV) PipelineCoverageToColorStateCreateFlagsNV { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCoverageToColorStateCreateFlagsNV, rhs: PipelineCoverageToColorStateCreateFlagsNV) PipelineCoverageToColorStateCreateFlagsNV { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCoverageToColorStateCreateFlagsNV) PipelineCoverageToColorStateCreateFlagsNV { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).complement(self); }
+    pub fn subtract(lhs: PipelineCoverageToColorStateCreateFlagsNV, rhs: PipelineCoverageToColorStateCreateFlagsNV) PipelineCoverageToColorStateCreateFlagsNV { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCoverageToColorStateCreateFlagsNV, rhs: PipelineCoverageToColorStateCreateFlagsNV) bool { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: PipelineCoverageToColorStateCreateFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCoverageToColorStateCreateFlagsNV).format(self, fmt, options, writer); }
 };
-pub const PipelineCoverageModulationStateCreateFlagsNV = packed struct {
+pub const PipelineCoverageModulationStateCreateFlagsNV = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV);
+    pub const IntType = FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).IntType;
+    pub fn toInt(self: PipelineCoverageModulationStateCreateFlagsNV) IntType { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCoverageModulationStateCreateFlagsNV { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: PipelineCoverageModulationStateCreateFlagsNV, rhs: PipelineCoverageModulationStateCreateFlagsNV) PipelineCoverageModulationStateCreateFlagsNV { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCoverageModulationStateCreateFlagsNV, rhs: PipelineCoverageModulationStateCreateFlagsNV) PipelineCoverageModulationStateCreateFlagsNV { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCoverageModulationStateCreateFlagsNV) PipelineCoverageModulationStateCreateFlagsNV { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).complement(self); }
+    pub fn subtract(lhs: PipelineCoverageModulationStateCreateFlagsNV, rhs: PipelineCoverageModulationStateCreateFlagsNV) PipelineCoverageModulationStateCreateFlagsNV { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCoverageModulationStateCreateFlagsNV, rhs: PipelineCoverageModulationStateCreateFlagsNV) bool { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: PipelineCoverageModulationStateCreateFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCoverageModulationStateCreateFlagsNV).format(self, fmt, options, writer); }
 };
-pub const PipelineCoverageReductionStateCreateFlagsNV = packed struct {
+pub const PipelineCoverageReductionStateCreateFlagsNV = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV);
+    pub const IntType = FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).IntType;
+    pub fn toInt(self: PipelineCoverageReductionStateCreateFlagsNV) IntType { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCoverageReductionStateCreateFlagsNV { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: PipelineCoverageReductionStateCreateFlagsNV, rhs: PipelineCoverageReductionStateCreateFlagsNV) PipelineCoverageReductionStateCreateFlagsNV { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCoverageReductionStateCreateFlagsNV, rhs: PipelineCoverageReductionStateCreateFlagsNV) PipelineCoverageReductionStateCreateFlagsNV { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCoverageReductionStateCreateFlagsNV) PipelineCoverageReductionStateCreateFlagsNV { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).complement(self); }
+    pub fn subtract(lhs: PipelineCoverageReductionStateCreateFlagsNV, rhs: PipelineCoverageReductionStateCreateFlagsNV) PipelineCoverageReductionStateCreateFlagsNV { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCoverageReductionStateCreateFlagsNV, rhs: PipelineCoverageReductionStateCreateFlagsNV) bool { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: PipelineCoverageReductionStateCreateFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCoverageReductionStateCreateFlagsNV).format(self, fmt, options, writer); }
 };
-pub const ValidationCacheCreateFlagsEXT = packed struct {
+pub const ValidationCacheCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(ValidationCacheCreateFlagsEXT);
+    pub const IntType = FlagsMixin(ValidationCacheCreateFlagsEXT).IntType;
+    pub fn toInt(self: ValidationCacheCreateFlagsEXT) IntType { return FlagsMixin(ValidationCacheCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) ValidationCacheCreateFlagsEXT { return FlagsMixin(ValidationCacheCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: ValidationCacheCreateFlagsEXT, rhs: ValidationCacheCreateFlagsEXT) ValidationCacheCreateFlagsEXT { return FlagsMixin(ValidationCacheCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: ValidationCacheCreateFlagsEXT, rhs: ValidationCacheCreateFlagsEXT) ValidationCacheCreateFlagsEXT { return FlagsMixin(ValidationCacheCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: ValidationCacheCreateFlagsEXT) ValidationCacheCreateFlagsEXT { return FlagsMixin(ValidationCacheCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: ValidationCacheCreateFlagsEXT, rhs: ValidationCacheCreateFlagsEXT) ValidationCacheCreateFlagsEXT { return FlagsMixin(ValidationCacheCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: ValidationCacheCreateFlagsEXT, rhs: ValidationCacheCreateFlagsEXT) bool { return FlagsMixin(ValidationCacheCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: ValidationCacheCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ValidationCacheCreateFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const DebugUtilsMessengerCreateFlagsEXT = packed struct {
+pub const DebugUtilsMessengerCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DebugUtilsMessengerCreateFlagsEXT);
+    pub const IntType = FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).IntType;
+    pub fn toInt(self: DebugUtilsMessengerCreateFlagsEXT) IntType { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DebugUtilsMessengerCreateFlagsEXT { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DebugUtilsMessengerCreateFlagsEXT, rhs: DebugUtilsMessengerCreateFlagsEXT) DebugUtilsMessengerCreateFlagsEXT { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DebugUtilsMessengerCreateFlagsEXT, rhs: DebugUtilsMessengerCreateFlagsEXT) DebugUtilsMessengerCreateFlagsEXT { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DebugUtilsMessengerCreateFlagsEXT) DebugUtilsMessengerCreateFlagsEXT { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DebugUtilsMessengerCreateFlagsEXT, rhs: DebugUtilsMessengerCreateFlagsEXT) DebugUtilsMessengerCreateFlagsEXT { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DebugUtilsMessengerCreateFlagsEXT, rhs: DebugUtilsMessengerCreateFlagsEXT) bool { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DebugUtilsMessengerCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DebugUtilsMessengerCreateFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const DebugUtilsMessengerCallbackDataFlagsEXT = packed struct {
+pub const DebugUtilsMessengerCallbackDataFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT);
+    pub const IntType = FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).IntType;
+    pub fn toInt(self: DebugUtilsMessengerCallbackDataFlagsEXT) IntType { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DebugUtilsMessengerCallbackDataFlagsEXT { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DebugUtilsMessengerCallbackDataFlagsEXT, rhs: DebugUtilsMessengerCallbackDataFlagsEXT) DebugUtilsMessengerCallbackDataFlagsEXT { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DebugUtilsMessengerCallbackDataFlagsEXT, rhs: DebugUtilsMessengerCallbackDataFlagsEXT) DebugUtilsMessengerCallbackDataFlagsEXT { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DebugUtilsMessengerCallbackDataFlagsEXT) DebugUtilsMessengerCallbackDataFlagsEXT { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DebugUtilsMessengerCallbackDataFlagsEXT, rhs: DebugUtilsMessengerCallbackDataFlagsEXT) DebugUtilsMessengerCallbackDataFlagsEXT { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DebugUtilsMessengerCallbackDataFlagsEXT, rhs: DebugUtilsMessengerCallbackDataFlagsEXT) bool { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DebugUtilsMessengerCallbackDataFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DebugUtilsMessengerCallbackDataFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const DeviceMemoryReportFlagsEXT = packed struct {
+pub const DeviceMemoryReportFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(DeviceMemoryReportFlagsEXT);
+    pub const IntType = FlagsMixin(DeviceMemoryReportFlagsEXT).IntType;
+    pub fn toInt(self: DeviceMemoryReportFlagsEXT) IntType { return FlagsMixin(DeviceMemoryReportFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DeviceMemoryReportFlagsEXT { return FlagsMixin(DeviceMemoryReportFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DeviceMemoryReportFlagsEXT, rhs: DeviceMemoryReportFlagsEXT) DeviceMemoryReportFlagsEXT { return FlagsMixin(DeviceMemoryReportFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DeviceMemoryReportFlagsEXT, rhs: DeviceMemoryReportFlagsEXT) DeviceMemoryReportFlagsEXT { return FlagsMixin(DeviceMemoryReportFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DeviceMemoryReportFlagsEXT) DeviceMemoryReportFlagsEXT { return FlagsMixin(DeviceMemoryReportFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DeviceMemoryReportFlagsEXT, rhs: DeviceMemoryReportFlagsEXT) DeviceMemoryReportFlagsEXT { return FlagsMixin(DeviceMemoryReportFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DeviceMemoryReportFlagsEXT, rhs: DeviceMemoryReportFlagsEXT) bool { return FlagsMixin(DeviceMemoryReportFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DeviceMemoryReportFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DeviceMemoryReportFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const PipelineRasterizationConservativeStateCreateFlagsEXT = packed struct {
+pub const PipelineRasterizationConservativeStateCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT);
+    pub const IntType = FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).IntType;
+    pub fn toInt(self: PipelineRasterizationConservativeStateCreateFlagsEXT) IntType { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineRasterizationConservativeStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: PipelineRasterizationConservativeStateCreateFlagsEXT, rhs: PipelineRasterizationConservativeStateCreateFlagsEXT) PipelineRasterizationConservativeStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineRasterizationConservativeStateCreateFlagsEXT, rhs: PipelineRasterizationConservativeStateCreateFlagsEXT) PipelineRasterizationConservativeStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineRasterizationConservativeStateCreateFlagsEXT) PipelineRasterizationConservativeStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: PipelineRasterizationConservativeStateCreateFlagsEXT, rhs: PipelineRasterizationConservativeStateCreateFlagsEXT) PipelineRasterizationConservativeStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineRasterizationConservativeStateCreateFlagsEXT, rhs: PipelineRasterizationConservativeStateCreateFlagsEXT) bool { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: PipelineRasterizationConservativeStateCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineRasterizationConservativeStateCreateFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const DescriptorBindingFlagsEXT = DescriptorBindingFlags;
 pub const ResolveModeFlagsKHR = ResolveModeFlags;
-pub const PipelineRasterizationStateStreamCreateFlagsEXT = packed struct {
+pub const PipelineRasterizationStateStreamCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT);
+    pub const IntType = FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).IntType;
+    pub fn toInt(self: PipelineRasterizationStateStreamCreateFlagsEXT) IntType { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineRasterizationStateStreamCreateFlagsEXT { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: PipelineRasterizationStateStreamCreateFlagsEXT, rhs: PipelineRasterizationStateStreamCreateFlagsEXT) PipelineRasterizationStateStreamCreateFlagsEXT { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineRasterizationStateStreamCreateFlagsEXT, rhs: PipelineRasterizationStateStreamCreateFlagsEXT) PipelineRasterizationStateStreamCreateFlagsEXT { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineRasterizationStateStreamCreateFlagsEXT) PipelineRasterizationStateStreamCreateFlagsEXT { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: PipelineRasterizationStateStreamCreateFlagsEXT, rhs: PipelineRasterizationStateStreamCreateFlagsEXT) PipelineRasterizationStateStreamCreateFlagsEXT { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineRasterizationStateStreamCreateFlagsEXT, rhs: PipelineRasterizationStateStreamCreateFlagsEXT) bool { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: PipelineRasterizationStateStreamCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineRasterizationStateStreamCreateFlagsEXT).format(self, fmt, options, writer); }
 };
-pub const PipelineRasterizationDepthClipStateCreateFlagsEXT = packed struct {
+pub const PipelineRasterizationDepthClipStateCreateFlagsEXT = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT);
+    pub const IntType = FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).IntType;
+    pub fn toInt(self: PipelineRasterizationDepthClipStateCreateFlagsEXT) IntType { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineRasterizationDepthClipStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: PipelineRasterizationDepthClipStateCreateFlagsEXT, rhs: PipelineRasterizationDepthClipStateCreateFlagsEXT) PipelineRasterizationDepthClipStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineRasterizationDepthClipStateCreateFlagsEXT, rhs: PipelineRasterizationDepthClipStateCreateFlagsEXT) PipelineRasterizationDepthClipStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineRasterizationDepthClipStateCreateFlagsEXT) PipelineRasterizationDepthClipStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: PipelineRasterizationDepthClipStateCreateFlagsEXT, rhs: PipelineRasterizationDepthClipStateCreateFlagsEXT) PipelineRasterizationDepthClipStateCreateFlagsEXT { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineRasterizationDepthClipStateCreateFlagsEXT, rhs: PipelineRasterizationDepthClipStateCreateFlagsEXT) bool { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: PipelineRasterizationDepthClipStateCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineRasterizationDepthClipStateCreateFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const ToolPurposeFlagsEXT = ToolPurposeFlags;
 pub const SubmitFlagsKHR = SubmitFlags;
-pub const ImageFormatConstraintsFlagsFUCHSIA = packed struct {
+pub const ImageFormatConstraintsFlagsFUCHSIA = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA);
+    pub const IntType = FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).IntType;
+    pub fn toInt(self: ImageFormatConstraintsFlagsFUCHSIA) IntType { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageFormatConstraintsFlagsFUCHSIA { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).fromInt(flags); }
+    pub fn merge(lhs: ImageFormatConstraintsFlagsFUCHSIA, rhs: ImageFormatConstraintsFlagsFUCHSIA) ImageFormatConstraintsFlagsFUCHSIA { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageFormatConstraintsFlagsFUCHSIA, rhs: ImageFormatConstraintsFlagsFUCHSIA) ImageFormatConstraintsFlagsFUCHSIA { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).intersect(lhs, rhs); }
+    pub fn complement(self: ImageFormatConstraintsFlagsFUCHSIA) ImageFormatConstraintsFlagsFUCHSIA { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).complement(self); }
+    pub fn subtract(lhs: ImageFormatConstraintsFlagsFUCHSIA, rhs: ImageFormatConstraintsFlagsFUCHSIA) ImageFormatConstraintsFlagsFUCHSIA { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageFormatConstraintsFlagsFUCHSIA, rhs: ImageFormatConstraintsFlagsFUCHSIA) bool { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).contains(lhs, rhs); }
+    pub fn format(self: ImageFormatConstraintsFlagsFUCHSIA, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageFormatConstraintsFlagsFUCHSIA).format(self, fmt, options, writer); }
 };
-pub const VideoSessionParametersCreateFlagsKHR = packed struct {
+pub const VideoSessionParametersCreateFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(VideoSessionParametersCreateFlagsKHR);
+    pub const IntType = FlagsMixin(VideoSessionParametersCreateFlagsKHR).IntType;
+    pub fn toInt(self: VideoSessionParametersCreateFlagsKHR) IntType { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoSessionParametersCreateFlagsKHR { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoSessionParametersCreateFlagsKHR, rhs: VideoSessionParametersCreateFlagsKHR) VideoSessionParametersCreateFlagsKHR { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoSessionParametersCreateFlagsKHR, rhs: VideoSessionParametersCreateFlagsKHR) VideoSessionParametersCreateFlagsKHR { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoSessionParametersCreateFlagsKHR) VideoSessionParametersCreateFlagsKHR { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoSessionParametersCreateFlagsKHR, rhs: VideoSessionParametersCreateFlagsKHR) VideoSessionParametersCreateFlagsKHR { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoSessionParametersCreateFlagsKHR, rhs: VideoSessionParametersCreateFlagsKHR) bool { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoSessionParametersCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoSessionParametersCreateFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const VideoBeginCodingFlagsKHR = packed struct {
+pub const VideoBeginCodingFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(VideoBeginCodingFlagsKHR);
+    pub const IntType = FlagsMixin(VideoBeginCodingFlagsKHR).IntType;
+    pub fn toInt(self: VideoBeginCodingFlagsKHR) IntType { return FlagsMixin(VideoBeginCodingFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoBeginCodingFlagsKHR { return FlagsMixin(VideoBeginCodingFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoBeginCodingFlagsKHR, rhs: VideoBeginCodingFlagsKHR) VideoBeginCodingFlagsKHR { return FlagsMixin(VideoBeginCodingFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoBeginCodingFlagsKHR, rhs: VideoBeginCodingFlagsKHR) VideoBeginCodingFlagsKHR { return FlagsMixin(VideoBeginCodingFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoBeginCodingFlagsKHR) VideoBeginCodingFlagsKHR { return FlagsMixin(VideoBeginCodingFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoBeginCodingFlagsKHR, rhs: VideoBeginCodingFlagsKHR) VideoBeginCodingFlagsKHR { return FlagsMixin(VideoBeginCodingFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoBeginCodingFlagsKHR, rhs: VideoBeginCodingFlagsKHR) bool { return FlagsMixin(VideoBeginCodingFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoBeginCodingFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoBeginCodingFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const VideoEndCodingFlagsKHR = packed struct {
+pub const VideoEndCodingFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(VideoEndCodingFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEndCodingFlagsKHR).IntType;
+    pub fn toInt(self: VideoEndCodingFlagsKHR) IntType { return FlagsMixin(VideoEndCodingFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEndCodingFlagsKHR { return FlagsMixin(VideoEndCodingFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEndCodingFlagsKHR, rhs: VideoEndCodingFlagsKHR) VideoEndCodingFlagsKHR { return FlagsMixin(VideoEndCodingFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEndCodingFlagsKHR, rhs: VideoEndCodingFlagsKHR) VideoEndCodingFlagsKHR { return FlagsMixin(VideoEndCodingFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEndCodingFlagsKHR) VideoEndCodingFlagsKHR { return FlagsMixin(VideoEndCodingFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEndCodingFlagsKHR, rhs: VideoEndCodingFlagsKHR) VideoEndCodingFlagsKHR { return FlagsMixin(VideoEndCodingFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEndCodingFlagsKHR, rhs: VideoEndCodingFlagsKHR) bool { return FlagsMixin(VideoEndCodingFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEndCodingFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEndCodingFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const VideoDecodeFlagsKHR = packed struct {
+pub const VideoDecodeFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(VideoDecodeFlagsKHR);
+    pub const IntType = FlagsMixin(VideoDecodeFlagsKHR).IntType;
+    pub fn toInt(self: VideoDecodeFlagsKHR) IntType { return FlagsMixin(VideoDecodeFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoDecodeFlagsKHR { return FlagsMixin(VideoDecodeFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoDecodeFlagsKHR, rhs: VideoDecodeFlagsKHR) VideoDecodeFlagsKHR { return FlagsMixin(VideoDecodeFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoDecodeFlagsKHR, rhs: VideoDecodeFlagsKHR) VideoDecodeFlagsKHR { return FlagsMixin(VideoDecodeFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoDecodeFlagsKHR) VideoDecodeFlagsKHR { return FlagsMixin(VideoDecodeFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoDecodeFlagsKHR, rhs: VideoDecodeFlagsKHR) VideoDecodeFlagsKHR { return FlagsMixin(VideoDecodeFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoDecodeFlagsKHR, rhs: VideoDecodeFlagsKHR) bool { return FlagsMixin(VideoDecodeFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoDecodeFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoDecodeFlagsKHR).format(self, fmt, options, writer); }
 };
-pub const VideoEncodeRateControlFlagsKHR = packed struct {
+pub const VideoEncodeRateControlFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(VideoEncodeRateControlFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeRateControlFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeRateControlFlagsKHR) IntType { return FlagsMixin(VideoEncodeRateControlFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeRateControlFlagsKHR { return FlagsMixin(VideoEncodeRateControlFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeRateControlFlagsKHR, rhs: VideoEncodeRateControlFlagsKHR) VideoEncodeRateControlFlagsKHR { return FlagsMixin(VideoEncodeRateControlFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeRateControlFlagsKHR, rhs: VideoEncodeRateControlFlagsKHR) VideoEncodeRateControlFlagsKHR { return FlagsMixin(VideoEncodeRateControlFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeRateControlFlagsKHR) VideoEncodeRateControlFlagsKHR { return FlagsMixin(VideoEncodeRateControlFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeRateControlFlagsKHR, rhs: VideoEncodeRateControlFlagsKHR) VideoEncodeRateControlFlagsKHR { return FlagsMixin(VideoEncodeRateControlFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeRateControlFlagsKHR, rhs: VideoEncodeRateControlFlagsKHR) bool { return FlagsMixin(VideoEncodeRateControlFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeRateControlFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeRateControlFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const Instance = enum(usize) { null_handle = 0, _ };
 pub const PhysicalDevice = enum(usize) { null_handle = 0, _ };
@@ -8825,7 +9260,15 @@ pub const PipelineCacheCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineCacheCreateFlags);
+    pub const IntType = FlagsMixin(PipelineCacheCreateFlags).IntType;
+    pub fn toInt(self: PipelineCacheCreateFlags) IntType { return FlagsMixin(PipelineCacheCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCacheCreateFlags { return FlagsMixin(PipelineCacheCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineCacheCreateFlags, rhs: PipelineCacheCreateFlags) PipelineCacheCreateFlags { return FlagsMixin(PipelineCacheCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCacheCreateFlags, rhs: PipelineCacheCreateFlags) PipelineCacheCreateFlags { return FlagsMixin(PipelineCacheCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCacheCreateFlags) PipelineCacheCreateFlags { return FlagsMixin(PipelineCacheCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineCacheCreateFlags, rhs: PipelineCacheCreateFlags) PipelineCacheCreateFlags { return FlagsMixin(PipelineCacheCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCacheCreateFlags, rhs: PipelineCacheCreateFlags) bool { return FlagsMixin(PipelineCacheCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineCacheCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCacheCreateFlags).format(self, fmt, options, writer); }
 };
 pub const PrimitiveTopology = enum(i32) {
     point_list = 0,
@@ -10700,7 +11143,15 @@ pub const QueueFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(QueueFlags);
+    pub const IntType = FlagsMixin(QueueFlags).IntType;
+    pub fn toInt(self: QueueFlags) IntType { return FlagsMixin(QueueFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) QueueFlags { return FlagsMixin(QueueFlags).fromInt(flags); }
+    pub fn merge(lhs: QueueFlags, rhs: QueueFlags) QueueFlags { return FlagsMixin(QueueFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: QueueFlags, rhs: QueueFlags) QueueFlags { return FlagsMixin(QueueFlags).intersect(lhs, rhs); }
+    pub fn complement(self: QueueFlags) QueueFlags { return FlagsMixin(QueueFlags).complement(self); }
+    pub fn subtract(lhs: QueueFlags, rhs: QueueFlags) QueueFlags { return FlagsMixin(QueueFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: QueueFlags, rhs: QueueFlags) bool { return FlagsMixin(QueueFlags).contains(lhs, rhs); }
+    pub fn format(self: QueueFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(QueueFlags).format(self, fmt, options, writer); }
 };
 pub const CullModeFlags = packed struct(Flags) {
     front_bit: bool = false,
@@ -10735,7 +11186,15 @@ pub const CullModeFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(CullModeFlags);
+    pub const IntType = FlagsMixin(CullModeFlags).IntType;
+    pub fn toInt(self: CullModeFlags) IntType { return FlagsMixin(CullModeFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) CullModeFlags { return FlagsMixin(CullModeFlags).fromInt(flags); }
+    pub fn merge(lhs: CullModeFlags, rhs: CullModeFlags) CullModeFlags { return FlagsMixin(CullModeFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: CullModeFlags, rhs: CullModeFlags) CullModeFlags { return FlagsMixin(CullModeFlags).intersect(lhs, rhs); }
+    pub fn complement(self: CullModeFlags) CullModeFlags { return FlagsMixin(CullModeFlags).complement(self); }
+    pub fn subtract(lhs: CullModeFlags, rhs: CullModeFlags) CullModeFlags { return FlagsMixin(CullModeFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: CullModeFlags, rhs: CullModeFlags) bool { return FlagsMixin(CullModeFlags).contains(lhs, rhs); }
+    pub fn format(self: CullModeFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(CullModeFlags).format(self, fmt, options, writer); }
 };
 pub const RenderPassCreateFlags = packed struct(Flags) {
     _reserved_bit_0: bool = false,
@@ -10770,7 +11229,15 @@ pub const RenderPassCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(RenderPassCreateFlags);
+    pub const IntType = FlagsMixin(RenderPassCreateFlags).IntType;
+    pub fn toInt(self: RenderPassCreateFlags) IntType { return FlagsMixin(RenderPassCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) RenderPassCreateFlags { return FlagsMixin(RenderPassCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: RenderPassCreateFlags, rhs: RenderPassCreateFlags) RenderPassCreateFlags { return FlagsMixin(RenderPassCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: RenderPassCreateFlags, rhs: RenderPassCreateFlags) RenderPassCreateFlags { return FlagsMixin(RenderPassCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: RenderPassCreateFlags) RenderPassCreateFlags { return FlagsMixin(RenderPassCreateFlags).complement(self); }
+    pub fn subtract(lhs: RenderPassCreateFlags, rhs: RenderPassCreateFlags) RenderPassCreateFlags { return FlagsMixin(RenderPassCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: RenderPassCreateFlags, rhs: RenderPassCreateFlags) bool { return FlagsMixin(RenderPassCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: RenderPassCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(RenderPassCreateFlags).format(self, fmt, options, writer); }
 };
 pub const DeviceQueueCreateFlags = packed struct(Flags) {
     protected_bit: bool = false,
@@ -10805,7 +11272,15 @@ pub const DeviceQueueCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DeviceQueueCreateFlags);
+    pub const IntType = FlagsMixin(DeviceQueueCreateFlags).IntType;
+    pub fn toInt(self: DeviceQueueCreateFlags) IntType { return FlagsMixin(DeviceQueueCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DeviceQueueCreateFlags { return FlagsMixin(DeviceQueueCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: DeviceQueueCreateFlags, rhs: DeviceQueueCreateFlags) DeviceQueueCreateFlags { return FlagsMixin(DeviceQueueCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DeviceQueueCreateFlags, rhs: DeviceQueueCreateFlags) DeviceQueueCreateFlags { return FlagsMixin(DeviceQueueCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DeviceQueueCreateFlags) DeviceQueueCreateFlags { return FlagsMixin(DeviceQueueCreateFlags).complement(self); }
+    pub fn subtract(lhs: DeviceQueueCreateFlags, rhs: DeviceQueueCreateFlags) DeviceQueueCreateFlags { return FlagsMixin(DeviceQueueCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DeviceQueueCreateFlags, rhs: DeviceQueueCreateFlags) bool { return FlagsMixin(DeviceQueueCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: DeviceQueueCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DeviceQueueCreateFlags).format(self, fmt, options, writer); }
 };
 pub const MemoryPropertyFlags = packed struct(Flags) {
     device_local_bit: bool = false,
@@ -10840,7 +11315,15 @@ pub const MemoryPropertyFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(MemoryPropertyFlags);
+    pub const IntType = FlagsMixin(MemoryPropertyFlags).IntType;
+    pub fn toInt(self: MemoryPropertyFlags) IntType { return FlagsMixin(MemoryPropertyFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) MemoryPropertyFlags { return FlagsMixin(MemoryPropertyFlags).fromInt(flags); }
+    pub fn merge(lhs: MemoryPropertyFlags, rhs: MemoryPropertyFlags) MemoryPropertyFlags { return FlagsMixin(MemoryPropertyFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: MemoryPropertyFlags, rhs: MemoryPropertyFlags) MemoryPropertyFlags { return FlagsMixin(MemoryPropertyFlags).intersect(lhs, rhs); }
+    pub fn complement(self: MemoryPropertyFlags) MemoryPropertyFlags { return FlagsMixin(MemoryPropertyFlags).complement(self); }
+    pub fn subtract(lhs: MemoryPropertyFlags, rhs: MemoryPropertyFlags) MemoryPropertyFlags { return FlagsMixin(MemoryPropertyFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: MemoryPropertyFlags, rhs: MemoryPropertyFlags) bool { return FlagsMixin(MemoryPropertyFlags).contains(lhs, rhs); }
+    pub fn format(self: MemoryPropertyFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MemoryPropertyFlags).format(self, fmt, options, writer); }
 };
 pub const MemoryHeapFlags = packed struct(Flags) {
     device_local_bit: bool = false,
@@ -10875,7 +11358,15 @@ pub const MemoryHeapFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(MemoryHeapFlags);
+    pub const IntType = FlagsMixin(MemoryHeapFlags).IntType;
+    pub fn toInt(self: MemoryHeapFlags) IntType { return FlagsMixin(MemoryHeapFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) MemoryHeapFlags { return FlagsMixin(MemoryHeapFlags).fromInt(flags); }
+    pub fn merge(lhs: MemoryHeapFlags, rhs: MemoryHeapFlags) MemoryHeapFlags { return FlagsMixin(MemoryHeapFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: MemoryHeapFlags, rhs: MemoryHeapFlags) MemoryHeapFlags { return FlagsMixin(MemoryHeapFlags).intersect(lhs, rhs); }
+    pub fn complement(self: MemoryHeapFlags) MemoryHeapFlags { return FlagsMixin(MemoryHeapFlags).complement(self); }
+    pub fn subtract(lhs: MemoryHeapFlags, rhs: MemoryHeapFlags) MemoryHeapFlags { return FlagsMixin(MemoryHeapFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: MemoryHeapFlags, rhs: MemoryHeapFlags) bool { return FlagsMixin(MemoryHeapFlags).contains(lhs, rhs); }
+    pub fn format(self: MemoryHeapFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MemoryHeapFlags).format(self, fmt, options, writer); }
 };
 pub const AccessFlags = packed struct(Flags) {
     indirect_command_read_bit: bool = false,
@@ -10910,7 +11401,15 @@ pub const AccessFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(AccessFlags);
+    pub const IntType = FlagsMixin(AccessFlags).IntType;
+    pub fn toInt(self: AccessFlags) IntType { return FlagsMixin(AccessFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) AccessFlags { return FlagsMixin(AccessFlags).fromInt(flags); }
+    pub fn merge(lhs: AccessFlags, rhs: AccessFlags) AccessFlags { return FlagsMixin(AccessFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: AccessFlags, rhs: AccessFlags) AccessFlags { return FlagsMixin(AccessFlags).intersect(lhs, rhs); }
+    pub fn complement(self: AccessFlags) AccessFlags { return FlagsMixin(AccessFlags).complement(self); }
+    pub fn subtract(lhs: AccessFlags, rhs: AccessFlags) AccessFlags { return FlagsMixin(AccessFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: AccessFlags, rhs: AccessFlags) bool { return FlagsMixin(AccessFlags).contains(lhs, rhs); }
+    pub fn format(self: AccessFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AccessFlags).format(self, fmt, options, writer); }
 };
 pub const BufferUsageFlags = packed struct(Flags) {
     transfer_src_bit: bool = false,
@@ -10945,7 +11444,15 @@ pub const BufferUsageFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(BufferUsageFlags);
+    pub const IntType = FlagsMixin(BufferUsageFlags).IntType;
+    pub fn toInt(self: BufferUsageFlags) IntType { return FlagsMixin(BufferUsageFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) BufferUsageFlags { return FlagsMixin(BufferUsageFlags).fromInt(flags); }
+    pub fn merge(lhs: BufferUsageFlags, rhs: BufferUsageFlags) BufferUsageFlags { return FlagsMixin(BufferUsageFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: BufferUsageFlags, rhs: BufferUsageFlags) BufferUsageFlags { return FlagsMixin(BufferUsageFlags).intersect(lhs, rhs); }
+    pub fn complement(self: BufferUsageFlags) BufferUsageFlags { return FlagsMixin(BufferUsageFlags).complement(self); }
+    pub fn subtract(lhs: BufferUsageFlags, rhs: BufferUsageFlags) BufferUsageFlags { return FlagsMixin(BufferUsageFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: BufferUsageFlags, rhs: BufferUsageFlags) bool { return FlagsMixin(BufferUsageFlags).contains(lhs, rhs); }
+    pub fn format(self: BufferUsageFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(BufferUsageFlags).format(self, fmt, options, writer); }
 };
 pub const BufferUsageFlags2KHR = packed struct(Flags64) {
     transfer_src_bit_khr: bool = false,
@@ -11012,7 +11519,15 @@ pub const BufferUsageFlags2KHR = packed struct(Flags64) {
     _reserved_bit_61: bool = false,
     _reserved_bit_62: bool = false,
     _reserved_bit_63: bool = false,
-    pub usingnamespace FlagsMixin(BufferUsageFlags2KHR);
+    pub const IntType = FlagsMixin(BufferUsageFlags2KHR).IntType;
+    pub fn toInt(self: BufferUsageFlags2KHR) IntType { return FlagsMixin(BufferUsageFlags2KHR).toInt(self); }
+    pub fn fromInt(flags: IntType) BufferUsageFlags2KHR { return FlagsMixin(BufferUsageFlags2KHR).fromInt(flags); }
+    pub fn merge(lhs: BufferUsageFlags2KHR, rhs: BufferUsageFlags2KHR) BufferUsageFlags2KHR { return FlagsMixin(BufferUsageFlags2KHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: BufferUsageFlags2KHR, rhs: BufferUsageFlags2KHR) BufferUsageFlags2KHR { return FlagsMixin(BufferUsageFlags2KHR).intersect(lhs, rhs); }
+    pub fn complement(self: BufferUsageFlags2KHR) BufferUsageFlags2KHR { return FlagsMixin(BufferUsageFlags2KHR).complement(self); }
+    pub fn subtract(lhs: BufferUsageFlags2KHR, rhs: BufferUsageFlags2KHR) BufferUsageFlags2KHR { return FlagsMixin(BufferUsageFlags2KHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: BufferUsageFlags2KHR, rhs: BufferUsageFlags2KHR) bool { return FlagsMixin(BufferUsageFlags2KHR).contains(lhs, rhs); }
+    pub fn format(self: BufferUsageFlags2KHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(BufferUsageFlags2KHR).format(self, fmt, options, writer); }
 };
 pub const BufferCreateFlags = packed struct(Flags) {
     sparse_binding_bit: bool = false,
@@ -11047,7 +11562,15 @@ pub const BufferCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(BufferCreateFlags);
+    pub const IntType = FlagsMixin(BufferCreateFlags).IntType;
+    pub fn toInt(self: BufferCreateFlags) IntType { return FlagsMixin(BufferCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) BufferCreateFlags { return FlagsMixin(BufferCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: BufferCreateFlags, rhs: BufferCreateFlags) BufferCreateFlags { return FlagsMixin(BufferCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: BufferCreateFlags, rhs: BufferCreateFlags) BufferCreateFlags { return FlagsMixin(BufferCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: BufferCreateFlags) BufferCreateFlags { return FlagsMixin(BufferCreateFlags).complement(self); }
+    pub fn subtract(lhs: BufferCreateFlags, rhs: BufferCreateFlags) BufferCreateFlags { return FlagsMixin(BufferCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: BufferCreateFlags, rhs: BufferCreateFlags) bool { return FlagsMixin(BufferCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: BufferCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(BufferCreateFlags).format(self, fmt, options, writer); }
 };
 pub const ShaderStageFlags = packed struct(Flags) {
     vertex_bit: bool = false,
@@ -11082,7 +11605,15 @@ pub const ShaderStageFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ShaderStageFlags);
+    pub const IntType = FlagsMixin(ShaderStageFlags).IntType;
+    pub fn toInt(self: ShaderStageFlags) IntType { return FlagsMixin(ShaderStageFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ShaderStageFlags { return FlagsMixin(ShaderStageFlags).fromInt(flags); }
+    pub fn merge(lhs: ShaderStageFlags, rhs: ShaderStageFlags) ShaderStageFlags { return FlagsMixin(ShaderStageFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ShaderStageFlags, rhs: ShaderStageFlags) ShaderStageFlags { return FlagsMixin(ShaderStageFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ShaderStageFlags) ShaderStageFlags { return FlagsMixin(ShaderStageFlags).complement(self); }
+    pub fn subtract(lhs: ShaderStageFlags, rhs: ShaderStageFlags) ShaderStageFlags { return FlagsMixin(ShaderStageFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ShaderStageFlags, rhs: ShaderStageFlags) bool { return FlagsMixin(ShaderStageFlags).contains(lhs, rhs); }
+    pub fn format(self: ShaderStageFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ShaderStageFlags).format(self, fmt, options, writer); }
 };
 pub const ImageUsageFlags = packed struct(Flags) {
     transfer_src_bit: bool = false,
@@ -11117,7 +11648,15 @@ pub const ImageUsageFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ImageUsageFlags);
+    pub const IntType = FlagsMixin(ImageUsageFlags).IntType;
+    pub fn toInt(self: ImageUsageFlags) IntType { return FlagsMixin(ImageUsageFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageUsageFlags { return FlagsMixin(ImageUsageFlags).fromInt(flags); }
+    pub fn merge(lhs: ImageUsageFlags, rhs: ImageUsageFlags) ImageUsageFlags { return FlagsMixin(ImageUsageFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageUsageFlags, rhs: ImageUsageFlags) ImageUsageFlags { return FlagsMixin(ImageUsageFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ImageUsageFlags) ImageUsageFlags { return FlagsMixin(ImageUsageFlags).complement(self); }
+    pub fn subtract(lhs: ImageUsageFlags, rhs: ImageUsageFlags) ImageUsageFlags { return FlagsMixin(ImageUsageFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageUsageFlags, rhs: ImageUsageFlags) bool { return FlagsMixin(ImageUsageFlags).contains(lhs, rhs); }
+    pub fn format(self: ImageUsageFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageUsageFlags).format(self, fmt, options, writer); }
 };
 pub const ImageCreateFlags = packed struct(Flags) {
     sparse_binding_bit: bool = false,
@@ -11152,7 +11691,15 @@ pub const ImageCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ImageCreateFlags);
+    pub const IntType = FlagsMixin(ImageCreateFlags).IntType;
+    pub fn toInt(self: ImageCreateFlags) IntType { return FlagsMixin(ImageCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageCreateFlags { return FlagsMixin(ImageCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: ImageCreateFlags, rhs: ImageCreateFlags) ImageCreateFlags { return FlagsMixin(ImageCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageCreateFlags, rhs: ImageCreateFlags) ImageCreateFlags { return FlagsMixin(ImageCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ImageCreateFlags) ImageCreateFlags { return FlagsMixin(ImageCreateFlags).complement(self); }
+    pub fn subtract(lhs: ImageCreateFlags, rhs: ImageCreateFlags) ImageCreateFlags { return FlagsMixin(ImageCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageCreateFlags, rhs: ImageCreateFlags) bool { return FlagsMixin(ImageCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: ImageCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageCreateFlags).format(self, fmt, options, writer); }
 };
 pub const ImageViewCreateFlags = packed struct(Flags) {
     fragment_density_map_dynamic_bit_ext: bool = false,
@@ -11187,7 +11734,15 @@ pub const ImageViewCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ImageViewCreateFlags);
+    pub const IntType = FlagsMixin(ImageViewCreateFlags).IntType;
+    pub fn toInt(self: ImageViewCreateFlags) IntType { return FlagsMixin(ImageViewCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageViewCreateFlags { return FlagsMixin(ImageViewCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: ImageViewCreateFlags, rhs: ImageViewCreateFlags) ImageViewCreateFlags { return FlagsMixin(ImageViewCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageViewCreateFlags, rhs: ImageViewCreateFlags) ImageViewCreateFlags { return FlagsMixin(ImageViewCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ImageViewCreateFlags) ImageViewCreateFlags { return FlagsMixin(ImageViewCreateFlags).complement(self); }
+    pub fn subtract(lhs: ImageViewCreateFlags, rhs: ImageViewCreateFlags) ImageViewCreateFlags { return FlagsMixin(ImageViewCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageViewCreateFlags, rhs: ImageViewCreateFlags) bool { return FlagsMixin(ImageViewCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: ImageViewCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageViewCreateFlags).format(self, fmt, options, writer); }
 };
 pub const SamplerCreateFlags = packed struct(Flags) {
     subsampled_bit_ext: bool = false,
@@ -11222,7 +11777,15 @@ pub const SamplerCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SamplerCreateFlags);
+    pub const IntType = FlagsMixin(SamplerCreateFlags).IntType;
+    pub fn toInt(self: SamplerCreateFlags) IntType { return FlagsMixin(SamplerCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SamplerCreateFlags { return FlagsMixin(SamplerCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: SamplerCreateFlags, rhs: SamplerCreateFlags) SamplerCreateFlags { return FlagsMixin(SamplerCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SamplerCreateFlags, rhs: SamplerCreateFlags) SamplerCreateFlags { return FlagsMixin(SamplerCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SamplerCreateFlags) SamplerCreateFlags { return FlagsMixin(SamplerCreateFlags).complement(self); }
+    pub fn subtract(lhs: SamplerCreateFlags, rhs: SamplerCreateFlags) SamplerCreateFlags { return FlagsMixin(SamplerCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SamplerCreateFlags, rhs: SamplerCreateFlags) bool { return FlagsMixin(SamplerCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: SamplerCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SamplerCreateFlags).format(self, fmt, options, writer); }
 };
 pub const PipelineCreateFlags = packed struct(Flags) {
     disable_optimization_bit: bool = false,
@@ -11257,7 +11820,15 @@ pub const PipelineCreateFlags = packed struct(Flags) {
     descriptor_buffer_bit_ext: bool = false,
     protected_access_only_bit_ext: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineCreateFlags);
+    pub const IntType = FlagsMixin(PipelineCreateFlags).IntType;
+    pub fn toInt(self: PipelineCreateFlags) IntType { return FlagsMixin(PipelineCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCreateFlags { return FlagsMixin(PipelineCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineCreateFlags, rhs: PipelineCreateFlags) PipelineCreateFlags { return FlagsMixin(PipelineCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCreateFlags, rhs: PipelineCreateFlags) PipelineCreateFlags { return FlagsMixin(PipelineCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCreateFlags) PipelineCreateFlags { return FlagsMixin(PipelineCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineCreateFlags, rhs: PipelineCreateFlags) PipelineCreateFlags { return FlagsMixin(PipelineCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCreateFlags, rhs: PipelineCreateFlags) bool { return FlagsMixin(PipelineCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCreateFlags).format(self, fmt, options, writer); }
 };
 pub const PipelineCreateFlags2KHR = packed struct(Flags64) {
     disable_optimization_bit_khr: bool = false,
@@ -11324,7 +11895,15 @@ pub const PipelineCreateFlags2KHR = packed struct(Flags64) {
     _reserved_bit_61: bool = false,
     _reserved_bit_62: bool = false,
     _reserved_bit_63: bool = false,
-    pub usingnamespace FlagsMixin(PipelineCreateFlags2KHR);
+    pub const IntType = FlagsMixin(PipelineCreateFlags2KHR).IntType;
+    pub fn toInt(self: PipelineCreateFlags2KHR) IntType { return FlagsMixin(PipelineCreateFlags2KHR).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCreateFlags2KHR { return FlagsMixin(PipelineCreateFlags2KHR).fromInt(flags); }
+    pub fn merge(lhs: PipelineCreateFlags2KHR, rhs: PipelineCreateFlags2KHR) PipelineCreateFlags2KHR { return FlagsMixin(PipelineCreateFlags2KHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCreateFlags2KHR, rhs: PipelineCreateFlags2KHR) PipelineCreateFlags2KHR { return FlagsMixin(PipelineCreateFlags2KHR).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCreateFlags2KHR) PipelineCreateFlags2KHR { return FlagsMixin(PipelineCreateFlags2KHR).complement(self); }
+    pub fn subtract(lhs: PipelineCreateFlags2KHR, rhs: PipelineCreateFlags2KHR) PipelineCreateFlags2KHR { return FlagsMixin(PipelineCreateFlags2KHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCreateFlags2KHR, rhs: PipelineCreateFlags2KHR) bool { return FlagsMixin(PipelineCreateFlags2KHR).contains(lhs, rhs); }
+    pub fn format(self: PipelineCreateFlags2KHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCreateFlags2KHR).format(self, fmt, options, writer); }
 };
 pub const PipelineShaderStageCreateFlags = packed struct(Flags) {
     allow_varying_subgroup_size_bit: bool = false,
@@ -11359,7 +11938,15 @@ pub const PipelineShaderStageCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineShaderStageCreateFlags);
+    pub const IntType = FlagsMixin(PipelineShaderStageCreateFlags).IntType;
+    pub fn toInt(self: PipelineShaderStageCreateFlags) IntType { return FlagsMixin(PipelineShaderStageCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineShaderStageCreateFlags { return FlagsMixin(PipelineShaderStageCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineShaderStageCreateFlags, rhs: PipelineShaderStageCreateFlags) PipelineShaderStageCreateFlags { return FlagsMixin(PipelineShaderStageCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineShaderStageCreateFlags, rhs: PipelineShaderStageCreateFlags) PipelineShaderStageCreateFlags { return FlagsMixin(PipelineShaderStageCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineShaderStageCreateFlags) PipelineShaderStageCreateFlags { return FlagsMixin(PipelineShaderStageCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineShaderStageCreateFlags, rhs: PipelineShaderStageCreateFlags) PipelineShaderStageCreateFlags { return FlagsMixin(PipelineShaderStageCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineShaderStageCreateFlags, rhs: PipelineShaderStageCreateFlags) bool { return FlagsMixin(PipelineShaderStageCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineShaderStageCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineShaderStageCreateFlags).format(self, fmt, options, writer); }
 };
 pub const ColorComponentFlags = packed struct(Flags) {
     r_bit: bool = false,
@@ -11394,7 +11981,15 @@ pub const ColorComponentFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ColorComponentFlags);
+    pub const IntType = FlagsMixin(ColorComponentFlags).IntType;
+    pub fn toInt(self: ColorComponentFlags) IntType { return FlagsMixin(ColorComponentFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ColorComponentFlags { return FlagsMixin(ColorComponentFlags).fromInt(flags); }
+    pub fn merge(lhs: ColorComponentFlags, rhs: ColorComponentFlags) ColorComponentFlags { return FlagsMixin(ColorComponentFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ColorComponentFlags, rhs: ColorComponentFlags) ColorComponentFlags { return FlagsMixin(ColorComponentFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ColorComponentFlags) ColorComponentFlags { return FlagsMixin(ColorComponentFlags).complement(self); }
+    pub fn subtract(lhs: ColorComponentFlags, rhs: ColorComponentFlags) ColorComponentFlags { return FlagsMixin(ColorComponentFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ColorComponentFlags, rhs: ColorComponentFlags) bool { return FlagsMixin(ColorComponentFlags).contains(lhs, rhs); }
+    pub fn format(self: ColorComponentFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ColorComponentFlags).format(self, fmt, options, writer); }
 };
 pub const FenceCreateFlags = packed struct(Flags) {
     signaled_bit: bool = false,
@@ -11429,7 +12024,15 @@ pub const FenceCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(FenceCreateFlags);
+    pub const IntType = FlagsMixin(FenceCreateFlags).IntType;
+    pub fn toInt(self: FenceCreateFlags) IntType { return FlagsMixin(FenceCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) FenceCreateFlags { return FlagsMixin(FenceCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: FenceCreateFlags, rhs: FenceCreateFlags) FenceCreateFlags { return FlagsMixin(FenceCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: FenceCreateFlags, rhs: FenceCreateFlags) FenceCreateFlags { return FlagsMixin(FenceCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: FenceCreateFlags) FenceCreateFlags { return FlagsMixin(FenceCreateFlags).complement(self); }
+    pub fn subtract(lhs: FenceCreateFlags, rhs: FenceCreateFlags) FenceCreateFlags { return FlagsMixin(FenceCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: FenceCreateFlags, rhs: FenceCreateFlags) bool { return FlagsMixin(FenceCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: FenceCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(FenceCreateFlags).format(self, fmt, options, writer); }
 };
 pub const FormatFeatureFlags = packed struct(Flags) {
     sampled_image_bit: bool = false,
@@ -11464,7 +12067,15 @@ pub const FormatFeatureFlags = packed struct(Flags) {
     acceleration_structure_vertex_buffer_bit_khr: bool = false,
     fragment_shading_rate_attachment_bit_khr: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(FormatFeatureFlags);
+    pub const IntType = FlagsMixin(FormatFeatureFlags).IntType;
+    pub fn toInt(self: FormatFeatureFlags) IntType { return FlagsMixin(FormatFeatureFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) FormatFeatureFlags { return FlagsMixin(FormatFeatureFlags).fromInt(flags); }
+    pub fn merge(lhs: FormatFeatureFlags, rhs: FormatFeatureFlags) FormatFeatureFlags { return FlagsMixin(FormatFeatureFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: FormatFeatureFlags, rhs: FormatFeatureFlags) FormatFeatureFlags { return FlagsMixin(FormatFeatureFlags).intersect(lhs, rhs); }
+    pub fn complement(self: FormatFeatureFlags) FormatFeatureFlags { return FlagsMixin(FormatFeatureFlags).complement(self); }
+    pub fn subtract(lhs: FormatFeatureFlags, rhs: FormatFeatureFlags) FormatFeatureFlags { return FlagsMixin(FormatFeatureFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: FormatFeatureFlags, rhs: FormatFeatureFlags) bool { return FlagsMixin(FormatFeatureFlags).contains(lhs, rhs); }
+    pub fn format(self: FormatFeatureFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(FormatFeatureFlags).format(self, fmt, options, writer); }
 };
 pub const QueryControlFlags = packed struct(Flags) {
     precise_bit: bool = false,
@@ -11499,7 +12110,15 @@ pub const QueryControlFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(QueryControlFlags);
+    pub const IntType = FlagsMixin(QueryControlFlags).IntType;
+    pub fn toInt(self: QueryControlFlags) IntType { return FlagsMixin(QueryControlFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) QueryControlFlags { return FlagsMixin(QueryControlFlags).fromInt(flags); }
+    pub fn merge(lhs: QueryControlFlags, rhs: QueryControlFlags) QueryControlFlags { return FlagsMixin(QueryControlFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: QueryControlFlags, rhs: QueryControlFlags) QueryControlFlags { return FlagsMixin(QueryControlFlags).intersect(lhs, rhs); }
+    pub fn complement(self: QueryControlFlags) QueryControlFlags { return FlagsMixin(QueryControlFlags).complement(self); }
+    pub fn subtract(lhs: QueryControlFlags, rhs: QueryControlFlags) QueryControlFlags { return FlagsMixin(QueryControlFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: QueryControlFlags, rhs: QueryControlFlags) bool { return FlagsMixin(QueryControlFlags).contains(lhs, rhs); }
+    pub fn format(self: QueryControlFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(QueryControlFlags).format(self, fmt, options, writer); }
 };
 pub const QueryResultFlags = packed struct(Flags) {
     @"64_bit": bool = false,
@@ -11534,7 +12153,15 @@ pub const QueryResultFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(QueryResultFlags);
+    pub const IntType = FlagsMixin(QueryResultFlags).IntType;
+    pub fn toInt(self: QueryResultFlags) IntType { return FlagsMixin(QueryResultFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) QueryResultFlags { return FlagsMixin(QueryResultFlags).fromInt(flags); }
+    pub fn merge(lhs: QueryResultFlags, rhs: QueryResultFlags) QueryResultFlags { return FlagsMixin(QueryResultFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: QueryResultFlags, rhs: QueryResultFlags) QueryResultFlags { return FlagsMixin(QueryResultFlags).intersect(lhs, rhs); }
+    pub fn complement(self: QueryResultFlags) QueryResultFlags { return FlagsMixin(QueryResultFlags).complement(self); }
+    pub fn subtract(lhs: QueryResultFlags, rhs: QueryResultFlags) QueryResultFlags { return FlagsMixin(QueryResultFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: QueryResultFlags, rhs: QueryResultFlags) bool { return FlagsMixin(QueryResultFlags).contains(lhs, rhs); }
+    pub fn format(self: QueryResultFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(QueryResultFlags).format(self, fmt, options, writer); }
 };
 pub const CommandBufferUsageFlags = packed struct(Flags) {
     one_time_submit_bit: bool = false,
@@ -11569,7 +12196,15 @@ pub const CommandBufferUsageFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(CommandBufferUsageFlags);
+    pub const IntType = FlagsMixin(CommandBufferUsageFlags).IntType;
+    pub fn toInt(self: CommandBufferUsageFlags) IntType { return FlagsMixin(CommandBufferUsageFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) CommandBufferUsageFlags { return FlagsMixin(CommandBufferUsageFlags).fromInt(flags); }
+    pub fn merge(lhs: CommandBufferUsageFlags, rhs: CommandBufferUsageFlags) CommandBufferUsageFlags { return FlagsMixin(CommandBufferUsageFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: CommandBufferUsageFlags, rhs: CommandBufferUsageFlags) CommandBufferUsageFlags { return FlagsMixin(CommandBufferUsageFlags).intersect(lhs, rhs); }
+    pub fn complement(self: CommandBufferUsageFlags) CommandBufferUsageFlags { return FlagsMixin(CommandBufferUsageFlags).complement(self); }
+    pub fn subtract(lhs: CommandBufferUsageFlags, rhs: CommandBufferUsageFlags) CommandBufferUsageFlags { return FlagsMixin(CommandBufferUsageFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: CommandBufferUsageFlags, rhs: CommandBufferUsageFlags) bool { return FlagsMixin(CommandBufferUsageFlags).contains(lhs, rhs); }
+    pub fn format(self: CommandBufferUsageFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(CommandBufferUsageFlags).format(self, fmt, options, writer); }
 };
 pub const QueryPipelineStatisticFlags = packed struct(Flags) {
     input_assembly_vertices_bit: bool = false,
@@ -11604,7 +12239,15 @@ pub const QueryPipelineStatisticFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(QueryPipelineStatisticFlags);
+    pub const IntType = FlagsMixin(QueryPipelineStatisticFlags).IntType;
+    pub fn toInt(self: QueryPipelineStatisticFlags) IntType { return FlagsMixin(QueryPipelineStatisticFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) QueryPipelineStatisticFlags { return FlagsMixin(QueryPipelineStatisticFlags).fromInt(flags); }
+    pub fn merge(lhs: QueryPipelineStatisticFlags, rhs: QueryPipelineStatisticFlags) QueryPipelineStatisticFlags { return FlagsMixin(QueryPipelineStatisticFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: QueryPipelineStatisticFlags, rhs: QueryPipelineStatisticFlags) QueryPipelineStatisticFlags { return FlagsMixin(QueryPipelineStatisticFlags).intersect(lhs, rhs); }
+    pub fn complement(self: QueryPipelineStatisticFlags) QueryPipelineStatisticFlags { return FlagsMixin(QueryPipelineStatisticFlags).complement(self); }
+    pub fn subtract(lhs: QueryPipelineStatisticFlags, rhs: QueryPipelineStatisticFlags) QueryPipelineStatisticFlags { return FlagsMixin(QueryPipelineStatisticFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: QueryPipelineStatisticFlags, rhs: QueryPipelineStatisticFlags) bool { return FlagsMixin(QueryPipelineStatisticFlags).contains(lhs, rhs); }
+    pub fn format(self: QueryPipelineStatisticFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(QueryPipelineStatisticFlags).format(self, fmt, options, writer); }
 };
 pub const MemoryMapFlags = packed struct(Flags) {
     placed_bit_ext: bool = false,
@@ -11639,7 +12282,15 @@ pub const MemoryMapFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(MemoryMapFlags);
+    pub const IntType = FlagsMixin(MemoryMapFlags).IntType;
+    pub fn toInt(self: MemoryMapFlags) IntType { return FlagsMixin(MemoryMapFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) MemoryMapFlags { return FlagsMixin(MemoryMapFlags).fromInt(flags); }
+    pub fn merge(lhs: MemoryMapFlags, rhs: MemoryMapFlags) MemoryMapFlags { return FlagsMixin(MemoryMapFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: MemoryMapFlags, rhs: MemoryMapFlags) MemoryMapFlags { return FlagsMixin(MemoryMapFlags).intersect(lhs, rhs); }
+    pub fn complement(self: MemoryMapFlags) MemoryMapFlags { return FlagsMixin(MemoryMapFlags).complement(self); }
+    pub fn subtract(lhs: MemoryMapFlags, rhs: MemoryMapFlags) MemoryMapFlags { return FlagsMixin(MemoryMapFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: MemoryMapFlags, rhs: MemoryMapFlags) bool { return FlagsMixin(MemoryMapFlags).contains(lhs, rhs); }
+    pub fn format(self: MemoryMapFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MemoryMapFlags).format(self, fmt, options, writer); }
 };
 pub const ImageAspectFlags = packed struct(Flags) {
     color_bit: bool = false,
@@ -11674,7 +12325,15 @@ pub const ImageAspectFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ImageAspectFlags);
+    pub const IntType = FlagsMixin(ImageAspectFlags).IntType;
+    pub fn toInt(self: ImageAspectFlags) IntType { return FlagsMixin(ImageAspectFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageAspectFlags { return FlagsMixin(ImageAspectFlags).fromInt(flags); }
+    pub fn merge(lhs: ImageAspectFlags, rhs: ImageAspectFlags) ImageAspectFlags { return FlagsMixin(ImageAspectFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageAspectFlags, rhs: ImageAspectFlags) ImageAspectFlags { return FlagsMixin(ImageAspectFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ImageAspectFlags) ImageAspectFlags { return FlagsMixin(ImageAspectFlags).complement(self); }
+    pub fn subtract(lhs: ImageAspectFlags, rhs: ImageAspectFlags) ImageAspectFlags { return FlagsMixin(ImageAspectFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageAspectFlags, rhs: ImageAspectFlags) bool { return FlagsMixin(ImageAspectFlags).contains(lhs, rhs); }
+    pub fn format(self: ImageAspectFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageAspectFlags).format(self, fmt, options, writer); }
 };
 pub const SparseImageFormatFlags = packed struct(Flags) {
     single_miptail_bit: bool = false,
@@ -11709,7 +12368,15 @@ pub const SparseImageFormatFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SparseImageFormatFlags);
+    pub const IntType = FlagsMixin(SparseImageFormatFlags).IntType;
+    pub fn toInt(self: SparseImageFormatFlags) IntType { return FlagsMixin(SparseImageFormatFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SparseImageFormatFlags { return FlagsMixin(SparseImageFormatFlags).fromInt(flags); }
+    pub fn merge(lhs: SparseImageFormatFlags, rhs: SparseImageFormatFlags) SparseImageFormatFlags { return FlagsMixin(SparseImageFormatFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SparseImageFormatFlags, rhs: SparseImageFormatFlags) SparseImageFormatFlags { return FlagsMixin(SparseImageFormatFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SparseImageFormatFlags) SparseImageFormatFlags { return FlagsMixin(SparseImageFormatFlags).complement(self); }
+    pub fn subtract(lhs: SparseImageFormatFlags, rhs: SparseImageFormatFlags) SparseImageFormatFlags { return FlagsMixin(SparseImageFormatFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SparseImageFormatFlags, rhs: SparseImageFormatFlags) bool { return FlagsMixin(SparseImageFormatFlags).contains(lhs, rhs); }
+    pub fn format(self: SparseImageFormatFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SparseImageFormatFlags).format(self, fmt, options, writer); }
 };
 pub const SparseMemoryBindFlags = packed struct(Flags) {
     metadata_bit: bool = false,
@@ -11744,7 +12411,15 @@ pub const SparseMemoryBindFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SparseMemoryBindFlags);
+    pub const IntType = FlagsMixin(SparseMemoryBindFlags).IntType;
+    pub fn toInt(self: SparseMemoryBindFlags) IntType { return FlagsMixin(SparseMemoryBindFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SparseMemoryBindFlags { return FlagsMixin(SparseMemoryBindFlags).fromInt(flags); }
+    pub fn merge(lhs: SparseMemoryBindFlags, rhs: SparseMemoryBindFlags) SparseMemoryBindFlags { return FlagsMixin(SparseMemoryBindFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SparseMemoryBindFlags, rhs: SparseMemoryBindFlags) SparseMemoryBindFlags { return FlagsMixin(SparseMemoryBindFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SparseMemoryBindFlags) SparseMemoryBindFlags { return FlagsMixin(SparseMemoryBindFlags).complement(self); }
+    pub fn subtract(lhs: SparseMemoryBindFlags, rhs: SparseMemoryBindFlags) SparseMemoryBindFlags { return FlagsMixin(SparseMemoryBindFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SparseMemoryBindFlags, rhs: SparseMemoryBindFlags) bool { return FlagsMixin(SparseMemoryBindFlags).contains(lhs, rhs); }
+    pub fn format(self: SparseMemoryBindFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SparseMemoryBindFlags).format(self, fmt, options, writer); }
 };
 pub const PipelineStageFlags = packed struct(Flags) {
     top_of_pipe_bit: bool = false,
@@ -11779,7 +12454,15 @@ pub const PipelineStageFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineStageFlags);
+    pub const IntType = FlagsMixin(PipelineStageFlags).IntType;
+    pub fn toInt(self: PipelineStageFlags) IntType { return FlagsMixin(PipelineStageFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineStageFlags { return FlagsMixin(PipelineStageFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineStageFlags, rhs: PipelineStageFlags) PipelineStageFlags { return FlagsMixin(PipelineStageFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineStageFlags, rhs: PipelineStageFlags) PipelineStageFlags { return FlagsMixin(PipelineStageFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineStageFlags) PipelineStageFlags { return FlagsMixin(PipelineStageFlags).complement(self); }
+    pub fn subtract(lhs: PipelineStageFlags, rhs: PipelineStageFlags) PipelineStageFlags { return FlagsMixin(PipelineStageFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineStageFlags, rhs: PipelineStageFlags) bool { return FlagsMixin(PipelineStageFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineStageFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineStageFlags).format(self, fmt, options, writer); }
 };
 pub const CommandPoolCreateFlags = packed struct(Flags) {
     transient_bit: bool = false,
@@ -11814,7 +12497,15 @@ pub const CommandPoolCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(CommandPoolCreateFlags);
+    pub const IntType = FlagsMixin(CommandPoolCreateFlags).IntType;
+    pub fn toInt(self: CommandPoolCreateFlags) IntType { return FlagsMixin(CommandPoolCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) CommandPoolCreateFlags { return FlagsMixin(CommandPoolCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: CommandPoolCreateFlags, rhs: CommandPoolCreateFlags) CommandPoolCreateFlags { return FlagsMixin(CommandPoolCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: CommandPoolCreateFlags, rhs: CommandPoolCreateFlags) CommandPoolCreateFlags { return FlagsMixin(CommandPoolCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: CommandPoolCreateFlags) CommandPoolCreateFlags { return FlagsMixin(CommandPoolCreateFlags).complement(self); }
+    pub fn subtract(lhs: CommandPoolCreateFlags, rhs: CommandPoolCreateFlags) CommandPoolCreateFlags { return FlagsMixin(CommandPoolCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: CommandPoolCreateFlags, rhs: CommandPoolCreateFlags) bool { return FlagsMixin(CommandPoolCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: CommandPoolCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(CommandPoolCreateFlags).format(self, fmt, options, writer); }
 };
 pub const CommandPoolResetFlags = packed struct(Flags) {
     release_resources_bit: bool = false,
@@ -11849,7 +12540,15 @@ pub const CommandPoolResetFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(CommandPoolResetFlags);
+    pub const IntType = FlagsMixin(CommandPoolResetFlags).IntType;
+    pub fn toInt(self: CommandPoolResetFlags) IntType { return FlagsMixin(CommandPoolResetFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) CommandPoolResetFlags { return FlagsMixin(CommandPoolResetFlags).fromInt(flags); }
+    pub fn merge(lhs: CommandPoolResetFlags, rhs: CommandPoolResetFlags) CommandPoolResetFlags { return FlagsMixin(CommandPoolResetFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: CommandPoolResetFlags, rhs: CommandPoolResetFlags) CommandPoolResetFlags { return FlagsMixin(CommandPoolResetFlags).intersect(lhs, rhs); }
+    pub fn complement(self: CommandPoolResetFlags) CommandPoolResetFlags { return FlagsMixin(CommandPoolResetFlags).complement(self); }
+    pub fn subtract(lhs: CommandPoolResetFlags, rhs: CommandPoolResetFlags) CommandPoolResetFlags { return FlagsMixin(CommandPoolResetFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: CommandPoolResetFlags, rhs: CommandPoolResetFlags) bool { return FlagsMixin(CommandPoolResetFlags).contains(lhs, rhs); }
+    pub fn format(self: CommandPoolResetFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(CommandPoolResetFlags).format(self, fmt, options, writer); }
 };
 pub const CommandBufferResetFlags = packed struct(Flags) {
     release_resources_bit: bool = false,
@@ -11884,7 +12583,15 @@ pub const CommandBufferResetFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(CommandBufferResetFlags);
+    pub const IntType = FlagsMixin(CommandBufferResetFlags).IntType;
+    pub fn toInt(self: CommandBufferResetFlags) IntType { return FlagsMixin(CommandBufferResetFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) CommandBufferResetFlags { return FlagsMixin(CommandBufferResetFlags).fromInt(flags); }
+    pub fn merge(lhs: CommandBufferResetFlags, rhs: CommandBufferResetFlags) CommandBufferResetFlags { return FlagsMixin(CommandBufferResetFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: CommandBufferResetFlags, rhs: CommandBufferResetFlags) CommandBufferResetFlags { return FlagsMixin(CommandBufferResetFlags).intersect(lhs, rhs); }
+    pub fn complement(self: CommandBufferResetFlags) CommandBufferResetFlags { return FlagsMixin(CommandBufferResetFlags).complement(self); }
+    pub fn subtract(lhs: CommandBufferResetFlags, rhs: CommandBufferResetFlags) CommandBufferResetFlags { return FlagsMixin(CommandBufferResetFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: CommandBufferResetFlags, rhs: CommandBufferResetFlags) bool { return FlagsMixin(CommandBufferResetFlags).contains(lhs, rhs); }
+    pub fn format(self: CommandBufferResetFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(CommandBufferResetFlags).format(self, fmt, options, writer); }
 };
 pub const SampleCountFlags = packed struct(Flags) {
     @"1_bit": bool = false,
@@ -11919,7 +12626,15 @@ pub const SampleCountFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SampleCountFlags);
+    pub const IntType = FlagsMixin(SampleCountFlags).IntType;
+    pub fn toInt(self: SampleCountFlags) IntType { return FlagsMixin(SampleCountFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SampleCountFlags { return FlagsMixin(SampleCountFlags).fromInt(flags); }
+    pub fn merge(lhs: SampleCountFlags, rhs: SampleCountFlags) SampleCountFlags { return FlagsMixin(SampleCountFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SampleCountFlags, rhs: SampleCountFlags) SampleCountFlags { return FlagsMixin(SampleCountFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SampleCountFlags) SampleCountFlags { return FlagsMixin(SampleCountFlags).complement(self); }
+    pub fn subtract(lhs: SampleCountFlags, rhs: SampleCountFlags) SampleCountFlags { return FlagsMixin(SampleCountFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SampleCountFlags, rhs: SampleCountFlags) bool { return FlagsMixin(SampleCountFlags).contains(lhs, rhs); }
+    pub fn format(self: SampleCountFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SampleCountFlags).format(self, fmt, options, writer); }
 };
 pub const AttachmentDescriptionFlags = packed struct(Flags) {
     may_alias_bit: bool = false,
@@ -11954,7 +12669,15 @@ pub const AttachmentDescriptionFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(AttachmentDescriptionFlags);
+    pub const IntType = FlagsMixin(AttachmentDescriptionFlags).IntType;
+    pub fn toInt(self: AttachmentDescriptionFlags) IntType { return FlagsMixin(AttachmentDescriptionFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) AttachmentDescriptionFlags { return FlagsMixin(AttachmentDescriptionFlags).fromInt(flags); }
+    pub fn merge(lhs: AttachmentDescriptionFlags, rhs: AttachmentDescriptionFlags) AttachmentDescriptionFlags { return FlagsMixin(AttachmentDescriptionFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: AttachmentDescriptionFlags, rhs: AttachmentDescriptionFlags) AttachmentDescriptionFlags { return FlagsMixin(AttachmentDescriptionFlags).intersect(lhs, rhs); }
+    pub fn complement(self: AttachmentDescriptionFlags) AttachmentDescriptionFlags { return FlagsMixin(AttachmentDescriptionFlags).complement(self); }
+    pub fn subtract(lhs: AttachmentDescriptionFlags, rhs: AttachmentDescriptionFlags) AttachmentDescriptionFlags { return FlagsMixin(AttachmentDescriptionFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: AttachmentDescriptionFlags, rhs: AttachmentDescriptionFlags) bool { return FlagsMixin(AttachmentDescriptionFlags).contains(lhs, rhs); }
+    pub fn format(self: AttachmentDescriptionFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AttachmentDescriptionFlags).format(self, fmt, options, writer); }
 };
 pub const StencilFaceFlags = packed struct(Flags) {
     front_bit: bool = false,
@@ -11989,7 +12712,15 @@ pub const StencilFaceFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(StencilFaceFlags);
+    pub const IntType = FlagsMixin(StencilFaceFlags).IntType;
+    pub fn toInt(self: StencilFaceFlags) IntType { return FlagsMixin(StencilFaceFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) StencilFaceFlags { return FlagsMixin(StencilFaceFlags).fromInt(flags); }
+    pub fn merge(lhs: StencilFaceFlags, rhs: StencilFaceFlags) StencilFaceFlags { return FlagsMixin(StencilFaceFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: StencilFaceFlags, rhs: StencilFaceFlags) StencilFaceFlags { return FlagsMixin(StencilFaceFlags).intersect(lhs, rhs); }
+    pub fn complement(self: StencilFaceFlags) StencilFaceFlags { return FlagsMixin(StencilFaceFlags).complement(self); }
+    pub fn subtract(lhs: StencilFaceFlags, rhs: StencilFaceFlags) StencilFaceFlags { return FlagsMixin(StencilFaceFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: StencilFaceFlags, rhs: StencilFaceFlags) bool { return FlagsMixin(StencilFaceFlags).contains(lhs, rhs); }
+    pub fn format(self: StencilFaceFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(StencilFaceFlags).format(self, fmt, options, writer); }
 };
 pub const DescriptorPoolCreateFlags = packed struct(Flags) {
     free_descriptor_set_bit: bool = false,
@@ -12024,7 +12755,15 @@ pub const DescriptorPoolCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DescriptorPoolCreateFlags);
+    pub const IntType = FlagsMixin(DescriptorPoolCreateFlags).IntType;
+    pub fn toInt(self: DescriptorPoolCreateFlags) IntType { return FlagsMixin(DescriptorPoolCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DescriptorPoolCreateFlags { return FlagsMixin(DescriptorPoolCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: DescriptorPoolCreateFlags, rhs: DescriptorPoolCreateFlags) DescriptorPoolCreateFlags { return FlagsMixin(DescriptorPoolCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DescriptorPoolCreateFlags, rhs: DescriptorPoolCreateFlags) DescriptorPoolCreateFlags { return FlagsMixin(DescriptorPoolCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DescriptorPoolCreateFlags) DescriptorPoolCreateFlags { return FlagsMixin(DescriptorPoolCreateFlags).complement(self); }
+    pub fn subtract(lhs: DescriptorPoolCreateFlags, rhs: DescriptorPoolCreateFlags) DescriptorPoolCreateFlags { return FlagsMixin(DescriptorPoolCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DescriptorPoolCreateFlags, rhs: DescriptorPoolCreateFlags) bool { return FlagsMixin(DescriptorPoolCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: DescriptorPoolCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DescriptorPoolCreateFlags).format(self, fmt, options, writer); }
 };
 pub const DependencyFlags = packed struct(Flags) {
     by_region_bit: bool = false,
@@ -12059,7 +12798,15 @@ pub const DependencyFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DependencyFlags);
+    pub const IntType = FlagsMixin(DependencyFlags).IntType;
+    pub fn toInt(self: DependencyFlags) IntType { return FlagsMixin(DependencyFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DependencyFlags { return FlagsMixin(DependencyFlags).fromInt(flags); }
+    pub fn merge(lhs: DependencyFlags, rhs: DependencyFlags) DependencyFlags { return FlagsMixin(DependencyFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DependencyFlags, rhs: DependencyFlags) DependencyFlags { return FlagsMixin(DependencyFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DependencyFlags) DependencyFlags { return FlagsMixin(DependencyFlags).complement(self); }
+    pub fn subtract(lhs: DependencyFlags, rhs: DependencyFlags) DependencyFlags { return FlagsMixin(DependencyFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DependencyFlags, rhs: DependencyFlags) bool { return FlagsMixin(DependencyFlags).contains(lhs, rhs); }
+    pub fn format(self: DependencyFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DependencyFlags).format(self, fmt, options, writer); }
 };
 pub const SemaphoreType = enum(i32) {
     binary = 0,
@@ -12101,7 +12848,15 @@ pub const SemaphoreWaitFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SemaphoreWaitFlags);
+    pub const IntType = FlagsMixin(SemaphoreWaitFlags).IntType;
+    pub fn toInt(self: SemaphoreWaitFlags) IntType { return FlagsMixin(SemaphoreWaitFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SemaphoreWaitFlags { return FlagsMixin(SemaphoreWaitFlags).fromInt(flags); }
+    pub fn merge(lhs: SemaphoreWaitFlags, rhs: SemaphoreWaitFlags) SemaphoreWaitFlags { return FlagsMixin(SemaphoreWaitFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SemaphoreWaitFlags, rhs: SemaphoreWaitFlags) SemaphoreWaitFlags { return FlagsMixin(SemaphoreWaitFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SemaphoreWaitFlags) SemaphoreWaitFlags { return FlagsMixin(SemaphoreWaitFlags).complement(self); }
+    pub fn subtract(lhs: SemaphoreWaitFlags, rhs: SemaphoreWaitFlags) SemaphoreWaitFlags { return FlagsMixin(SemaphoreWaitFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SemaphoreWaitFlags, rhs: SemaphoreWaitFlags) bool { return FlagsMixin(SemaphoreWaitFlags).contains(lhs, rhs); }
+    pub fn format(self: SemaphoreWaitFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SemaphoreWaitFlags).format(self, fmt, options, writer); }
 };
 pub const PresentModeKHR = enum(i32) {
     immediate_khr = 0,
@@ -12166,7 +12921,15 @@ pub const DisplayPlaneAlphaFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DisplayPlaneAlphaFlagsKHR);
+    pub const IntType = FlagsMixin(DisplayPlaneAlphaFlagsKHR).IntType;
+    pub fn toInt(self: DisplayPlaneAlphaFlagsKHR) IntType { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) DisplayPlaneAlphaFlagsKHR { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: DisplayPlaneAlphaFlagsKHR, rhs: DisplayPlaneAlphaFlagsKHR) DisplayPlaneAlphaFlagsKHR { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: DisplayPlaneAlphaFlagsKHR, rhs: DisplayPlaneAlphaFlagsKHR) DisplayPlaneAlphaFlagsKHR { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: DisplayPlaneAlphaFlagsKHR) DisplayPlaneAlphaFlagsKHR { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).complement(self); }
+    pub fn subtract(lhs: DisplayPlaneAlphaFlagsKHR, rhs: DisplayPlaneAlphaFlagsKHR) DisplayPlaneAlphaFlagsKHR { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: DisplayPlaneAlphaFlagsKHR, rhs: DisplayPlaneAlphaFlagsKHR) bool { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: DisplayPlaneAlphaFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DisplayPlaneAlphaFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const CompositeAlphaFlagsKHR = packed struct(Flags) {
     opaque_bit_khr: bool = false,
@@ -12201,7 +12964,15 @@ pub const CompositeAlphaFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(CompositeAlphaFlagsKHR);
+    pub const IntType = FlagsMixin(CompositeAlphaFlagsKHR).IntType;
+    pub fn toInt(self: CompositeAlphaFlagsKHR) IntType { return FlagsMixin(CompositeAlphaFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) CompositeAlphaFlagsKHR { return FlagsMixin(CompositeAlphaFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: CompositeAlphaFlagsKHR, rhs: CompositeAlphaFlagsKHR) CompositeAlphaFlagsKHR { return FlagsMixin(CompositeAlphaFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: CompositeAlphaFlagsKHR, rhs: CompositeAlphaFlagsKHR) CompositeAlphaFlagsKHR { return FlagsMixin(CompositeAlphaFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: CompositeAlphaFlagsKHR) CompositeAlphaFlagsKHR { return FlagsMixin(CompositeAlphaFlagsKHR).complement(self); }
+    pub fn subtract(lhs: CompositeAlphaFlagsKHR, rhs: CompositeAlphaFlagsKHR) CompositeAlphaFlagsKHR { return FlagsMixin(CompositeAlphaFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: CompositeAlphaFlagsKHR, rhs: CompositeAlphaFlagsKHR) bool { return FlagsMixin(CompositeAlphaFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: CompositeAlphaFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(CompositeAlphaFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const SurfaceTransformFlagsKHR = packed struct(Flags) {
     identity_bit_khr: bool = false,
@@ -12236,7 +13007,15 @@ pub const SurfaceTransformFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SurfaceTransformFlagsKHR);
+    pub const IntType = FlagsMixin(SurfaceTransformFlagsKHR).IntType;
+    pub fn toInt(self: SurfaceTransformFlagsKHR) IntType { return FlagsMixin(SurfaceTransformFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) SurfaceTransformFlagsKHR { return FlagsMixin(SurfaceTransformFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: SurfaceTransformFlagsKHR, rhs: SurfaceTransformFlagsKHR) SurfaceTransformFlagsKHR { return FlagsMixin(SurfaceTransformFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: SurfaceTransformFlagsKHR, rhs: SurfaceTransformFlagsKHR) SurfaceTransformFlagsKHR { return FlagsMixin(SurfaceTransformFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: SurfaceTransformFlagsKHR) SurfaceTransformFlagsKHR { return FlagsMixin(SurfaceTransformFlagsKHR).complement(self); }
+    pub fn subtract(lhs: SurfaceTransformFlagsKHR, rhs: SurfaceTransformFlagsKHR) SurfaceTransformFlagsKHR { return FlagsMixin(SurfaceTransformFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: SurfaceTransformFlagsKHR, rhs: SurfaceTransformFlagsKHR) bool { return FlagsMixin(SurfaceTransformFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: SurfaceTransformFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SurfaceTransformFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const SwapchainImageUsageFlagsANDROID = packed struct(Flags) {
     shared_bit_android: bool = false,
@@ -12271,7 +13050,15 @@ pub const SwapchainImageUsageFlagsANDROID = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SwapchainImageUsageFlagsANDROID);
+    pub const IntType = FlagsMixin(SwapchainImageUsageFlagsANDROID).IntType;
+    pub fn toInt(self: SwapchainImageUsageFlagsANDROID) IntType { return FlagsMixin(SwapchainImageUsageFlagsANDROID).toInt(self); }
+    pub fn fromInt(flags: IntType) SwapchainImageUsageFlagsANDROID { return FlagsMixin(SwapchainImageUsageFlagsANDROID).fromInt(flags); }
+    pub fn merge(lhs: SwapchainImageUsageFlagsANDROID, rhs: SwapchainImageUsageFlagsANDROID) SwapchainImageUsageFlagsANDROID { return FlagsMixin(SwapchainImageUsageFlagsANDROID).merge(lhs, rhs); }
+    pub fn intersect(lhs: SwapchainImageUsageFlagsANDROID, rhs: SwapchainImageUsageFlagsANDROID) SwapchainImageUsageFlagsANDROID { return FlagsMixin(SwapchainImageUsageFlagsANDROID).intersect(lhs, rhs); }
+    pub fn complement(self: SwapchainImageUsageFlagsANDROID) SwapchainImageUsageFlagsANDROID { return FlagsMixin(SwapchainImageUsageFlagsANDROID).complement(self); }
+    pub fn subtract(lhs: SwapchainImageUsageFlagsANDROID, rhs: SwapchainImageUsageFlagsANDROID) SwapchainImageUsageFlagsANDROID { return FlagsMixin(SwapchainImageUsageFlagsANDROID).subtract(lhs, rhs); }
+    pub fn contains(lhs: SwapchainImageUsageFlagsANDROID, rhs: SwapchainImageUsageFlagsANDROID) bool { return FlagsMixin(SwapchainImageUsageFlagsANDROID).contains(lhs, rhs); }
+    pub fn format(self: SwapchainImageUsageFlagsANDROID, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SwapchainImageUsageFlagsANDROID).format(self, fmt, options, writer); }
 };
 pub const TimeDomainKHR = enum(i32) {
     device_khr = 0,
@@ -12317,7 +13104,15 @@ pub const DebugReportFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DebugReportFlagsEXT);
+    pub const IntType = FlagsMixin(DebugReportFlagsEXT).IntType;
+    pub fn toInt(self: DebugReportFlagsEXT) IntType { return FlagsMixin(DebugReportFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DebugReportFlagsEXT { return FlagsMixin(DebugReportFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DebugReportFlagsEXT, rhs: DebugReportFlagsEXT) DebugReportFlagsEXT { return FlagsMixin(DebugReportFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DebugReportFlagsEXT, rhs: DebugReportFlagsEXT) DebugReportFlagsEXT { return FlagsMixin(DebugReportFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DebugReportFlagsEXT) DebugReportFlagsEXT { return FlagsMixin(DebugReportFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DebugReportFlagsEXT, rhs: DebugReportFlagsEXT) DebugReportFlagsEXT { return FlagsMixin(DebugReportFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DebugReportFlagsEXT, rhs: DebugReportFlagsEXT) bool { return FlagsMixin(DebugReportFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DebugReportFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DebugReportFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const DebugReportObjectTypeEXT = enum(i32) {
     unknown_ext = 0,
@@ -12413,7 +13208,15 @@ pub const ExternalMemoryHandleTypeFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalMemoryHandleTypeFlagsNV);
+    pub const IntType = FlagsMixin(ExternalMemoryHandleTypeFlagsNV).IntType;
+    pub fn toInt(self: ExternalMemoryHandleTypeFlagsNV) IntType { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalMemoryHandleTypeFlagsNV { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: ExternalMemoryHandleTypeFlagsNV, rhs: ExternalMemoryHandleTypeFlagsNV) ExternalMemoryHandleTypeFlagsNV { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalMemoryHandleTypeFlagsNV, rhs: ExternalMemoryHandleTypeFlagsNV) ExternalMemoryHandleTypeFlagsNV { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalMemoryHandleTypeFlagsNV) ExternalMemoryHandleTypeFlagsNV { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).complement(self); }
+    pub fn subtract(lhs: ExternalMemoryHandleTypeFlagsNV, rhs: ExternalMemoryHandleTypeFlagsNV) ExternalMemoryHandleTypeFlagsNV { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalMemoryHandleTypeFlagsNV, rhs: ExternalMemoryHandleTypeFlagsNV) bool { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: ExternalMemoryHandleTypeFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalMemoryHandleTypeFlagsNV).format(self, fmt, options, writer); }
 };
 pub const ExternalMemoryFeatureFlagsNV = packed struct(Flags) {
     dedicated_only_bit_nv: bool = false,
@@ -12448,7 +13251,15 @@ pub const ExternalMemoryFeatureFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalMemoryFeatureFlagsNV);
+    pub const IntType = FlagsMixin(ExternalMemoryFeatureFlagsNV).IntType;
+    pub fn toInt(self: ExternalMemoryFeatureFlagsNV) IntType { return FlagsMixin(ExternalMemoryFeatureFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalMemoryFeatureFlagsNV { return FlagsMixin(ExternalMemoryFeatureFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: ExternalMemoryFeatureFlagsNV, rhs: ExternalMemoryFeatureFlagsNV) ExternalMemoryFeatureFlagsNV { return FlagsMixin(ExternalMemoryFeatureFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalMemoryFeatureFlagsNV, rhs: ExternalMemoryFeatureFlagsNV) ExternalMemoryFeatureFlagsNV { return FlagsMixin(ExternalMemoryFeatureFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalMemoryFeatureFlagsNV) ExternalMemoryFeatureFlagsNV { return FlagsMixin(ExternalMemoryFeatureFlagsNV).complement(self); }
+    pub fn subtract(lhs: ExternalMemoryFeatureFlagsNV, rhs: ExternalMemoryFeatureFlagsNV) ExternalMemoryFeatureFlagsNV { return FlagsMixin(ExternalMemoryFeatureFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalMemoryFeatureFlagsNV, rhs: ExternalMemoryFeatureFlagsNV) bool { return FlagsMixin(ExternalMemoryFeatureFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: ExternalMemoryFeatureFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalMemoryFeatureFlagsNV).format(self, fmt, options, writer); }
 };
 pub const ValidationCheckEXT = enum(i32) {
     all_ext = 0,
@@ -12518,7 +13329,15 @@ pub const SubgroupFeatureFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SubgroupFeatureFlags);
+    pub const IntType = FlagsMixin(SubgroupFeatureFlags).IntType;
+    pub fn toInt(self: SubgroupFeatureFlags) IntType { return FlagsMixin(SubgroupFeatureFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SubgroupFeatureFlags { return FlagsMixin(SubgroupFeatureFlags).fromInt(flags); }
+    pub fn merge(lhs: SubgroupFeatureFlags, rhs: SubgroupFeatureFlags) SubgroupFeatureFlags { return FlagsMixin(SubgroupFeatureFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SubgroupFeatureFlags, rhs: SubgroupFeatureFlags) SubgroupFeatureFlags { return FlagsMixin(SubgroupFeatureFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SubgroupFeatureFlags) SubgroupFeatureFlags { return FlagsMixin(SubgroupFeatureFlags).complement(self); }
+    pub fn subtract(lhs: SubgroupFeatureFlags, rhs: SubgroupFeatureFlags) SubgroupFeatureFlags { return FlagsMixin(SubgroupFeatureFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SubgroupFeatureFlags, rhs: SubgroupFeatureFlags) bool { return FlagsMixin(SubgroupFeatureFlags).contains(lhs, rhs); }
+    pub fn format(self: SubgroupFeatureFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SubgroupFeatureFlags).format(self, fmt, options, writer); }
 };
 pub const IndirectCommandsLayoutUsageFlagsNV = packed struct(Flags) {
     explicit_preprocess_bit_nv: bool = false,
@@ -12553,7 +13372,15 @@ pub const IndirectCommandsLayoutUsageFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(IndirectCommandsLayoutUsageFlagsNV);
+    pub const IntType = FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).IntType;
+    pub fn toInt(self: IndirectCommandsLayoutUsageFlagsNV) IntType { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) IndirectCommandsLayoutUsageFlagsNV { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: IndirectCommandsLayoutUsageFlagsNV, rhs: IndirectCommandsLayoutUsageFlagsNV) IndirectCommandsLayoutUsageFlagsNV { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: IndirectCommandsLayoutUsageFlagsNV, rhs: IndirectCommandsLayoutUsageFlagsNV) IndirectCommandsLayoutUsageFlagsNV { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: IndirectCommandsLayoutUsageFlagsNV) IndirectCommandsLayoutUsageFlagsNV { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).complement(self); }
+    pub fn subtract(lhs: IndirectCommandsLayoutUsageFlagsNV, rhs: IndirectCommandsLayoutUsageFlagsNV) IndirectCommandsLayoutUsageFlagsNV { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: IndirectCommandsLayoutUsageFlagsNV, rhs: IndirectCommandsLayoutUsageFlagsNV) bool { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: IndirectCommandsLayoutUsageFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(IndirectCommandsLayoutUsageFlagsNV).format(self, fmt, options, writer); }
 };
 pub const IndirectStateFlagsNV = packed struct(Flags) {
     flag_frontface_bit_nv: bool = false,
@@ -12588,7 +13415,15 @@ pub const IndirectStateFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(IndirectStateFlagsNV);
+    pub const IntType = FlagsMixin(IndirectStateFlagsNV).IntType;
+    pub fn toInt(self: IndirectStateFlagsNV) IntType { return FlagsMixin(IndirectStateFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) IndirectStateFlagsNV { return FlagsMixin(IndirectStateFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: IndirectStateFlagsNV, rhs: IndirectStateFlagsNV) IndirectStateFlagsNV { return FlagsMixin(IndirectStateFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: IndirectStateFlagsNV, rhs: IndirectStateFlagsNV) IndirectStateFlagsNV { return FlagsMixin(IndirectStateFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: IndirectStateFlagsNV) IndirectStateFlagsNV { return FlagsMixin(IndirectStateFlagsNV).complement(self); }
+    pub fn subtract(lhs: IndirectStateFlagsNV, rhs: IndirectStateFlagsNV) IndirectStateFlagsNV { return FlagsMixin(IndirectStateFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: IndirectStateFlagsNV, rhs: IndirectStateFlagsNV) bool { return FlagsMixin(IndirectStateFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: IndirectStateFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(IndirectStateFlagsNV).format(self, fmt, options, writer); }
 };
 pub const IndirectCommandsTokenTypeNV = enum(i32) {
     shader_group_nv = 0,
@@ -12637,7 +13472,15 @@ pub const DescriptorSetLayoutCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DescriptorSetLayoutCreateFlags);
+    pub const IntType = FlagsMixin(DescriptorSetLayoutCreateFlags).IntType;
+    pub fn toInt(self: DescriptorSetLayoutCreateFlags) IntType { return FlagsMixin(DescriptorSetLayoutCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DescriptorSetLayoutCreateFlags { return FlagsMixin(DescriptorSetLayoutCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: DescriptorSetLayoutCreateFlags, rhs: DescriptorSetLayoutCreateFlags) DescriptorSetLayoutCreateFlags { return FlagsMixin(DescriptorSetLayoutCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DescriptorSetLayoutCreateFlags, rhs: DescriptorSetLayoutCreateFlags) DescriptorSetLayoutCreateFlags { return FlagsMixin(DescriptorSetLayoutCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DescriptorSetLayoutCreateFlags) DescriptorSetLayoutCreateFlags { return FlagsMixin(DescriptorSetLayoutCreateFlags).complement(self); }
+    pub fn subtract(lhs: DescriptorSetLayoutCreateFlags, rhs: DescriptorSetLayoutCreateFlags) DescriptorSetLayoutCreateFlags { return FlagsMixin(DescriptorSetLayoutCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DescriptorSetLayoutCreateFlags, rhs: DescriptorSetLayoutCreateFlags) bool { return FlagsMixin(DescriptorSetLayoutCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: DescriptorSetLayoutCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DescriptorSetLayoutCreateFlags).format(self, fmt, options, writer); }
 };
 pub const ExternalMemoryHandleTypeFlags = packed struct(Flags) {
     opaque_fd_bit: bool = false,
@@ -12672,7 +13515,15 @@ pub const ExternalMemoryHandleTypeFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalMemoryHandleTypeFlags);
+    pub const IntType = FlagsMixin(ExternalMemoryHandleTypeFlags).IntType;
+    pub fn toInt(self: ExternalMemoryHandleTypeFlags) IntType { return FlagsMixin(ExternalMemoryHandleTypeFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalMemoryHandleTypeFlags { return FlagsMixin(ExternalMemoryHandleTypeFlags).fromInt(flags); }
+    pub fn merge(lhs: ExternalMemoryHandleTypeFlags, rhs: ExternalMemoryHandleTypeFlags) ExternalMemoryHandleTypeFlags { return FlagsMixin(ExternalMemoryHandleTypeFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalMemoryHandleTypeFlags, rhs: ExternalMemoryHandleTypeFlags) ExternalMemoryHandleTypeFlags { return FlagsMixin(ExternalMemoryHandleTypeFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalMemoryHandleTypeFlags) ExternalMemoryHandleTypeFlags { return FlagsMixin(ExternalMemoryHandleTypeFlags).complement(self); }
+    pub fn subtract(lhs: ExternalMemoryHandleTypeFlags, rhs: ExternalMemoryHandleTypeFlags) ExternalMemoryHandleTypeFlags { return FlagsMixin(ExternalMemoryHandleTypeFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalMemoryHandleTypeFlags, rhs: ExternalMemoryHandleTypeFlags) bool { return FlagsMixin(ExternalMemoryHandleTypeFlags).contains(lhs, rhs); }
+    pub fn format(self: ExternalMemoryHandleTypeFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalMemoryHandleTypeFlags).format(self, fmt, options, writer); }
 };
 pub const ExternalMemoryFeatureFlags = packed struct(Flags) {
     dedicated_only_bit: bool = false,
@@ -12707,7 +13558,15 @@ pub const ExternalMemoryFeatureFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalMemoryFeatureFlags);
+    pub const IntType = FlagsMixin(ExternalMemoryFeatureFlags).IntType;
+    pub fn toInt(self: ExternalMemoryFeatureFlags) IntType { return FlagsMixin(ExternalMemoryFeatureFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalMemoryFeatureFlags { return FlagsMixin(ExternalMemoryFeatureFlags).fromInt(flags); }
+    pub fn merge(lhs: ExternalMemoryFeatureFlags, rhs: ExternalMemoryFeatureFlags) ExternalMemoryFeatureFlags { return FlagsMixin(ExternalMemoryFeatureFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalMemoryFeatureFlags, rhs: ExternalMemoryFeatureFlags) ExternalMemoryFeatureFlags { return FlagsMixin(ExternalMemoryFeatureFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalMemoryFeatureFlags) ExternalMemoryFeatureFlags { return FlagsMixin(ExternalMemoryFeatureFlags).complement(self); }
+    pub fn subtract(lhs: ExternalMemoryFeatureFlags, rhs: ExternalMemoryFeatureFlags) ExternalMemoryFeatureFlags { return FlagsMixin(ExternalMemoryFeatureFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalMemoryFeatureFlags, rhs: ExternalMemoryFeatureFlags) bool { return FlagsMixin(ExternalMemoryFeatureFlags).contains(lhs, rhs); }
+    pub fn format(self: ExternalMemoryFeatureFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalMemoryFeatureFlags).format(self, fmt, options, writer); }
 };
 pub const ExternalSemaphoreHandleTypeFlags = packed struct(Flags) {
     opaque_fd_bit: bool = false,
@@ -12742,7 +13601,15 @@ pub const ExternalSemaphoreHandleTypeFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalSemaphoreHandleTypeFlags);
+    pub const IntType = FlagsMixin(ExternalSemaphoreHandleTypeFlags).IntType;
+    pub fn toInt(self: ExternalSemaphoreHandleTypeFlags) IntType { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalSemaphoreHandleTypeFlags { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).fromInt(flags); }
+    pub fn merge(lhs: ExternalSemaphoreHandleTypeFlags, rhs: ExternalSemaphoreHandleTypeFlags) ExternalSemaphoreHandleTypeFlags { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalSemaphoreHandleTypeFlags, rhs: ExternalSemaphoreHandleTypeFlags) ExternalSemaphoreHandleTypeFlags { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalSemaphoreHandleTypeFlags) ExternalSemaphoreHandleTypeFlags { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).complement(self); }
+    pub fn subtract(lhs: ExternalSemaphoreHandleTypeFlags, rhs: ExternalSemaphoreHandleTypeFlags) ExternalSemaphoreHandleTypeFlags { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalSemaphoreHandleTypeFlags, rhs: ExternalSemaphoreHandleTypeFlags) bool { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).contains(lhs, rhs); }
+    pub fn format(self: ExternalSemaphoreHandleTypeFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalSemaphoreHandleTypeFlags).format(self, fmt, options, writer); }
 };
 pub const ExternalSemaphoreFeatureFlags = packed struct(Flags) {
     exportable_bit: bool = false,
@@ -12777,7 +13644,15 @@ pub const ExternalSemaphoreFeatureFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalSemaphoreFeatureFlags);
+    pub const IntType = FlagsMixin(ExternalSemaphoreFeatureFlags).IntType;
+    pub fn toInt(self: ExternalSemaphoreFeatureFlags) IntType { return FlagsMixin(ExternalSemaphoreFeatureFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalSemaphoreFeatureFlags { return FlagsMixin(ExternalSemaphoreFeatureFlags).fromInt(flags); }
+    pub fn merge(lhs: ExternalSemaphoreFeatureFlags, rhs: ExternalSemaphoreFeatureFlags) ExternalSemaphoreFeatureFlags { return FlagsMixin(ExternalSemaphoreFeatureFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalSemaphoreFeatureFlags, rhs: ExternalSemaphoreFeatureFlags) ExternalSemaphoreFeatureFlags { return FlagsMixin(ExternalSemaphoreFeatureFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalSemaphoreFeatureFlags) ExternalSemaphoreFeatureFlags { return FlagsMixin(ExternalSemaphoreFeatureFlags).complement(self); }
+    pub fn subtract(lhs: ExternalSemaphoreFeatureFlags, rhs: ExternalSemaphoreFeatureFlags) ExternalSemaphoreFeatureFlags { return FlagsMixin(ExternalSemaphoreFeatureFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalSemaphoreFeatureFlags, rhs: ExternalSemaphoreFeatureFlags) bool { return FlagsMixin(ExternalSemaphoreFeatureFlags).contains(lhs, rhs); }
+    pub fn format(self: ExternalSemaphoreFeatureFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalSemaphoreFeatureFlags).format(self, fmt, options, writer); }
 };
 pub const SemaphoreImportFlags = packed struct(Flags) {
     temporary_bit: bool = false,
@@ -12812,7 +13687,15 @@ pub const SemaphoreImportFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SemaphoreImportFlags);
+    pub const IntType = FlagsMixin(SemaphoreImportFlags).IntType;
+    pub fn toInt(self: SemaphoreImportFlags) IntType { return FlagsMixin(SemaphoreImportFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SemaphoreImportFlags { return FlagsMixin(SemaphoreImportFlags).fromInt(flags); }
+    pub fn merge(lhs: SemaphoreImportFlags, rhs: SemaphoreImportFlags) SemaphoreImportFlags { return FlagsMixin(SemaphoreImportFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SemaphoreImportFlags, rhs: SemaphoreImportFlags) SemaphoreImportFlags { return FlagsMixin(SemaphoreImportFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SemaphoreImportFlags) SemaphoreImportFlags { return FlagsMixin(SemaphoreImportFlags).complement(self); }
+    pub fn subtract(lhs: SemaphoreImportFlags, rhs: SemaphoreImportFlags) SemaphoreImportFlags { return FlagsMixin(SemaphoreImportFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SemaphoreImportFlags, rhs: SemaphoreImportFlags) bool { return FlagsMixin(SemaphoreImportFlags).contains(lhs, rhs); }
+    pub fn format(self: SemaphoreImportFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SemaphoreImportFlags).format(self, fmt, options, writer); }
 };
 pub const ExternalFenceHandleTypeFlags = packed struct(Flags) {
     opaque_fd_bit: bool = false,
@@ -12847,7 +13730,15 @@ pub const ExternalFenceHandleTypeFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalFenceHandleTypeFlags);
+    pub const IntType = FlagsMixin(ExternalFenceHandleTypeFlags).IntType;
+    pub fn toInt(self: ExternalFenceHandleTypeFlags) IntType { return FlagsMixin(ExternalFenceHandleTypeFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalFenceHandleTypeFlags { return FlagsMixin(ExternalFenceHandleTypeFlags).fromInt(flags); }
+    pub fn merge(lhs: ExternalFenceHandleTypeFlags, rhs: ExternalFenceHandleTypeFlags) ExternalFenceHandleTypeFlags { return FlagsMixin(ExternalFenceHandleTypeFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalFenceHandleTypeFlags, rhs: ExternalFenceHandleTypeFlags) ExternalFenceHandleTypeFlags { return FlagsMixin(ExternalFenceHandleTypeFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalFenceHandleTypeFlags) ExternalFenceHandleTypeFlags { return FlagsMixin(ExternalFenceHandleTypeFlags).complement(self); }
+    pub fn subtract(lhs: ExternalFenceHandleTypeFlags, rhs: ExternalFenceHandleTypeFlags) ExternalFenceHandleTypeFlags { return FlagsMixin(ExternalFenceHandleTypeFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalFenceHandleTypeFlags, rhs: ExternalFenceHandleTypeFlags) bool { return FlagsMixin(ExternalFenceHandleTypeFlags).contains(lhs, rhs); }
+    pub fn format(self: ExternalFenceHandleTypeFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalFenceHandleTypeFlags).format(self, fmt, options, writer); }
 };
 pub const ExternalFenceFeatureFlags = packed struct(Flags) {
     exportable_bit: bool = false,
@@ -12882,7 +13773,15 @@ pub const ExternalFenceFeatureFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExternalFenceFeatureFlags);
+    pub const IntType = FlagsMixin(ExternalFenceFeatureFlags).IntType;
+    pub fn toInt(self: ExternalFenceFeatureFlags) IntType { return FlagsMixin(ExternalFenceFeatureFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ExternalFenceFeatureFlags { return FlagsMixin(ExternalFenceFeatureFlags).fromInt(flags); }
+    pub fn merge(lhs: ExternalFenceFeatureFlags, rhs: ExternalFenceFeatureFlags) ExternalFenceFeatureFlags { return FlagsMixin(ExternalFenceFeatureFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExternalFenceFeatureFlags, rhs: ExternalFenceFeatureFlags) ExternalFenceFeatureFlags { return FlagsMixin(ExternalFenceFeatureFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ExternalFenceFeatureFlags) ExternalFenceFeatureFlags { return FlagsMixin(ExternalFenceFeatureFlags).complement(self); }
+    pub fn subtract(lhs: ExternalFenceFeatureFlags, rhs: ExternalFenceFeatureFlags) ExternalFenceFeatureFlags { return FlagsMixin(ExternalFenceFeatureFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExternalFenceFeatureFlags, rhs: ExternalFenceFeatureFlags) bool { return FlagsMixin(ExternalFenceFeatureFlags).contains(lhs, rhs); }
+    pub fn format(self: ExternalFenceFeatureFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExternalFenceFeatureFlags).format(self, fmt, options, writer); }
 };
 pub const FenceImportFlags = packed struct(Flags) {
     temporary_bit: bool = false,
@@ -12917,7 +13816,15 @@ pub const FenceImportFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(FenceImportFlags);
+    pub const IntType = FlagsMixin(FenceImportFlags).IntType;
+    pub fn toInt(self: FenceImportFlags) IntType { return FlagsMixin(FenceImportFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) FenceImportFlags { return FlagsMixin(FenceImportFlags).fromInt(flags); }
+    pub fn merge(lhs: FenceImportFlags, rhs: FenceImportFlags) FenceImportFlags { return FlagsMixin(FenceImportFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: FenceImportFlags, rhs: FenceImportFlags) FenceImportFlags { return FlagsMixin(FenceImportFlags).intersect(lhs, rhs); }
+    pub fn complement(self: FenceImportFlags) FenceImportFlags { return FlagsMixin(FenceImportFlags).complement(self); }
+    pub fn subtract(lhs: FenceImportFlags, rhs: FenceImportFlags) FenceImportFlags { return FlagsMixin(FenceImportFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: FenceImportFlags, rhs: FenceImportFlags) bool { return FlagsMixin(FenceImportFlags).contains(lhs, rhs); }
+    pub fn format(self: FenceImportFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(FenceImportFlags).format(self, fmt, options, writer); }
 };
 pub const SurfaceCounterFlagsEXT = packed struct(Flags) {
     vblank_bit_ext: bool = false,
@@ -12952,7 +13859,15 @@ pub const SurfaceCounterFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SurfaceCounterFlagsEXT);
+    pub const IntType = FlagsMixin(SurfaceCounterFlagsEXT).IntType;
+    pub fn toInt(self: SurfaceCounterFlagsEXT) IntType { return FlagsMixin(SurfaceCounterFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) SurfaceCounterFlagsEXT { return FlagsMixin(SurfaceCounterFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: SurfaceCounterFlagsEXT, rhs: SurfaceCounterFlagsEXT) SurfaceCounterFlagsEXT { return FlagsMixin(SurfaceCounterFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: SurfaceCounterFlagsEXT, rhs: SurfaceCounterFlagsEXT) SurfaceCounterFlagsEXT { return FlagsMixin(SurfaceCounterFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: SurfaceCounterFlagsEXT) SurfaceCounterFlagsEXT { return FlagsMixin(SurfaceCounterFlagsEXT).complement(self); }
+    pub fn subtract(lhs: SurfaceCounterFlagsEXT, rhs: SurfaceCounterFlagsEXT) SurfaceCounterFlagsEXT { return FlagsMixin(SurfaceCounterFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: SurfaceCounterFlagsEXT, rhs: SurfaceCounterFlagsEXT) bool { return FlagsMixin(SurfaceCounterFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: SurfaceCounterFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SurfaceCounterFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const DisplayPowerStateEXT = enum(i32) {
     off_ext = 0,
@@ -13001,7 +13916,15 @@ pub const PeerMemoryFeatureFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PeerMemoryFeatureFlags);
+    pub const IntType = FlagsMixin(PeerMemoryFeatureFlags).IntType;
+    pub fn toInt(self: PeerMemoryFeatureFlags) IntType { return FlagsMixin(PeerMemoryFeatureFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PeerMemoryFeatureFlags { return FlagsMixin(PeerMemoryFeatureFlags).fromInt(flags); }
+    pub fn merge(lhs: PeerMemoryFeatureFlags, rhs: PeerMemoryFeatureFlags) PeerMemoryFeatureFlags { return FlagsMixin(PeerMemoryFeatureFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PeerMemoryFeatureFlags, rhs: PeerMemoryFeatureFlags) PeerMemoryFeatureFlags { return FlagsMixin(PeerMemoryFeatureFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PeerMemoryFeatureFlags) PeerMemoryFeatureFlags { return FlagsMixin(PeerMemoryFeatureFlags).complement(self); }
+    pub fn subtract(lhs: PeerMemoryFeatureFlags, rhs: PeerMemoryFeatureFlags) PeerMemoryFeatureFlags { return FlagsMixin(PeerMemoryFeatureFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PeerMemoryFeatureFlags, rhs: PeerMemoryFeatureFlags) bool { return FlagsMixin(PeerMemoryFeatureFlags).contains(lhs, rhs); }
+    pub fn format(self: PeerMemoryFeatureFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PeerMemoryFeatureFlags).format(self, fmt, options, writer); }
 };
 pub const MemoryAllocateFlags = packed struct(Flags) {
     device_mask_bit: bool = false,
@@ -13036,7 +13959,15 @@ pub const MemoryAllocateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(MemoryAllocateFlags);
+    pub const IntType = FlagsMixin(MemoryAllocateFlags).IntType;
+    pub fn toInt(self: MemoryAllocateFlags) IntType { return FlagsMixin(MemoryAllocateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) MemoryAllocateFlags { return FlagsMixin(MemoryAllocateFlags).fromInt(flags); }
+    pub fn merge(lhs: MemoryAllocateFlags, rhs: MemoryAllocateFlags) MemoryAllocateFlags { return FlagsMixin(MemoryAllocateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: MemoryAllocateFlags, rhs: MemoryAllocateFlags) MemoryAllocateFlags { return FlagsMixin(MemoryAllocateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: MemoryAllocateFlags) MemoryAllocateFlags { return FlagsMixin(MemoryAllocateFlags).complement(self); }
+    pub fn subtract(lhs: MemoryAllocateFlags, rhs: MemoryAllocateFlags) MemoryAllocateFlags { return FlagsMixin(MemoryAllocateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: MemoryAllocateFlags, rhs: MemoryAllocateFlags) bool { return FlagsMixin(MemoryAllocateFlags).contains(lhs, rhs); }
+    pub fn format(self: MemoryAllocateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MemoryAllocateFlags).format(self, fmt, options, writer); }
 };
 pub const DeviceGroupPresentModeFlagsKHR = packed struct(Flags) {
     local_bit_khr: bool = false,
@@ -13071,7 +14002,15 @@ pub const DeviceGroupPresentModeFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DeviceGroupPresentModeFlagsKHR);
+    pub const IntType = FlagsMixin(DeviceGroupPresentModeFlagsKHR).IntType;
+    pub fn toInt(self: DeviceGroupPresentModeFlagsKHR) IntType { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) DeviceGroupPresentModeFlagsKHR { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: DeviceGroupPresentModeFlagsKHR, rhs: DeviceGroupPresentModeFlagsKHR) DeviceGroupPresentModeFlagsKHR { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: DeviceGroupPresentModeFlagsKHR, rhs: DeviceGroupPresentModeFlagsKHR) DeviceGroupPresentModeFlagsKHR { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: DeviceGroupPresentModeFlagsKHR) DeviceGroupPresentModeFlagsKHR { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).complement(self); }
+    pub fn subtract(lhs: DeviceGroupPresentModeFlagsKHR, rhs: DeviceGroupPresentModeFlagsKHR) DeviceGroupPresentModeFlagsKHR { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: DeviceGroupPresentModeFlagsKHR, rhs: DeviceGroupPresentModeFlagsKHR) bool { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: DeviceGroupPresentModeFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DeviceGroupPresentModeFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const SwapchainCreateFlagsKHR = packed struct(Flags) {
     split_instance_bind_regions_bit_khr: bool = false,
@@ -13106,7 +14045,15 @@ pub const SwapchainCreateFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SwapchainCreateFlagsKHR);
+    pub const IntType = FlagsMixin(SwapchainCreateFlagsKHR).IntType;
+    pub fn toInt(self: SwapchainCreateFlagsKHR) IntType { return FlagsMixin(SwapchainCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) SwapchainCreateFlagsKHR { return FlagsMixin(SwapchainCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: SwapchainCreateFlagsKHR, rhs: SwapchainCreateFlagsKHR) SwapchainCreateFlagsKHR { return FlagsMixin(SwapchainCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: SwapchainCreateFlagsKHR, rhs: SwapchainCreateFlagsKHR) SwapchainCreateFlagsKHR { return FlagsMixin(SwapchainCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: SwapchainCreateFlagsKHR) SwapchainCreateFlagsKHR { return FlagsMixin(SwapchainCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: SwapchainCreateFlagsKHR, rhs: SwapchainCreateFlagsKHR) SwapchainCreateFlagsKHR { return FlagsMixin(SwapchainCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: SwapchainCreateFlagsKHR, rhs: SwapchainCreateFlagsKHR) bool { return FlagsMixin(SwapchainCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: SwapchainCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SwapchainCreateFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const ViewportCoordinateSwizzleNV = enum(i32) {
     positive_x_nv = 0,
@@ -13157,7 +14104,15 @@ pub const SubpassDescriptionFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SubpassDescriptionFlags);
+    pub const IntType = FlagsMixin(SubpassDescriptionFlags).IntType;
+    pub fn toInt(self: SubpassDescriptionFlags) IntType { return FlagsMixin(SubpassDescriptionFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SubpassDescriptionFlags { return FlagsMixin(SubpassDescriptionFlags).fromInt(flags); }
+    pub fn merge(lhs: SubpassDescriptionFlags, rhs: SubpassDescriptionFlags) SubpassDescriptionFlags { return FlagsMixin(SubpassDescriptionFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SubpassDescriptionFlags, rhs: SubpassDescriptionFlags) SubpassDescriptionFlags { return FlagsMixin(SubpassDescriptionFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SubpassDescriptionFlags) SubpassDescriptionFlags { return FlagsMixin(SubpassDescriptionFlags).complement(self); }
+    pub fn subtract(lhs: SubpassDescriptionFlags, rhs: SubpassDescriptionFlags) SubpassDescriptionFlags { return FlagsMixin(SubpassDescriptionFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SubpassDescriptionFlags, rhs: SubpassDescriptionFlags) bool { return FlagsMixin(SubpassDescriptionFlags).contains(lhs, rhs); }
+    pub fn format(self: SubpassDescriptionFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SubpassDescriptionFlags).format(self, fmt, options, writer); }
 };
 pub const PointClippingBehavior = enum(i32) {
     all_clip_planes = 0,
@@ -13282,7 +14237,15 @@ pub const DebugUtilsMessageSeverityFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DebugUtilsMessageSeverityFlagsEXT);
+    pub const IntType = FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).IntType;
+    pub fn toInt(self: DebugUtilsMessageSeverityFlagsEXT) IntType { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DebugUtilsMessageSeverityFlagsEXT { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DebugUtilsMessageSeverityFlagsEXT, rhs: DebugUtilsMessageSeverityFlagsEXT) DebugUtilsMessageSeverityFlagsEXT { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DebugUtilsMessageSeverityFlagsEXT, rhs: DebugUtilsMessageSeverityFlagsEXT) DebugUtilsMessageSeverityFlagsEXT { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DebugUtilsMessageSeverityFlagsEXT) DebugUtilsMessageSeverityFlagsEXT { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DebugUtilsMessageSeverityFlagsEXT, rhs: DebugUtilsMessageSeverityFlagsEXT) DebugUtilsMessageSeverityFlagsEXT { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DebugUtilsMessageSeverityFlagsEXT, rhs: DebugUtilsMessageSeverityFlagsEXT) bool { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DebugUtilsMessageSeverityFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DebugUtilsMessageSeverityFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const DebugUtilsMessageTypeFlagsEXT = packed struct(Flags) {
     general_bit_ext: bool = false,
@@ -13317,7 +14280,15 @@ pub const DebugUtilsMessageTypeFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DebugUtilsMessageTypeFlagsEXT);
+    pub const IntType = FlagsMixin(DebugUtilsMessageTypeFlagsEXT).IntType;
+    pub fn toInt(self: DebugUtilsMessageTypeFlagsEXT) IntType { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DebugUtilsMessageTypeFlagsEXT { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DebugUtilsMessageTypeFlagsEXT, rhs: DebugUtilsMessageTypeFlagsEXT) DebugUtilsMessageTypeFlagsEXT { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DebugUtilsMessageTypeFlagsEXT, rhs: DebugUtilsMessageTypeFlagsEXT) DebugUtilsMessageTypeFlagsEXT { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DebugUtilsMessageTypeFlagsEXT) DebugUtilsMessageTypeFlagsEXT { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DebugUtilsMessageTypeFlagsEXT, rhs: DebugUtilsMessageTypeFlagsEXT) DebugUtilsMessageTypeFlagsEXT { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DebugUtilsMessageTypeFlagsEXT, rhs: DebugUtilsMessageTypeFlagsEXT) bool { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DebugUtilsMessageTypeFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DebugUtilsMessageTypeFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const ConservativeRasterizationModeEXT = enum(i32) {
     disabled_ext = 0,
@@ -13358,7 +14329,15 @@ pub const DescriptorBindingFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DescriptorBindingFlags);
+    pub const IntType = FlagsMixin(DescriptorBindingFlags).IntType;
+    pub fn toInt(self: DescriptorBindingFlags) IntType { return FlagsMixin(DescriptorBindingFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) DescriptorBindingFlags { return FlagsMixin(DescriptorBindingFlags).fromInt(flags); }
+    pub fn merge(lhs: DescriptorBindingFlags, rhs: DescriptorBindingFlags) DescriptorBindingFlags { return FlagsMixin(DescriptorBindingFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DescriptorBindingFlags, rhs: DescriptorBindingFlags) DescriptorBindingFlags { return FlagsMixin(DescriptorBindingFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DescriptorBindingFlags) DescriptorBindingFlags { return FlagsMixin(DescriptorBindingFlags).complement(self); }
+    pub fn subtract(lhs: DescriptorBindingFlags, rhs: DescriptorBindingFlags) DescriptorBindingFlags { return FlagsMixin(DescriptorBindingFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DescriptorBindingFlags, rhs: DescriptorBindingFlags) bool { return FlagsMixin(DescriptorBindingFlags).contains(lhs, rhs); }
+    pub fn format(self: DescriptorBindingFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DescriptorBindingFlags).format(self, fmt, options, writer); }
 };
 pub const VendorId = enum(i32) {
     _viv = 0x10001,
@@ -13444,7 +14423,15 @@ pub const ConditionalRenderingFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ConditionalRenderingFlagsEXT);
+    pub const IntType = FlagsMixin(ConditionalRenderingFlagsEXT).IntType;
+    pub fn toInt(self: ConditionalRenderingFlagsEXT) IntType { return FlagsMixin(ConditionalRenderingFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) ConditionalRenderingFlagsEXT { return FlagsMixin(ConditionalRenderingFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: ConditionalRenderingFlagsEXT, rhs: ConditionalRenderingFlagsEXT) ConditionalRenderingFlagsEXT { return FlagsMixin(ConditionalRenderingFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: ConditionalRenderingFlagsEXT, rhs: ConditionalRenderingFlagsEXT) ConditionalRenderingFlagsEXT { return FlagsMixin(ConditionalRenderingFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: ConditionalRenderingFlagsEXT) ConditionalRenderingFlagsEXT { return FlagsMixin(ConditionalRenderingFlagsEXT).complement(self); }
+    pub fn subtract(lhs: ConditionalRenderingFlagsEXT, rhs: ConditionalRenderingFlagsEXT) ConditionalRenderingFlagsEXT { return FlagsMixin(ConditionalRenderingFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: ConditionalRenderingFlagsEXT, rhs: ConditionalRenderingFlagsEXT) bool { return FlagsMixin(ConditionalRenderingFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: ConditionalRenderingFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ConditionalRenderingFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const ResolveModeFlags = packed struct(Flags) {
     sample_zero_bit: bool = false,
@@ -13479,7 +14466,15 @@ pub const ResolveModeFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ResolveModeFlags);
+    pub const IntType = FlagsMixin(ResolveModeFlags).IntType;
+    pub fn toInt(self: ResolveModeFlags) IntType { return FlagsMixin(ResolveModeFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ResolveModeFlags { return FlagsMixin(ResolveModeFlags).fromInt(flags); }
+    pub fn merge(lhs: ResolveModeFlags, rhs: ResolveModeFlags) ResolveModeFlags { return FlagsMixin(ResolveModeFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ResolveModeFlags, rhs: ResolveModeFlags) ResolveModeFlags { return FlagsMixin(ResolveModeFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ResolveModeFlags) ResolveModeFlags { return FlagsMixin(ResolveModeFlags).complement(self); }
+    pub fn subtract(lhs: ResolveModeFlags, rhs: ResolveModeFlags) ResolveModeFlags { return FlagsMixin(ResolveModeFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ResolveModeFlags, rhs: ResolveModeFlags) bool { return FlagsMixin(ResolveModeFlags).contains(lhs, rhs); }
+    pub fn format(self: ResolveModeFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ResolveModeFlags).format(self, fmt, options, writer); }
 };
 pub const ShadingRatePaletteEntryNV = enum(i32) {
     no_invocations_nv = 0,
@@ -13536,7 +14531,15 @@ pub const GeometryInstanceFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(GeometryInstanceFlagsKHR);
+    pub const IntType = FlagsMixin(GeometryInstanceFlagsKHR).IntType;
+    pub fn toInt(self: GeometryInstanceFlagsKHR) IntType { return FlagsMixin(GeometryInstanceFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) GeometryInstanceFlagsKHR { return FlagsMixin(GeometryInstanceFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: GeometryInstanceFlagsKHR, rhs: GeometryInstanceFlagsKHR) GeometryInstanceFlagsKHR { return FlagsMixin(GeometryInstanceFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: GeometryInstanceFlagsKHR, rhs: GeometryInstanceFlagsKHR) GeometryInstanceFlagsKHR { return FlagsMixin(GeometryInstanceFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: GeometryInstanceFlagsKHR) GeometryInstanceFlagsKHR { return FlagsMixin(GeometryInstanceFlagsKHR).complement(self); }
+    pub fn subtract(lhs: GeometryInstanceFlagsKHR, rhs: GeometryInstanceFlagsKHR) GeometryInstanceFlagsKHR { return FlagsMixin(GeometryInstanceFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: GeometryInstanceFlagsKHR, rhs: GeometryInstanceFlagsKHR) bool { return FlagsMixin(GeometryInstanceFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: GeometryInstanceFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(GeometryInstanceFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const GeometryFlagsKHR = packed struct(Flags) {
     opaque_bit_khr: bool = false,
@@ -13571,7 +14574,15 @@ pub const GeometryFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(GeometryFlagsKHR);
+    pub const IntType = FlagsMixin(GeometryFlagsKHR).IntType;
+    pub fn toInt(self: GeometryFlagsKHR) IntType { return FlagsMixin(GeometryFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) GeometryFlagsKHR { return FlagsMixin(GeometryFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: GeometryFlagsKHR, rhs: GeometryFlagsKHR) GeometryFlagsKHR { return FlagsMixin(GeometryFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: GeometryFlagsKHR, rhs: GeometryFlagsKHR) GeometryFlagsKHR { return FlagsMixin(GeometryFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: GeometryFlagsKHR) GeometryFlagsKHR { return FlagsMixin(GeometryFlagsKHR).complement(self); }
+    pub fn subtract(lhs: GeometryFlagsKHR, rhs: GeometryFlagsKHR) GeometryFlagsKHR { return FlagsMixin(GeometryFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: GeometryFlagsKHR, rhs: GeometryFlagsKHR) bool { return FlagsMixin(GeometryFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: GeometryFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(GeometryFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const BuildAccelerationStructureFlagsKHR = packed struct(Flags) {
     allow_update_bit_khr: bool = false,
@@ -13606,7 +14617,15 @@ pub const BuildAccelerationStructureFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(BuildAccelerationStructureFlagsKHR);
+    pub const IntType = FlagsMixin(BuildAccelerationStructureFlagsKHR).IntType;
+    pub fn toInt(self: BuildAccelerationStructureFlagsKHR) IntType { return FlagsMixin(BuildAccelerationStructureFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) BuildAccelerationStructureFlagsKHR { return FlagsMixin(BuildAccelerationStructureFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: BuildAccelerationStructureFlagsKHR, rhs: BuildAccelerationStructureFlagsKHR) BuildAccelerationStructureFlagsKHR { return FlagsMixin(BuildAccelerationStructureFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: BuildAccelerationStructureFlagsKHR, rhs: BuildAccelerationStructureFlagsKHR) BuildAccelerationStructureFlagsKHR { return FlagsMixin(BuildAccelerationStructureFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: BuildAccelerationStructureFlagsKHR) BuildAccelerationStructureFlagsKHR { return FlagsMixin(BuildAccelerationStructureFlagsKHR).complement(self); }
+    pub fn subtract(lhs: BuildAccelerationStructureFlagsKHR, rhs: BuildAccelerationStructureFlagsKHR) BuildAccelerationStructureFlagsKHR { return FlagsMixin(BuildAccelerationStructureFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: BuildAccelerationStructureFlagsKHR, rhs: BuildAccelerationStructureFlagsKHR) bool { return FlagsMixin(BuildAccelerationStructureFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: BuildAccelerationStructureFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(BuildAccelerationStructureFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const AccelerationStructureCreateFlagsKHR = packed struct(Flags) {
     device_address_capture_replay_bit_khr: bool = false,
@@ -13641,7 +14660,15 @@ pub const AccelerationStructureCreateFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(AccelerationStructureCreateFlagsKHR);
+    pub const IntType = FlagsMixin(AccelerationStructureCreateFlagsKHR).IntType;
+    pub fn toInt(self: AccelerationStructureCreateFlagsKHR) IntType { return FlagsMixin(AccelerationStructureCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) AccelerationStructureCreateFlagsKHR { return FlagsMixin(AccelerationStructureCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: AccelerationStructureCreateFlagsKHR, rhs: AccelerationStructureCreateFlagsKHR) AccelerationStructureCreateFlagsKHR { return FlagsMixin(AccelerationStructureCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: AccelerationStructureCreateFlagsKHR, rhs: AccelerationStructureCreateFlagsKHR) AccelerationStructureCreateFlagsKHR { return FlagsMixin(AccelerationStructureCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: AccelerationStructureCreateFlagsKHR) AccelerationStructureCreateFlagsKHR { return FlagsMixin(AccelerationStructureCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: AccelerationStructureCreateFlagsKHR, rhs: AccelerationStructureCreateFlagsKHR) AccelerationStructureCreateFlagsKHR { return FlagsMixin(AccelerationStructureCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: AccelerationStructureCreateFlagsKHR, rhs: AccelerationStructureCreateFlagsKHR) bool { return FlagsMixin(AccelerationStructureCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: AccelerationStructureCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AccelerationStructureCreateFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const CopyAccelerationStructureModeKHR = enum(i32) {
     clone_khr = 0,
@@ -13745,7 +14772,15 @@ pub const FramebufferCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(FramebufferCreateFlags);
+    pub const IntType = FlagsMixin(FramebufferCreateFlags).IntType;
+    pub fn toInt(self: FramebufferCreateFlags) IntType { return FlagsMixin(FramebufferCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) FramebufferCreateFlags { return FlagsMixin(FramebufferCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: FramebufferCreateFlags, rhs: FramebufferCreateFlags) FramebufferCreateFlags { return FlagsMixin(FramebufferCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: FramebufferCreateFlags, rhs: FramebufferCreateFlags) FramebufferCreateFlags { return FlagsMixin(FramebufferCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: FramebufferCreateFlags) FramebufferCreateFlags { return FlagsMixin(FramebufferCreateFlags).complement(self); }
+    pub fn subtract(lhs: FramebufferCreateFlags, rhs: FramebufferCreateFlags) FramebufferCreateFlags { return FlagsMixin(FramebufferCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: FramebufferCreateFlags, rhs: FramebufferCreateFlags) bool { return FlagsMixin(FramebufferCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: FramebufferCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(FramebufferCreateFlags).format(self, fmt, options, writer); }
 };
 pub const DeviceDiagnosticsConfigFlagsNV = packed struct(Flags) {
     enable_shader_debug_info_bit_nv: bool = false,
@@ -13780,7 +14815,15 @@ pub const DeviceDiagnosticsConfigFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DeviceDiagnosticsConfigFlagsNV);
+    pub const IntType = FlagsMixin(DeviceDiagnosticsConfigFlagsNV).IntType;
+    pub fn toInt(self: DeviceDiagnosticsConfigFlagsNV) IntType { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) DeviceDiagnosticsConfigFlagsNV { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: DeviceDiagnosticsConfigFlagsNV, rhs: DeviceDiagnosticsConfigFlagsNV) DeviceDiagnosticsConfigFlagsNV { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: DeviceDiagnosticsConfigFlagsNV, rhs: DeviceDiagnosticsConfigFlagsNV) DeviceDiagnosticsConfigFlagsNV { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: DeviceDiagnosticsConfigFlagsNV) DeviceDiagnosticsConfigFlagsNV { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).complement(self); }
+    pub fn subtract(lhs: DeviceDiagnosticsConfigFlagsNV, rhs: DeviceDiagnosticsConfigFlagsNV) DeviceDiagnosticsConfigFlagsNV { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: DeviceDiagnosticsConfigFlagsNV, rhs: DeviceDiagnosticsConfigFlagsNV) bool { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: DeviceDiagnosticsConfigFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DeviceDiagnosticsConfigFlagsNV).format(self, fmt, options, writer); }
 };
 pub const PipelineCreationFeedbackFlags = packed struct(Flags) {
     valid_bit: bool = false,
@@ -13815,7 +14858,15 @@ pub const PipelineCreationFeedbackFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineCreationFeedbackFlags);
+    pub const IntType = FlagsMixin(PipelineCreationFeedbackFlags).IntType;
+    pub fn toInt(self: PipelineCreationFeedbackFlags) IntType { return FlagsMixin(PipelineCreationFeedbackFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCreationFeedbackFlags { return FlagsMixin(PipelineCreationFeedbackFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineCreationFeedbackFlags, rhs: PipelineCreationFeedbackFlags) PipelineCreationFeedbackFlags { return FlagsMixin(PipelineCreationFeedbackFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCreationFeedbackFlags, rhs: PipelineCreationFeedbackFlags) PipelineCreationFeedbackFlags { return FlagsMixin(PipelineCreationFeedbackFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCreationFeedbackFlags) PipelineCreationFeedbackFlags { return FlagsMixin(PipelineCreationFeedbackFlags).complement(self); }
+    pub fn subtract(lhs: PipelineCreationFeedbackFlags, rhs: PipelineCreationFeedbackFlags) PipelineCreationFeedbackFlags { return FlagsMixin(PipelineCreationFeedbackFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCreationFeedbackFlags, rhs: PipelineCreationFeedbackFlags) bool { return FlagsMixin(PipelineCreationFeedbackFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineCreationFeedbackFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCreationFeedbackFlags).format(self, fmt, options, writer); }
 };
 pub const FullScreenExclusiveEXT = enum(i32) {
     default_ext = 0,
@@ -13898,7 +14949,15 @@ pub const MemoryDecompressionMethodFlagsNV = packed struct(Flags64) {
     _reserved_bit_61: bool = false,
     _reserved_bit_62: bool = false,
     _reserved_bit_63: bool = false,
-    pub usingnamespace FlagsMixin(MemoryDecompressionMethodFlagsNV);
+    pub const IntType = FlagsMixin(MemoryDecompressionMethodFlagsNV).IntType;
+    pub fn toInt(self: MemoryDecompressionMethodFlagsNV) IntType { return FlagsMixin(MemoryDecompressionMethodFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) MemoryDecompressionMethodFlagsNV { return FlagsMixin(MemoryDecompressionMethodFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: MemoryDecompressionMethodFlagsNV, rhs: MemoryDecompressionMethodFlagsNV) MemoryDecompressionMethodFlagsNV { return FlagsMixin(MemoryDecompressionMethodFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: MemoryDecompressionMethodFlagsNV, rhs: MemoryDecompressionMethodFlagsNV) MemoryDecompressionMethodFlagsNV { return FlagsMixin(MemoryDecompressionMethodFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: MemoryDecompressionMethodFlagsNV) MemoryDecompressionMethodFlagsNV { return FlagsMixin(MemoryDecompressionMethodFlagsNV).complement(self); }
+    pub fn subtract(lhs: MemoryDecompressionMethodFlagsNV, rhs: MemoryDecompressionMethodFlagsNV) MemoryDecompressionMethodFlagsNV { return FlagsMixin(MemoryDecompressionMethodFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: MemoryDecompressionMethodFlagsNV, rhs: MemoryDecompressionMethodFlagsNV) bool { return FlagsMixin(MemoryDecompressionMethodFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: MemoryDecompressionMethodFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MemoryDecompressionMethodFlagsNV).format(self, fmt, options, writer); }
 };
 pub const PerformanceCounterUnitKHR = enum(i32) {
     generic_khr = 0,
@@ -13956,19 +15015,51 @@ pub const PerformanceCounterDescriptionFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PerformanceCounterDescriptionFlagsKHR);
+    pub const IntType = FlagsMixin(PerformanceCounterDescriptionFlagsKHR).IntType;
+    pub fn toInt(self: PerformanceCounterDescriptionFlagsKHR) IntType { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) PerformanceCounterDescriptionFlagsKHR { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: PerformanceCounterDescriptionFlagsKHR, rhs: PerformanceCounterDescriptionFlagsKHR) PerformanceCounterDescriptionFlagsKHR { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: PerformanceCounterDescriptionFlagsKHR, rhs: PerformanceCounterDescriptionFlagsKHR) PerformanceCounterDescriptionFlagsKHR { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: PerformanceCounterDescriptionFlagsKHR) PerformanceCounterDescriptionFlagsKHR { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).complement(self); }
+    pub fn subtract(lhs: PerformanceCounterDescriptionFlagsKHR, rhs: PerformanceCounterDescriptionFlagsKHR) PerformanceCounterDescriptionFlagsKHR { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: PerformanceCounterDescriptionFlagsKHR, rhs: PerformanceCounterDescriptionFlagsKHR) bool { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: PerformanceCounterDescriptionFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PerformanceCounterDescriptionFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const AcquireProfilingLockFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(AcquireProfilingLockFlagsKHR);
+    pub const IntType = FlagsMixin(AcquireProfilingLockFlagsKHR).IntType;
+    pub fn toInt(self: AcquireProfilingLockFlagsKHR) IntType { return FlagsMixin(AcquireProfilingLockFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) AcquireProfilingLockFlagsKHR { return FlagsMixin(AcquireProfilingLockFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: AcquireProfilingLockFlagsKHR, rhs: AcquireProfilingLockFlagsKHR) AcquireProfilingLockFlagsKHR { return FlagsMixin(AcquireProfilingLockFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: AcquireProfilingLockFlagsKHR, rhs: AcquireProfilingLockFlagsKHR) AcquireProfilingLockFlagsKHR { return FlagsMixin(AcquireProfilingLockFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: AcquireProfilingLockFlagsKHR) AcquireProfilingLockFlagsKHR { return FlagsMixin(AcquireProfilingLockFlagsKHR).complement(self); }
+    pub fn subtract(lhs: AcquireProfilingLockFlagsKHR, rhs: AcquireProfilingLockFlagsKHR) AcquireProfilingLockFlagsKHR { return FlagsMixin(AcquireProfilingLockFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: AcquireProfilingLockFlagsKHR, rhs: AcquireProfilingLockFlagsKHR) bool { return FlagsMixin(AcquireProfilingLockFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: AcquireProfilingLockFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AcquireProfilingLockFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const ShaderCorePropertiesFlagsAMD = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(ShaderCorePropertiesFlagsAMD);
+    pub const IntType = FlagsMixin(ShaderCorePropertiesFlagsAMD).IntType;
+    pub fn toInt(self: ShaderCorePropertiesFlagsAMD) IntType { return FlagsMixin(ShaderCorePropertiesFlagsAMD).toInt(self); }
+    pub fn fromInt(flags: IntType) ShaderCorePropertiesFlagsAMD { return FlagsMixin(ShaderCorePropertiesFlagsAMD).fromInt(flags); }
+    pub fn merge(lhs: ShaderCorePropertiesFlagsAMD, rhs: ShaderCorePropertiesFlagsAMD) ShaderCorePropertiesFlagsAMD { return FlagsMixin(ShaderCorePropertiesFlagsAMD).merge(lhs, rhs); }
+    pub fn intersect(lhs: ShaderCorePropertiesFlagsAMD, rhs: ShaderCorePropertiesFlagsAMD) ShaderCorePropertiesFlagsAMD { return FlagsMixin(ShaderCorePropertiesFlagsAMD).intersect(lhs, rhs); }
+    pub fn complement(self: ShaderCorePropertiesFlagsAMD) ShaderCorePropertiesFlagsAMD { return FlagsMixin(ShaderCorePropertiesFlagsAMD).complement(self); }
+    pub fn subtract(lhs: ShaderCorePropertiesFlagsAMD, rhs: ShaderCorePropertiesFlagsAMD) ShaderCorePropertiesFlagsAMD { return FlagsMixin(ShaderCorePropertiesFlagsAMD).subtract(lhs, rhs); }
+    pub fn contains(lhs: ShaderCorePropertiesFlagsAMD, rhs: ShaderCorePropertiesFlagsAMD) bool { return FlagsMixin(ShaderCorePropertiesFlagsAMD).contains(lhs, rhs); }
+    pub fn format(self: ShaderCorePropertiesFlagsAMD, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ShaderCorePropertiesFlagsAMD).format(self, fmt, options, writer); }
 };
 pub const RefreshObjectFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(RefreshObjectFlagsKHR);
+    pub const IntType = FlagsMixin(RefreshObjectFlagsKHR).IntType;
+    pub fn toInt(self: RefreshObjectFlagsKHR) IntType { return FlagsMixin(RefreshObjectFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) RefreshObjectFlagsKHR { return FlagsMixin(RefreshObjectFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: RefreshObjectFlagsKHR, rhs: RefreshObjectFlagsKHR) RefreshObjectFlagsKHR { return FlagsMixin(RefreshObjectFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: RefreshObjectFlagsKHR, rhs: RefreshObjectFlagsKHR) RefreshObjectFlagsKHR { return FlagsMixin(RefreshObjectFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: RefreshObjectFlagsKHR) RefreshObjectFlagsKHR { return FlagsMixin(RefreshObjectFlagsKHR).complement(self); }
+    pub fn subtract(lhs: RefreshObjectFlagsKHR, rhs: RefreshObjectFlagsKHR) RefreshObjectFlagsKHR { return FlagsMixin(RefreshObjectFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: RefreshObjectFlagsKHR, rhs: RefreshObjectFlagsKHR) bool { return FlagsMixin(RefreshObjectFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: RefreshObjectFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(RefreshObjectFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const PerformanceConfigurationTypeINTEL = enum(i32) {
     command_queue_metrics_discovery_activated_intel = 0,
@@ -14025,7 +15116,15 @@ pub const LineRasterizationModeKHR = enum(i32) {
 };
 pub const PipelineCompilerControlFlagsAMD = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(PipelineCompilerControlFlagsAMD);
+    pub const IntType = FlagsMixin(PipelineCompilerControlFlagsAMD).IntType;
+    pub fn toInt(self: PipelineCompilerControlFlagsAMD) IntType { return FlagsMixin(PipelineCompilerControlFlagsAMD).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineCompilerControlFlagsAMD { return FlagsMixin(PipelineCompilerControlFlagsAMD).fromInt(flags); }
+    pub fn merge(lhs: PipelineCompilerControlFlagsAMD, rhs: PipelineCompilerControlFlagsAMD) PipelineCompilerControlFlagsAMD { return FlagsMixin(PipelineCompilerControlFlagsAMD).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineCompilerControlFlagsAMD, rhs: PipelineCompilerControlFlagsAMD) PipelineCompilerControlFlagsAMD { return FlagsMixin(PipelineCompilerControlFlagsAMD).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineCompilerControlFlagsAMD) PipelineCompilerControlFlagsAMD { return FlagsMixin(PipelineCompilerControlFlagsAMD).complement(self); }
+    pub fn subtract(lhs: PipelineCompilerControlFlagsAMD, rhs: PipelineCompilerControlFlagsAMD) PipelineCompilerControlFlagsAMD { return FlagsMixin(PipelineCompilerControlFlagsAMD).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineCompilerControlFlagsAMD, rhs: PipelineCompilerControlFlagsAMD) bool { return FlagsMixin(PipelineCompilerControlFlagsAMD).contains(lhs, rhs); }
+    pub fn format(self: PipelineCompilerControlFlagsAMD, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineCompilerControlFlagsAMD).format(self, fmt, options, writer); }
 };
 pub const FaultLevel = enum(i32) {
     unassigned = 0,
@@ -14081,7 +15180,15 @@ pub const ToolPurposeFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ToolPurposeFlags);
+    pub const IntType = FlagsMixin(ToolPurposeFlags).IntType;
+    pub fn toInt(self: ToolPurposeFlags) IntType { return FlagsMixin(ToolPurposeFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) ToolPurposeFlags { return FlagsMixin(ToolPurposeFlags).fromInt(flags); }
+    pub fn merge(lhs: ToolPurposeFlags, rhs: ToolPurposeFlags) ToolPurposeFlags { return FlagsMixin(ToolPurposeFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: ToolPurposeFlags, rhs: ToolPurposeFlags) ToolPurposeFlags { return FlagsMixin(ToolPurposeFlags).intersect(lhs, rhs); }
+    pub fn complement(self: ToolPurposeFlags) ToolPurposeFlags { return FlagsMixin(ToolPurposeFlags).complement(self); }
+    pub fn subtract(lhs: ToolPurposeFlags, rhs: ToolPurposeFlags) ToolPurposeFlags { return FlagsMixin(ToolPurposeFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: ToolPurposeFlags, rhs: ToolPurposeFlags) bool { return FlagsMixin(ToolPurposeFlags).contains(lhs, rhs); }
+    pub fn format(self: ToolPurposeFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ToolPurposeFlags).format(self, fmt, options, writer); }
 };
 pub const PipelineMatchControl = enum(i32) {
     application_uuid_exact_match = 0,
@@ -14197,7 +15304,15 @@ pub const AccessFlags2 = packed struct(Flags64) {
     _reserved_bit_61: bool = false,
     _reserved_bit_62: bool = false,
     _reserved_bit_63: bool = false,
-    pub usingnamespace FlagsMixin(AccessFlags2);
+    pub const IntType = FlagsMixin(AccessFlags2).IntType;
+    pub fn toInt(self: AccessFlags2) IntType { return FlagsMixin(AccessFlags2).toInt(self); }
+    pub fn fromInt(flags: IntType) AccessFlags2 { return FlagsMixin(AccessFlags2).fromInt(flags); }
+    pub fn merge(lhs: AccessFlags2, rhs: AccessFlags2) AccessFlags2 { return FlagsMixin(AccessFlags2).merge(lhs, rhs); }
+    pub fn intersect(lhs: AccessFlags2, rhs: AccessFlags2) AccessFlags2 { return FlagsMixin(AccessFlags2).intersect(lhs, rhs); }
+    pub fn complement(self: AccessFlags2) AccessFlags2 { return FlagsMixin(AccessFlags2).complement(self); }
+    pub fn subtract(lhs: AccessFlags2, rhs: AccessFlags2) AccessFlags2 { return FlagsMixin(AccessFlags2).subtract(lhs, rhs); }
+    pub fn contains(lhs: AccessFlags2, rhs: AccessFlags2) bool { return FlagsMixin(AccessFlags2).contains(lhs, rhs); }
+    pub fn format(self: AccessFlags2, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(AccessFlags2).format(self, fmt, options, writer); }
 };
 pub const PipelineStageFlags2 = packed struct(Flags64) {
     top_of_pipe_bit: bool = false,
@@ -14264,7 +15379,15 @@ pub const PipelineStageFlags2 = packed struct(Flags64) {
     _reserved_bit_61: bool = false,
     _reserved_bit_62: bool = false,
     _reserved_bit_63: bool = false,
-    pub usingnamespace FlagsMixin(PipelineStageFlags2);
+    pub const IntType = FlagsMixin(PipelineStageFlags2).IntType;
+    pub fn toInt(self: PipelineStageFlags2) IntType { return FlagsMixin(PipelineStageFlags2).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineStageFlags2 { return FlagsMixin(PipelineStageFlags2).fromInt(flags); }
+    pub fn merge(lhs: PipelineStageFlags2, rhs: PipelineStageFlags2) PipelineStageFlags2 { return FlagsMixin(PipelineStageFlags2).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineStageFlags2, rhs: PipelineStageFlags2) PipelineStageFlags2 { return FlagsMixin(PipelineStageFlags2).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineStageFlags2) PipelineStageFlags2 { return FlagsMixin(PipelineStageFlags2).complement(self); }
+    pub fn subtract(lhs: PipelineStageFlags2, rhs: PipelineStageFlags2) PipelineStageFlags2 { return FlagsMixin(PipelineStageFlags2).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineStageFlags2, rhs: PipelineStageFlags2) bool { return FlagsMixin(PipelineStageFlags2).contains(lhs, rhs); }
+    pub fn format(self: PipelineStageFlags2, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineStageFlags2).format(self, fmt, options, writer); }
 };
 pub const SubmitFlags = packed struct(Flags) {
     protected_bit: bool = false,
@@ -14299,7 +15422,15 @@ pub const SubmitFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(SubmitFlags);
+    pub const IntType = FlagsMixin(SubmitFlags).IntType;
+    pub fn toInt(self: SubmitFlags) IntType { return FlagsMixin(SubmitFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) SubmitFlags { return FlagsMixin(SubmitFlags).fromInt(flags); }
+    pub fn merge(lhs: SubmitFlags, rhs: SubmitFlags) SubmitFlags { return FlagsMixin(SubmitFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: SubmitFlags, rhs: SubmitFlags) SubmitFlags { return FlagsMixin(SubmitFlags).intersect(lhs, rhs); }
+    pub fn complement(self: SubmitFlags) SubmitFlags { return FlagsMixin(SubmitFlags).complement(self); }
+    pub fn subtract(lhs: SubmitFlags, rhs: SubmitFlags) SubmitFlags { return FlagsMixin(SubmitFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: SubmitFlags, rhs: SubmitFlags) bool { return FlagsMixin(SubmitFlags).contains(lhs, rhs); }
+    pub fn format(self: SubmitFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(SubmitFlags).format(self, fmt, options, writer); }
 };
 pub const EventCreateFlags = packed struct(Flags) {
     device_only_bit: bool = false,
@@ -14334,7 +15465,15 @@ pub const EventCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(EventCreateFlags);
+    pub const IntType = FlagsMixin(EventCreateFlags).IntType;
+    pub fn toInt(self: EventCreateFlags) IntType { return FlagsMixin(EventCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) EventCreateFlags { return FlagsMixin(EventCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: EventCreateFlags, rhs: EventCreateFlags) EventCreateFlags { return FlagsMixin(EventCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: EventCreateFlags, rhs: EventCreateFlags) EventCreateFlags { return FlagsMixin(EventCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: EventCreateFlags) EventCreateFlags { return FlagsMixin(EventCreateFlags).complement(self); }
+    pub fn subtract(lhs: EventCreateFlags, rhs: EventCreateFlags) EventCreateFlags { return FlagsMixin(EventCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: EventCreateFlags, rhs: EventCreateFlags) bool { return FlagsMixin(EventCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: EventCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(EventCreateFlags).format(self, fmt, options, writer); }
 };
 pub const PipelineLayoutCreateFlags = packed struct(Flags) {
     _reserved_bit_0: bool = false,
@@ -14369,7 +15508,15 @@ pub const PipelineLayoutCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineLayoutCreateFlags);
+    pub const IntType = FlagsMixin(PipelineLayoutCreateFlags).IntType;
+    pub fn toInt(self: PipelineLayoutCreateFlags) IntType { return FlagsMixin(PipelineLayoutCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineLayoutCreateFlags { return FlagsMixin(PipelineLayoutCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineLayoutCreateFlags, rhs: PipelineLayoutCreateFlags) PipelineLayoutCreateFlags { return FlagsMixin(PipelineLayoutCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineLayoutCreateFlags, rhs: PipelineLayoutCreateFlags) PipelineLayoutCreateFlags { return FlagsMixin(PipelineLayoutCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineLayoutCreateFlags) PipelineLayoutCreateFlags { return FlagsMixin(PipelineLayoutCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineLayoutCreateFlags, rhs: PipelineLayoutCreateFlags) PipelineLayoutCreateFlags { return FlagsMixin(PipelineLayoutCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineLayoutCreateFlags, rhs: PipelineLayoutCreateFlags) bool { return FlagsMixin(PipelineLayoutCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineLayoutCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineLayoutCreateFlags).format(self, fmt, options, writer); }
 };
 pub const SciSyncClientTypeNV = enum(i32) {
     signaler_nv = 0,
@@ -14430,7 +15577,15 @@ pub const PipelineColorBlendStateCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineColorBlendStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineColorBlendStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineColorBlendStateCreateFlags) IntType { return FlagsMixin(PipelineColorBlendStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineColorBlendStateCreateFlags { return FlagsMixin(PipelineColorBlendStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineColorBlendStateCreateFlags, rhs: PipelineColorBlendStateCreateFlags) PipelineColorBlendStateCreateFlags { return FlagsMixin(PipelineColorBlendStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineColorBlendStateCreateFlags, rhs: PipelineColorBlendStateCreateFlags) PipelineColorBlendStateCreateFlags { return FlagsMixin(PipelineColorBlendStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineColorBlendStateCreateFlags) PipelineColorBlendStateCreateFlags { return FlagsMixin(PipelineColorBlendStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineColorBlendStateCreateFlags, rhs: PipelineColorBlendStateCreateFlags) PipelineColorBlendStateCreateFlags { return FlagsMixin(PipelineColorBlendStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineColorBlendStateCreateFlags, rhs: PipelineColorBlendStateCreateFlags) bool { return FlagsMixin(PipelineColorBlendStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineColorBlendStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineColorBlendStateCreateFlags).format(self, fmt, options, writer); }
 };
 pub const PipelineDepthStencilStateCreateFlags = packed struct(Flags) {
     rasterization_order_attachment_depth_access_bit_ext: bool = false,
@@ -14465,7 +15620,15 @@ pub const PipelineDepthStencilStateCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PipelineDepthStencilStateCreateFlags);
+    pub const IntType = FlagsMixin(PipelineDepthStencilStateCreateFlags).IntType;
+    pub fn toInt(self: PipelineDepthStencilStateCreateFlags) IntType { return FlagsMixin(PipelineDepthStencilStateCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) PipelineDepthStencilStateCreateFlags { return FlagsMixin(PipelineDepthStencilStateCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: PipelineDepthStencilStateCreateFlags, rhs: PipelineDepthStencilStateCreateFlags) PipelineDepthStencilStateCreateFlags { return FlagsMixin(PipelineDepthStencilStateCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: PipelineDepthStencilStateCreateFlags, rhs: PipelineDepthStencilStateCreateFlags) PipelineDepthStencilStateCreateFlags { return FlagsMixin(PipelineDepthStencilStateCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: PipelineDepthStencilStateCreateFlags) PipelineDepthStencilStateCreateFlags { return FlagsMixin(PipelineDepthStencilStateCreateFlags).complement(self); }
+    pub fn subtract(lhs: PipelineDepthStencilStateCreateFlags, rhs: PipelineDepthStencilStateCreateFlags) PipelineDepthStencilStateCreateFlags { return FlagsMixin(PipelineDepthStencilStateCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: PipelineDepthStencilStateCreateFlags, rhs: PipelineDepthStencilStateCreateFlags) bool { return FlagsMixin(PipelineDepthStencilStateCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: PipelineDepthStencilStateCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PipelineDepthStencilStateCreateFlags).format(self, fmt, options, writer); }
 };
 pub const GraphicsPipelineLibraryFlagsEXT = packed struct(Flags) {
     vertex_input_interface_bit_ext: bool = false,
@@ -14500,7 +15663,15 @@ pub const GraphicsPipelineLibraryFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(GraphicsPipelineLibraryFlagsEXT);
+    pub const IntType = FlagsMixin(GraphicsPipelineLibraryFlagsEXT).IntType;
+    pub fn toInt(self: GraphicsPipelineLibraryFlagsEXT) IntType { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) GraphicsPipelineLibraryFlagsEXT { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: GraphicsPipelineLibraryFlagsEXT, rhs: GraphicsPipelineLibraryFlagsEXT) GraphicsPipelineLibraryFlagsEXT { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: GraphicsPipelineLibraryFlagsEXT, rhs: GraphicsPipelineLibraryFlagsEXT) GraphicsPipelineLibraryFlagsEXT { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: GraphicsPipelineLibraryFlagsEXT) GraphicsPipelineLibraryFlagsEXT { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).complement(self); }
+    pub fn subtract(lhs: GraphicsPipelineLibraryFlagsEXT, rhs: GraphicsPipelineLibraryFlagsEXT) GraphicsPipelineLibraryFlagsEXT { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: GraphicsPipelineLibraryFlagsEXT, rhs: GraphicsPipelineLibraryFlagsEXT) bool { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: GraphicsPipelineLibraryFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(GraphicsPipelineLibraryFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const DeviceAddressBindingFlagsEXT = packed struct(Flags) {
     internal_object_bit_ext: bool = false,
@@ -14535,7 +15706,15 @@ pub const DeviceAddressBindingFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(DeviceAddressBindingFlagsEXT);
+    pub const IntType = FlagsMixin(DeviceAddressBindingFlagsEXT).IntType;
+    pub fn toInt(self: DeviceAddressBindingFlagsEXT) IntType { return FlagsMixin(DeviceAddressBindingFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) DeviceAddressBindingFlagsEXT { return FlagsMixin(DeviceAddressBindingFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: DeviceAddressBindingFlagsEXT, rhs: DeviceAddressBindingFlagsEXT) DeviceAddressBindingFlagsEXT { return FlagsMixin(DeviceAddressBindingFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: DeviceAddressBindingFlagsEXT, rhs: DeviceAddressBindingFlagsEXT) DeviceAddressBindingFlagsEXT { return FlagsMixin(DeviceAddressBindingFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: DeviceAddressBindingFlagsEXT) DeviceAddressBindingFlagsEXT { return FlagsMixin(DeviceAddressBindingFlagsEXT).complement(self); }
+    pub fn subtract(lhs: DeviceAddressBindingFlagsEXT, rhs: DeviceAddressBindingFlagsEXT) DeviceAddressBindingFlagsEXT { return FlagsMixin(DeviceAddressBindingFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: DeviceAddressBindingFlagsEXT, rhs: DeviceAddressBindingFlagsEXT) bool { return FlagsMixin(DeviceAddressBindingFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: DeviceAddressBindingFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(DeviceAddressBindingFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const DeviceAddressBindingTypeEXT = enum(i32) {
     bind_ext = 0,
@@ -14575,7 +15754,15 @@ pub const FrameBoundaryFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(FrameBoundaryFlagsEXT);
+    pub const IntType = FlagsMixin(FrameBoundaryFlagsEXT).IntType;
+    pub fn toInt(self: FrameBoundaryFlagsEXT) IntType { return FlagsMixin(FrameBoundaryFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) FrameBoundaryFlagsEXT { return FlagsMixin(FrameBoundaryFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: FrameBoundaryFlagsEXT, rhs: FrameBoundaryFlagsEXT) FrameBoundaryFlagsEXT { return FlagsMixin(FrameBoundaryFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: FrameBoundaryFlagsEXT, rhs: FrameBoundaryFlagsEXT) FrameBoundaryFlagsEXT { return FlagsMixin(FrameBoundaryFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: FrameBoundaryFlagsEXT) FrameBoundaryFlagsEXT { return FlagsMixin(FrameBoundaryFlagsEXT).complement(self); }
+    pub fn subtract(lhs: FrameBoundaryFlagsEXT, rhs: FrameBoundaryFlagsEXT) FrameBoundaryFlagsEXT { return FlagsMixin(FrameBoundaryFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: FrameBoundaryFlagsEXT, rhs: FrameBoundaryFlagsEXT) bool { return FlagsMixin(FrameBoundaryFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: FrameBoundaryFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(FrameBoundaryFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const PresentScalingFlagsEXT = packed struct(Flags) {
     one_to_one_bit_ext: bool = false,
@@ -14610,7 +15797,15 @@ pub const PresentScalingFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PresentScalingFlagsEXT);
+    pub const IntType = FlagsMixin(PresentScalingFlagsEXT).IntType;
+    pub fn toInt(self: PresentScalingFlagsEXT) IntType { return FlagsMixin(PresentScalingFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) PresentScalingFlagsEXT { return FlagsMixin(PresentScalingFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: PresentScalingFlagsEXT, rhs: PresentScalingFlagsEXT) PresentScalingFlagsEXT { return FlagsMixin(PresentScalingFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: PresentScalingFlagsEXT, rhs: PresentScalingFlagsEXT) PresentScalingFlagsEXT { return FlagsMixin(PresentScalingFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: PresentScalingFlagsEXT) PresentScalingFlagsEXT { return FlagsMixin(PresentScalingFlagsEXT).complement(self); }
+    pub fn subtract(lhs: PresentScalingFlagsEXT, rhs: PresentScalingFlagsEXT) PresentScalingFlagsEXT { return FlagsMixin(PresentScalingFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: PresentScalingFlagsEXT, rhs: PresentScalingFlagsEXT) bool { return FlagsMixin(PresentScalingFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: PresentScalingFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PresentScalingFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const PresentGravityFlagsEXT = packed struct(Flags) {
     min_bit_ext: bool = false,
@@ -14645,7 +15840,15 @@ pub const PresentGravityFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(PresentGravityFlagsEXT);
+    pub const IntType = FlagsMixin(PresentGravityFlagsEXT).IntType;
+    pub fn toInt(self: PresentGravityFlagsEXT) IntType { return FlagsMixin(PresentGravityFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) PresentGravityFlagsEXT { return FlagsMixin(PresentGravityFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: PresentGravityFlagsEXT, rhs: PresentGravityFlagsEXT) PresentGravityFlagsEXT { return FlagsMixin(PresentGravityFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: PresentGravityFlagsEXT, rhs: PresentGravityFlagsEXT) PresentGravityFlagsEXT { return FlagsMixin(PresentGravityFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: PresentGravityFlagsEXT) PresentGravityFlagsEXT { return FlagsMixin(PresentGravityFlagsEXT).complement(self); }
+    pub fn subtract(lhs: PresentGravityFlagsEXT, rhs: PresentGravityFlagsEXT) PresentGravityFlagsEXT { return FlagsMixin(PresentGravityFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: PresentGravityFlagsEXT, rhs: PresentGravityFlagsEXT) bool { return FlagsMixin(PresentGravityFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: PresentGravityFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PresentGravityFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const PhysicalDeviceSchedulingControlsFlagsARM = packed struct(Flags64) {
     shader_core_count_arm: bool = false,
@@ -14712,7 +15915,15 @@ pub const PhysicalDeviceSchedulingControlsFlagsARM = packed struct(Flags64) {
     _reserved_bit_61: bool = false,
     _reserved_bit_62: bool = false,
     _reserved_bit_63: bool = false,
-    pub usingnamespace FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM);
+    pub const IntType = FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).IntType;
+    pub fn toInt(self: PhysicalDeviceSchedulingControlsFlagsARM) IntType { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).toInt(self); }
+    pub fn fromInt(flags: IntType) PhysicalDeviceSchedulingControlsFlagsARM { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).fromInt(flags); }
+    pub fn merge(lhs: PhysicalDeviceSchedulingControlsFlagsARM, rhs: PhysicalDeviceSchedulingControlsFlagsARM) PhysicalDeviceSchedulingControlsFlagsARM { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).merge(lhs, rhs); }
+    pub fn intersect(lhs: PhysicalDeviceSchedulingControlsFlagsARM, rhs: PhysicalDeviceSchedulingControlsFlagsARM) PhysicalDeviceSchedulingControlsFlagsARM { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).intersect(lhs, rhs); }
+    pub fn complement(self: PhysicalDeviceSchedulingControlsFlagsARM) PhysicalDeviceSchedulingControlsFlagsARM { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).complement(self); }
+    pub fn subtract(lhs: PhysicalDeviceSchedulingControlsFlagsARM, rhs: PhysicalDeviceSchedulingControlsFlagsARM) PhysicalDeviceSchedulingControlsFlagsARM { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).subtract(lhs, rhs); }
+    pub fn contains(lhs: PhysicalDeviceSchedulingControlsFlagsARM, rhs: PhysicalDeviceSchedulingControlsFlagsARM) bool { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).contains(lhs, rhs); }
+    pub fn format(self: PhysicalDeviceSchedulingControlsFlagsARM, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(PhysicalDeviceSchedulingControlsFlagsARM).format(self, fmt, options, writer); }
 };
 pub const VideoCodecOperationFlagsKHR = packed struct(Flags) {
     decode_h264_bit_khr: bool = false,
@@ -14747,7 +15958,15 @@ pub const VideoCodecOperationFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoCodecOperationFlagsKHR);
+    pub const IntType = FlagsMixin(VideoCodecOperationFlagsKHR).IntType;
+    pub fn toInt(self: VideoCodecOperationFlagsKHR) IntType { return FlagsMixin(VideoCodecOperationFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoCodecOperationFlagsKHR { return FlagsMixin(VideoCodecOperationFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoCodecOperationFlagsKHR, rhs: VideoCodecOperationFlagsKHR) VideoCodecOperationFlagsKHR { return FlagsMixin(VideoCodecOperationFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoCodecOperationFlagsKHR, rhs: VideoCodecOperationFlagsKHR) VideoCodecOperationFlagsKHR { return FlagsMixin(VideoCodecOperationFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoCodecOperationFlagsKHR) VideoCodecOperationFlagsKHR { return FlagsMixin(VideoCodecOperationFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoCodecOperationFlagsKHR, rhs: VideoCodecOperationFlagsKHR) VideoCodecOperationFlagsKHR { return FlagsMixin(VideoCodecOperationFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoCodecOperationFlagsKHR, rhs: VideoCodecOperationFlagsKHR) bool { return FlagsMixin(VideoCodecOperationFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoCodecOperationFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoCodecOperationFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoChromaSubsamplingFlagsKHR = packed struct(Flags) {
     monochrome_bit_khr: bool = false,
@@ -14782,7 +16001,15 @@ pub const VideoChromaSubsamplingFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoChromaSubsamplingFlagsKHR);
+    pub const IntType = FlagsMixin(VideoChromaSubsamplingFlagsKHR).IntType;
+    pub fn toInt(self: VideoChromaSubsamplingFlagsKHR) IntType { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoChromaSubsamplingFlagsKHR { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoChromaSubsamplingFlagsKHR, rhs: VideoChromaSubsamplingFlagsKHR) VideoChromaSubsamplingFlagsKHR { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoChromaSubsamplingFlagsKHR, rhs: VideoChromaSubsamplingFlagsKHR) VideoChromaSubsamplingFlagsKHR { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoChromaSubsamplingFlagsKHR) VideoChromaSubsamplingFlagsKHR { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoChromaSubsamplingFlagsKHR, rhs: VideoChromaSubsamplingFlagsKHR) VideoChromaSubsamplingFlagsKHR { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoChromaSubsamplingFlagsKHR, rhs: VideoChromaSubsamplingFlagsKHR) bool { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoChromaSubsamplingFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoChromaSubsamplingFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoComponentBitDepthFlagsKHR = packed struct(Flags) {
     @"8_bit_khr": bool = false,
@@ -14817,7 +16044,15 @@ pub const VideoComponentBitDepthFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoComponentBitDepthFlagsKHR);
+    pub const IntType = FlagsMixin(VideoComponentBitDepthFlagsKHR).IntType;
+    pub fn toInt(self: VideoComponentBitDepthFlagsKHR) IntType { return FlagsMixin(VideoComponentBitDepthFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoComponentBitDepthFlagsKHR { return FlagsMixin(VideoComponentBitDepthFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoComponentBitDepthFlagsKHR, rhs: VideoComponentBitDepthFlagsKHR) VideoComponentBitDepthFlagsKHR { return FlagsMixin(VideoComponentBitDepthFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoComponentBitDepthFlagsKHR, rhs: VideoComponentBitDepthFlagsKHR) VideoComponentBitDepthFlagsKHR { return FlagsMixin(VideoComponentBitDepthFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoComponentBitDepthFlagsKHR) VideoComponentBitDepthFlagsKHR { return FlagsMixin(VideoComponentBitDepthFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoComponentBitDepthFlagsKHR, rhs: VideoComponentBitDepthFlagsKHR) VideoComponentBitDepthFlagsKHR { return FlagsMixin(VideoComponentBitDepthFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoComponentBitDepthFlagsKHR, rhs: VideoComponentBitDepthFlagsKHR) bool { return FlagsMixin(VideoComponentBitDepthFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoComponentBitDepthFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoComponentBitDepthFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoCapabilityFlagsKHR = packed struct(Flags) {
     protected_content_bit_khr: bool = false,
@@ -14852,7 +16087,15 @@ pub const VideoCapabilityFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoCapabilityFlagsKHR);
+    pub const IntType = FlagsMixin(VideoCapabilityFlagsKHR).IntType;
+    pub fn toInt(self: VideoCapabilityFlagsKHR) IntType { return FlagsMixin(VideoCapabilityFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoCapabilityFlagsKHR { return FlagsMixin(VideoCapabilityFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoCapabilityFlagsKHR, rhs: VideoCapabilityFlagsKHR) VideoCapabilityFlagsKHR { return FlagsMixin(VideoCapabilityFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoCapabilityFlagsKHR, rhs: VideoCapabilityFlagsKHR) VideoCapabilityFlagsKHR { return FlagsMixin(VideoCapabilityFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoCapabilityFlagsKHR) VideoCapabilityFlagsKHR { return FlagsMixin(VideoCapabilityFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoCapabilityFlagsKHR, rhs: VideoCapabilityFlagsKHR) VideoCapabilityFlagsKHR { return FlagsMixin(VideoCapabilityFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoCapabilityFlagsKHR, rhs: VideoCapabilityFlagsKHR) bool { return FlagsMixin(VideoCapabilityFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoCapabilityFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoCapabilityFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoSessionCreateFlagsKHR = packed struct(Flags) {
     protected_content_bit_khr: bool = false,
@@ -14887,7 +16130,15 @@ pub const VideoSessionCreateFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoSessionCreateFlagsKHR);
+    pub const IntType = FlagsMixin(VideoSessionCreateFlagsKHR).IntType;
+    pub fn toInt(self: VideoSessionCreateFlagsKHR) IntType { return FlagsMixin(VideoSessionCreateFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoSessionCreateFlagsKHR { return FlagsMixin(VideoSessionCreateFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoSessionCreateFlagsKHR, rhs: VideoSessionCreateFlagsKHR) VideoSessionCreateFlagsKHR { return FlagsMixin(VideoSessionCreateFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoSessionCreateFlagsKHR, rhs: VideoSessionCreateFlagsKHR) VideoSessionCreateFlagsKHR { return FlagsMixin(VideoSessionCreateFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoSessionCreateFlagsKHR) VideoSessionCreateFlagsKHR { return FlagsMixin(VideoSessionCreateFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoSessionCreateFlagsKHR, rhs: VideoSessionCreateFlagsKHR) VideoSessionCreateFlagsKHR { return FlagsMixin(VideoSessionCreateFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoSessionCreateFlagsKHR, rhs: VideoSessionCreateFlagsKHR) bool { return FlagsMixin(VideoSessionCreateFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoSessionCreateFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoSessionCreateFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoDecodeH264PictureLayoutFlagsKHR = packed struct(Flags) {
     interlaced_interleaved_lines_bit_khr: bool = false,
@@ -14922,7 +16173,15 @@ pub const VideoDecodeH264PictureLayoutFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR);
+    pub const IntType = FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).IntType;
+    pub fn toInt(self: VideoDecodeH264PictureLayoutFlagsKHR) IntType { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoDecodeH264PictureLayoutFlagsKHR { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoDecodeH264PictureLayoutFlagsKHR, rhs: VideoDecodeH264PictureLayoutFlagsKHR) VideoDecodeH264PictureLayoutFlagsKHR { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoDecodeH264PictureLayoutFlagsKHR, rhs: VideoDecodeH264PictureLayoutFlagsKHR) VideoDecodeH264PictureLayoutFlagsKHR { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoDecodeH264PictureLayoutFlagsKHR) VideoDecodeH264PictureLayoutFlagsKHR { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoDecodeH264PictureLayoutFlagsKHR, rhs: VideoDecodeH264PictureLayoutFlagsKHR) VideoDecodeH264PictureLayoutFlagsKHR { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoDecodeH264PictureLayoutFlagsKHR, rhs: VideoDecodeH264PictureLayoutFlagsKHR) bool { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoDecodeH264PictureLayoutFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoDecodeH264PictureLayoutFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoCodingControlFlagsKHR = packed struct(Flags) {
     reset_bit_khr: bool = false,
@@ -14957,7 +16216,15 @@ pub const VideoCodingControlFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoCodingControlFlagsKHR);
+    pub const IntType = FlagsMixin(VideoCodingControlFlagsKHR).IntType;
+    pub fn toInt(self: VideoCodingControlFlagsKHR) IntType { return FlagsMixin(VideoCodingControlFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoCodingControlFlagsKHR { return FlagsMixin(VideoCodingControlFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoCodingControlFlagsKHR, rhs: VideoCodingControlFlagsKHR) VideoCodingControlFlagsKHR { return FlagsMixin(VideoCodingControlFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoCodingControlFlagsKHR, rhs: VideoCodingControlFlagsKHR) VideoCodingControlFlagsKHR { return FlagsMixin(VideoCodingControlFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoCodingControlFlagsKHR) VideoCodingControlFlagsKHR { return FlagsMixin(VideoCodingControlFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoCodingControlFlagsKHR, rhs: VideoCodingControlFlagsKHR) VideoCodingControlFlagsKHR { return FlagsMixin(VideoCodingControlFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoCodingControlFlagsKHR, rhs: VideoCodingControlFlagsKHR) bool { return FlagsMixin(VideoCodingControlFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoCodingControlFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoCodingControlFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const QueryResultStatusKHR = enum(i32) {
     error_khr = -1,
@@ -14999,7 +16266,15 @@ pub const VideoDecodeUsageFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoDecodeUsageFlagsKHR);
+    pub const IntType = FlagsMixin(VideoDecodeUsageFlagsKHR).IntType;
+    pub fn toInt(self: VideoDecodeUsageFlagsKHR) IntType { return FlagsMixin(VideoDecodeUsageFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoDecodeUsageFlagsKHR { return FlagsMixin(VideoDecodeUsageFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoDecodeUsageFlagsKHR, rhs: VideoDecodeUsageFlagsKHR) VideoDecodeUsageFlagsKHR { return FlagsMixin(VideoDecodeUsageFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoDecodeUsageFlagsKHR, rhs: VideoDecodeUsageFlagsKHR) VideoDecodeUsageFlagsKHR { return FlagsMixin(VideoDecodeUsageFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoDecodeUsageFlagsKHR) VideoDecodeUsageFlagsKHR { return FlagsMixin(VideoDecodeUsageFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoDecodeUsageFlagsKHR, rhs: VideoDecodeUsageFlagsKHR) VideoDecodeUsageFlagsKHR { return FlagsMixin(VideoDecodeUsageFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoDecodeUsageFlagsKHR, rhs: VideoDecodeUsageFlagsKHR) bool { return FlagsMixin(VideoDecodeUsageFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoDecodeUsageFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoDecodeUsageFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoDecodeCapabilityFlagsKHR = packed struct(Flags) {
     dpb_and_output_coincide_bit_khr: bool = false,
@@ -15034,11 +16309,27 @@ pub const VideoDecodeCapabilityFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoDecodeCapabilityFlagsKHR);
+    pub const IntType = FlagsMixin(VideoDecodeCapabilityFlagsKHR).IntType;
+    pub fn toInt(self: VideoDecodeCapabilityFlagsKHR) IntType { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoDecodeCapabilityFlagsKHR { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoDecodeCapabilityFlagsKHR, rhs: VideoDecodeCapabilityFlagsKHR) VideoDecodeCapabilityFlagsKHR { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoDecodeCapabilityFlagsKHR, rhs: VideoDecodeCapabilityFlagsKHR) VideoDecodeCapabilityFlagsKHR { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoDecodeCapabilityFlagsKHR) VideoDecodeCapabilityFlagsKHR { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoDecodeCapabilityFlagsKHR, rhs: VideoDecodeCapabilityFlagsKHR) VideoDecodeCapabilityFlagsKHR { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoDecodeCapabilityFlagsKHR, rhs: VideoDecodeCapabilityFlagsKHR) bool { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoDecodeCapabilityFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoDecodeCapabilityFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeFlagsKHR = packed struct(Flags) {
     _reserved_bits: Flags = 0,
-    pub usingnamespace FlagsMixin(VideoEncodeFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeFlagsKHR) IntType { return FlagsMixin(VideoEncodeFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeFlagsKHR { return FlagsMixin(VideoEncodeFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeFlagsKHR, rhs: VideoEncodeFlagsKHR) VideoEncodeFlagsKHR { return FlagsMixin(VideoEncodeFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeFlagsKHR, rhs: VideoEncodeFlagsKHR) VideoEncodeFlagsKHR { return FlagsMixin(VideoEncodeFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeFlagsKHR) VideoEncodeFlagsKHR { return FlagsMixin(VideoEncodeFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeFlagsKHR, rhs: VideoEncodeFlagsKHR) VideoEncodeFlagsKHR { return FlagsMixin(VideoEncodeFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeFlagsKHR, rhs: VideoEncodeFlagsKHR) bool { return FlagsMixin(VideoEncodeFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeUsageFlagsKHR = packed struct(Flags) {
     transcoding_bit_khr: bool = false,
@@ -15073,7 +16364,15 @@ pub const VideoEncodeUsageFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeUsageFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeUsageFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeUsageFlagsKHR) IntType { return FlagsMixin(VideoEncodeUsageFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeUsageFlagsKHR { return FlagsMixin(VideoEncodeUsageFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeUsageFlagsKHR, rhs: VideoEncodeUsageFlagsKHR) VideoEncodeUsageFlagsKHR { return FlagsMixin(VideoEncodeUsageFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeUsageFlagsKHR, rhs: VideoEncodeUsageFlagsKHR) VideoEncodeUsageFlagsKHR { return FlagsMixin(VideoEncodeUsageFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeUsageFlagsKHR) VideoEncodeUsageFlagsKHR { return FlagsMixin(VideoEncodeUsageFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeUsageFlagsKHR, rhs: VideoEncodeUsageFlagsKHR) VideoEncodeUsageFlagsKHR { return FlagsMixin(VideoEncodeUsageFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeUsageFlagsKHR, rhs: VideoEncodeUsageFlagsKHR) bool { return FlagsMixin(VideoEncodeUsageFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeUsageFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeUsageFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeContentFlagsKHR = packed struct(Flags) {
     camera_bit_khr: bool = false,
@@ -15108,7 +16407,15 @@ pub const VideoEncodeContentFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeContentFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeContentFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeContentFlagsKHR) IntType { return FlagsMixin(VideoEncodeContentFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeContentFlagsKHR { return FlagsMixin(VideoEncodeContentFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeContentFlagsKHR, rhs: VideoEncodeContentFlagsKHR) VideoEncodeContentFlagsKHR { return FlagsMixin(VideoEncodeContentFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeContentFlagsKHR, rhs: VideoEncodeContentFlagsKHR) VideoEncodeContentFlagsKHR { return FlagsMixin(VideoEncodeContentFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeContentFlagsKHR) VideoEncodeContentFlagsKHR { return FlagsMixin(VideoEncodeContentFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeContentFlagsKHR, rhs: VideoEncodeContentFlagsKHR) VideoEncodeContentFlagsKHR { return FlagsMixin(VideoEncodeContentFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeContentFlagsKHR, rhs: VideoEncodeContentFlagsKHR) bool { return FlagsMixin(VideoEncodeContentFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeContentFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeContentFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeTuningModeKHR = enum(i32) {
     default_khr = 0,
@@ -15151,7 +16458,15 @@ pub const VideoEncodeCapabilityFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeCapabilityFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeCapabilityFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeCapabilityFlagsKHR) IntType { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeCapabilityFlagsKHR { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeCapabilityFlagsKHR, rhs: VideoEncodeCapabilityFlagsKHR) VideoEncodeCapabilityFlagsKHR { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeCapabilityFlagsKHR, rhs: VideoEncodeCapabilityFlagsKHR) VideoEncodeCapabilityFlagsKHR { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeCapabilityFlagsKHR) VideoEncodeCapabilityFlagsKHR { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeCapabilityFlagsKHR, rhs: VideoEncodeCapabilityFlagsKHR) VideoEncodeCapabilityFlagsKHR { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeCapabilityFlagsKHR, rhs: VideoEncodeCapabilityFlagsKHR) bool { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeCapabilityFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeCapabilityFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeFeedbackFlagsKHR = packed struct(Flags) {
     bitstream_buffer_offset_bit_khr: bool = false,
@@ -15186,7 +16501,15 @@ pub const VideoEncodeFeedbackFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeFeedbackFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeFeedbackFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeFeedbackFlagsKHR) IntType { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeFeedbackFlagsKHR { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeFeedbackFlagsKHR, rhs: VideoEncodeFeedbackFlagsKHR) VideoEncodeFeedbackFlagsKHR { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeFeedbackFlagsKHR, rhs: VideoEncodeFeedbackFlagsKHR) VideoEncodeFeedbackFlagsKHR { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeFeedbackFlagsKHR) VideoEncodeFeedbackFlagsKHR { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeFeedbackFlagsKHR, rhs: VideoEncodeFeedbackFlagsKHR) VideoEncodeFeedbackFlagsKHR { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeFeedbackFlagsKHR, rhs: VideoEncodeFeedbackFlagsKHR) bool { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeFeedbackFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeFeedbackFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeRateControlModeFlagsKHR = packed struct(Flags) {
     disabled_bit_khr: bool = false,
@@ -15221,7 +16544,15 @@ pub const VideoEncodeRateControlModeFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeRateControlModeFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeRateControlModeFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeRateControlModeFlagsKHR) IntType { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeRateControlModeFlagsKHR { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeRateControlModeFlagsKHR, rhs: VideoEncodeRateControlModeFlagsKHR) VideoEncodeRateControlModeFlagsKHR { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeRateControlModeFlagsKHR, rhs: VideoEncodeRateControlModeFlagsKHR) VideoEncodeRateControlModeFlagsKHR { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeRateControlModeFlagsKHR) VideoEncodeRateControlModeFlagsKHR { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeRateControlModeFlagsKHR, rhs: VideoEncodeRateControlModeFlagsKHR) VideoEncodeRateControlModeFlagsKHR { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeRateControlModeFlagsKHR, rhs: VideoEncodeRateControlModeFlagsKHR) bool { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeRateControlModeFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeRateControlModeFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH264CapabilityFlagsKHR = packed struct(Flags) {
     hrd_compliance_bit_khr: bool = false,
@@ -15256,7 +16587,15 @@ pub const VideoEncodeH264CapabilityFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH264CapabilityFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH264CapabilityFlagsKHR) IntType { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH264CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH264CapabilityFlagsKHR, rhs: VideoEncodeH264CapabilityFlagsKHR) VideoEncodeH264CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH264CapabilityFlagsKHR, rhs: VideoEncodeH264CapabilityFlagsKHR) VideoEncodeH264CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH264CapabilityFlagsKHR) VideoEncodeH264CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH264CapabilityFlagsKHR, rhs: VideoEncodeH264CapabilityFlagsKHR) VideoEncodeH264CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH264CapabilityFlagsKHR, rhs: VideoEncodeH264CapabilityFlagsKHR) bool { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH264CapabilityFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH264CapabilityFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH264StdFlagsKHR = packed struct(Flags) {
     separate_color_plane_flag_set_bit_khr: bool = false,
@@ -15291,7 +16630,15 @@ pub const VideoEncodeH264StdFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH264StdFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH264StdFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH264StdFlagsKHR) IntType { return FlagsMixin(VideoEncodeH264StdFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH264StdFlagsKHR { return FlagsMixin(VideoEncodeH264StdFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH264StdFlagsKHR, rhs: VideoEncodeH264StdFlagsKHR) VideoEncodeH264StdFlagsKHR { return FlagsMixin(VideoEncodeH264StdFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH264StdFlagsKHR, rhs: VideoEncodeH264StdFlagsKHR) VideoEncodeH264StdFlagsKHR { return FlagsMixin(VideoEncodeH264StdFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH264StdFlagsKHR) VideoEncodeH264StdFlagsKHR { return FlagsMixin(VideoEncodeH264StdFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH264StdFlagsKHR, rhs: VideoEncodeH264StdFlagsKHR) VideoEncodeH264StdFlagsKHR { return FlagsMixin(VideoEncodeH264StdFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH264StdFlagsKHR, rhs: VideoEncodeH264StdFlagsKHR) bool { return FlagsMixin(VideoEncodeH264StdFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH264StdFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH264StdFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH264RateControlFlagsKHR = packed struct(Flags) {
     attempt_hrd_compliance_bit_khr: bool = false,
@@ -15326,7 +16673,15 @@ pub const VideoEncodeH264RateControlFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH264RateControlFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH264RateControlFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH264RateControlFlagsKHR) IntType { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH264RateControlFlagsKHR { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH264RateControlFlagsKHR, rhs: VideoEncodeH264RateControlFlagsKHR) VideoEncodeH264RateControlFlagsKHR { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH264RateControlFlagsKHR, rhs: VideoEncodeH264RateControlFlagsKHR) VideoEncodeH264RateControlFlagsKHR { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH264RateControlFlagsKHR) VideoEncodeH264RateControlFlagsKHR { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH264RateControlFlagsKHR, rhs: VideoEncodeH264RateControlFlagsKHR) VideoEncodeH264RateControlFlagsKHR { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH264RateControlFlagsKHR, rhs: VideoEncodeH264RateControlFlagsKHR) bool { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH264RateControlFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH264RateControlFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const HostImageCopyFlagsEXT = packed struct(Flags) {
     memcpy_ext: bool = false,
@@ -15361,7 +16716,15 @@ pub const HostImageCopyFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(HostImageCopyFlagsEXT);
+    pub const IntType = FlagsMixin(HostImageCopyFlagsEXT).IntType;
+    pub fn toInt(self: HostImageCopyFlagsEXT) IntType { return FlagsMixin(HostImageCopyFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) HostImageCopyFlagsEXT { return FlagsMixin(HostImageCopyFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: HostImageCopyFlagsEXT, rhs: HostImageCopyFlagsEXT) HostImageCopyFlagsEXT { return FlagsMixin(HostImageCopyFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: HostImageCopyFlagsEXT, rhs: HostImageCopyFlagsEXT) HostImageCopyFlagsEXT { return FlagsMixin(HostImageCopyFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: HostImageCopyFlagsEXT) HostImageCopyFlagsEXT { return FlagsMixin(HostImageCopyFlagsEXT).complement(self); }
+    pub fn subtract(lhs: HostImageCopyFlagsEXT, rhs: HostImageCopyFlagsEXT) HostImageCopyFlagsEXT { return FlagsMixin(HostImageCopyFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: HostImageCopyFlagsEXT, rhs: HostImageCopyFlagsEXT) bool { return FlagsMixin(HostImageCopyFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: HostImageCopyFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(HostImageCopyFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const ImageConstraintsInfoFlagsFUCHSIA = packed struct(Flags) {
     cpu_read_rarely_fuchsia: bool = false,
@@ -15396,7 +16759,15 @@ pub const ImageConstraintsInfoFlagsFUCHSIA = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA);
+    pub const IntType = FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).IntType;
+    pub fn toInt(self: ImageConstraintsInfoFlagsFUCHSIA) IntType { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageConstraintsInfoFlagsFUCHSIA { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).fromInt(flags); }
+    pub fn merge(lhs: ImageConstraintsInfoFlagsFUCHSIA, rhs: ImageConstraintsInfoFlagsFUCHSIA) ImageConstraintsInfoFlagsFUCHSIA { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageConstraintsInfoFlagsFUCHSIA, rhs: ImageConstraintsInfoFlagsFUCHSIA) ImageConstraintsInfoFlagsFUCHSIA { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).intersect(lhs, rhs); }
+    pub fn complement(self: ImageConstraintsInfoFlagsFUCHSIA) ImageConstraintsInfoFlagsFUCHSIA { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).complement(self); }
+    pub fn subtract(lhs: ImageConstraintsInfoFlagsFUCHSIA, rhs: ImageConstraintsInfoFlagsFUCHSIA) ImageConstraintsInfoFlagsFUCHSIA { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageConstraintsInfoFlagsFUCHSIA, rhs: ImageConstraintsInfoFlagsFUCHSIA) bool { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).contains(lhs, rhs); }
+    pub fn format(self: ImageConstraintsInfoFlagsFUCHSIA, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA).format(self, fmt, options, writer); }
 };
 pub const FormatFeatureFlags2 = packed struct(Flags64) {
     sampled_image_bit: bool = false,
@@ -15463,7 +16834,15 @@ pub const FormatFeatureFlags2 = packed struct(Flags64) {
     _reserved_bit_61: bool = false,
     _reserved_bit_62: bool = false,
     _reserved_bit_63: bool = false,
-    pub usingnamespace FlagsMixin(FormatFeatureFlags2);
+    pub const IntType = FlagsMixin(FormatFeatureFlags2).IntType;
+    pub fn toInt(self: FormatFeatureFlags2) IntType { return FlagsMixin(FormatFeatureFlags2).toInt(self); }
+    pub fn fromInt(flags: IntType) FormatFeatureFlags2 { return FlagsMixin(FormatFeatureFlags2).fromInt(flags); }
+    pub fn merge(lhs: FormatFeatureFlags2, rhs: FormatFeatureFlags2) FormatFeatureFlags2 { return FlagsMixin(FormatFeatureFlags2).merge(lhs, rhs); }
+    pub fn intersect(lhs: FormatFeatureFlags2, rhs: FormatFeatureFlags2) FormatFeatureFlags2 { return FlagsMixin(FormatFeatureFlags2).intersect(lhs, rhs); }
+    pub fn complement(self: FormatFeatureFlags2) FormatFeatureFlags2 { return FlagsMixin(FormatFeatureFlags2).complement(self); }
+    pub fn subtract(lhs: FormatFeatureFlags2, rhs: FormatFeatureFlags2) FormatFeatureFlags2 { return FlagsMixin(FormatFeatureFlags2).subtract(lhs, rhs); }
+    pub fn contains(lhs: FormatFeatureFlags2, rhs: FormatFeatureFlags2) bool { return FlagsMixin(FormatFeatureFlags2).contains(lhs, rhs); }
+    pub fn format(self: FormatFeatureFlags2, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(FormatFeatureFlags2).format(self, fmt, options, writer); }
 };
 pub const RenderingFlags = packed struct(Flags) {
     contents_secondary_command_buffers_bit: bool = false,
@@ -15498,7 +16877,15 @@ pub const RenderingFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(RenderingFlags);
+    pub const IntType = FlagsMixin(RenderingFlags).IntType;
+    pub fn toInt(self: RenderingFlags) IntType { return FlagsMixin(RenderingFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) RenderingFlags { return FlagsMixin(RenderingFlags).fromInt(flags); }
+    pub fn merge(lhs: RenderingFlags, rhs: RenderingFlags) RenderingFlags { return FlagsMixin(RenderingFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: RenderingFlags, rhs: RenderingFlags) RenderingFlags { return FlagsMixin(RenderingFlags).intersect(lhs, rhs); }
+    pub fn complement(self: RenderingFlags) RenderingFlags { return FlagsMixin(RenderingFlags).complement(self); }
+    pub fn subtract(lhs: RenderingFlags, rhs: RenderingFlags) RenderingFlags { return FlagsMixin(RenderingFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: RenderingFlags, rhs: RenderingFlags) bool { return FlagsMixin(RenderingFlags).contains(lhs, rhs); }
+    pub fn format(self: RenderingFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(RenderingFlags).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH265CapabilityFlagsKHR = packed struct(Flags) {
     hrd_compliance_bit_khr: bool = false,
@@ -15533,7 +16920,15 @@ pub const VideoEncodeH265CapabilityFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH265CapabilityFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH265CapabilityFlagsKHR) IntType { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH265CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH265CapabilityFlagsKHR, rhs: VideoEncodeH265CapabilityFlagsKHR) VideoEncodeH265CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH265CapabilityFlagsKHR, rhs: VideoEncodeH265CapabilityFlagsKHR) VideoEncodeH265CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH265CapabilityFlagsKHR) VideoEncodeH265CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH265CapabilityFlagsKHR, rhs: VideoEncodeH265CapabilityFlagsKHR) VideoEncodeH265CapabilityFlagsKHR { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH265CapabilityFlagsKHR, rhs: VideoEncodeH265CapabilityFlagsKHR) bool { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH265CapabilityFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH265CapabilityFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH265StdFlagsKHR = packed struct(Flags) {
     separate_color_plane_flag_set_bit_khr: bool = false,
@@ -15568,7 +16963,15 @@ pub const VideoEncodeH265StdFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH265StdFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH265StdFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH265StdFlagsKHR) IntType { return FlagsMixin(VideoEncodeH265StdFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH265StdFlagsKHR { return FlagsMixin(VideoEncodeH265StdFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH265StdFlagsKHR, rhs: VideoEncodeH265StdFlagsKHR) VideoEncodeH265StdFlagsKHR { return FlagsMixin(VideoEncodeH265StdFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH265StdFlagsKHR, rhs: VideoEncodeH265StdFlagsKHR) VideoEncodeH265StdFlagsKHR { return FlagsMixin(VideoEncodeH265StdFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH265StdFlagsKHR) VideoEncodeH265StdFlagsKHR { return FlagsMixin(VideoEncodeH265StdFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH265StdFlagsKHR, rhs: VideoEncodeH265StdFlagsKHR) VideoEncodeH265StdFlagsKHR { return FlagsMixin(VideoEncodeH265StdFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH265StdFlagsKHR, rhs: VideoEncodeH265StdFlagsKHR) bool { return FlagsMixin(VideoEncodeH265StdFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH265StdFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH265StdFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH265RateControlFlagsKHR = packed struct(Flags) {
     attempt_hrd_compliance_bit_khr: bool = false,
@@ -15603,7 +17006,15 @@ pub const VideoEncodeH265RateControlFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH265RateControlFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH265RateControlFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH265RateControlFlagsKHR) IntType { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH265RateControlFlagsKHR { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH265RateControlFlagsKHR, rhs: VideoEncodeH265RateControlFlagsKHR) VideoEncodeH265RateControlFlagsKHR { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH265RateControlFlagsKHR, rhs: VideoEncodeH265RateControlFlagsKHR) VideoEncodeH265RateControlFlagsKHR { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH265RateControlFlagsKHR) VideoEncodeH265RateControlFlagsKHR { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH265RateControlFlagsKHR, rhs: VideoEncodeH265RateControlFlagsKHR) VideoEncodeH265RateControlFlagsKHR { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH265RateControlFlagsKHR, rhs: VideoEncodeH265RateControlFlagsKHR) bool { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH265RateControlFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH265RateControlFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH265CtbSizeFlagsKHR = packed struct(Flags) {
     @"16_bit_khr": bool = false,
@@ -15638,7 +17049,15 @@ pub const VideoEncodeH265CtbSizeFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH265CtbSizeFlagsKHR) IntType { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH265CtbSizeFlagsKHR { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH265CtbSizeFlagsKHR, rhs: VideoEncodeH265CtbSizeFlagsKHR) VideoEncodeH265CtbSizeFlagsKHR { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH265CtbSizeFlagsKHR, rhs: VideoEncodeH265CtbSizeFlagsKHR) VideoEncodeH265CtbSizeFlagsKHR { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH265CtbSizeFlagsKHR) VideoEncodeH265CtbSizeFlagsKHR { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH265CtbSizeFlagsKHR, rhs: VideoEncodeH265CtbSizeFlagsKHR) VideoEncodeH265CtbSizeFlagsKHR { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH265CtbSizeFlagsKHR, rhs: VideoEncodeH265CtbSizeFlagsKHR) bool { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH265CtbSizeFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH265CtbSizeFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const VideoEncodeH265TransformBlockSizeFlagsKHR = packed struct(Flags) {
     @"4_bit_khr": bool = false,
@@ -15673,7 +17092,15 @@ pub const VideoEncodeH265TransformBlockSizeFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR);
+    pub const IntType = FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).IntType;
+    pub fn toInt(self: VideoEncodeH265TransformBlockSizeFlagsKHR) IntType { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) VideoEncodeH265TransformBlockSizeFlagsKHR { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: VideoEncodeH265TransformBlockSizeFlagsKHR, rhs: VideoEncodeH265TransformBlockSizeFlagsKHR) VideoEncodeH265TransformBlockSizeFlagsKHR { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: VideoEncodeH265TransformBlockSizeFlagsKHR, rhs: VideoEncodeH265TransformBlockSizeFlagsKHR) VideoEncodeH265TransformBlockSizeFlagsKHR { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: VideoEncodeH265TransformBlockSizeFlagsKHR) VideoEncodeH265TransformBlockSizeFlagsKHR { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).complement(self); }
+    pub fn subtract(lhs: VideoEncodeH265TransformBlockSizeFlagsKHR, rhs: VideoEncodeH265TransformBlockSizeFlagsKHR) VideoEncodeH265TransformBlockSizeFlagsKHR { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: VideoEncodeH265TransformBlockSizeFlagsKHR, rhs: VideoEncodeH265TransformBlockSizeFlagsKHR) bool { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: VideoEncodeH265TransformBlockSizeFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(VideoEncodeH265TransformBlockSizeFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const ExportMetalObjectTypeFlagsEXT = packed struct(Flags) {
     metal_device_bit_ext: bool = false,
@@ -15708,7 +17135,15 @@ pub const ExportMetalObjectTypeFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ExportMetalObjectTypeFlagsEXT);
+    pub const IntType = FlagsMixin(ExportMetalObjectTypeFlagsEXT).IntType;
+    pub fn toInt(self: ExportMetalObjectTypeFlagsEXT) IntType { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) ExportMetalObjectTypeFlagsEXT { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: ExportMetalObjectTypeFlagsEXT, rhs: ExportMetalObjectTypeFlagsEXT) ExportMetalObjectTypeFlagsEXT { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: ExportMetalObjectTypeFlagsEXT, rhs: ExportMetalObjectTypeFlagsEXT) ExportMetalObjectTypeFlagsEXT { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: ExportMetalObjectTypeFlagsEXT) ExportMetalObjectTypeFlagsEXT { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).complement(self); }
+    pub fn subtract(lhs: ExportMetalObjectTypeFlagsEXT, rhs: ExportMetalObjectTypeFlagsEXT) ExportMetalObjectTypeFlagsEXT { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: ExportMetalObjectTypeFlagsEXT, rhs: ExportMetalObjectTypeFlagsEXT) bool { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: ExportMetalObjectTypeFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ExportMetalObjectTypeFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const InstanceCreateFlags = packed struct(Flags) {
     enumerate_portability_bit_khr: bool = false,
@@ -15743,7 +17178,15 @@ pub const InstanceCreateFlags = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(InstanceCreateFlags);
+    pub const IntType = FlagsMixin(InstanceCreateFlags).IntType;
+    pub fn toInt(self: InstanceCreateFlags) IntType { return FlagsMixin(InstanceCreateFlags).toInt(self); }
+    pub fn fromInt(flags: IntType) InstanceCreateFlags { return FlagsMixin(InstanceCreateFlags).fromInt(flags); }
+    pub fn merge(lhs: InstanceCreateFlags, rhs: InstanceCreateFlags) InstanceCreateFlags { return FlagsMixin(InstanceCreateFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: InstanceCreateFlags, rhs: InstanceCreateFlags) InstanceCreateFlags { return FlagsMixin(InstanceCreateFlags).intersect(lhs, rhs); }
+    pub fn complement(self: InstanceCreateFlags) InstanceCreateFlags { return FlagsMixin(InstanceCreateFlags).complement(self); }
+    pub fn subtract(lhs: InstanceCreateFlags, rhs: InstanceCreateFlags) InstanceCreateFlags { return FlagsMixin(InstanceCreateFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: InstanceCreateFlags, rhs: InstanceCreateFlags) bool { return FlagsMixin(InstanceCreateFlags).contains(lhs, rhs); }
+    pub fn format(self: InstanceCreateFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(InstanceCreateFlags).format(self, fmt, options, writer); }
 };
 pub const ImageCompressionFlagsEXT = packed struct(Flags) {
     fixed_rate_default_ext: bool = false,
@@ -15778,7 +17221,15 @@ pub const ImageCompressionFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ImageCompressionFlagsEXT);
+    pub const IntType = FlagsMixin(ImageCompressionFlagsEXT).IntType;
+    pub fn toInt(self: ImageCompressionFlagsEXT) IntType { return FlagsMixin(ImageCompressionFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageCompressionFlagsEXT { return FlagsMixin(ImageCompressionFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: ImageCompressionFlagsEXT, rhs: ImageCompressionFlagsEXT) ImageCompressionFlagsEXT { return FlagsMixin(ImageCompressionFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageCompressionFlagsEXT, rhs: ImageCompressionFlagsEXT) ImageCompressionFlagsEXT { return FlagsMixin(ImageCompressionFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: ImageCompressionFlagsEXT) ImageCompressionFlagsEXT { return FlagsMixin(ImageCompressionFlagsEXT).complement(self); }
+    pub fn subtract(lhs: ImageCompressionFlagsEXT, rhs: ImageCompressionFlagsEXT) ImageCompressionFlagsEXT { return FlagsMixin(ImageCompressionFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageCompressionFlagsEXT, rhs: ImageCompressionFlagsEXT) bool { return FlagsMixin(ImageCompressionFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: ImageCompressionFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageCompressionFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const ImageCompressionFixedRateFlagsEXT = packed struct(Flags) {
     @"1bpc_bit_ext": bool = false,
@@ -15813,7 +17264,15 @@ pub const ImageCompressionFixedRateFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ImageCompressionFixedRateFlagsEXT);
+    pub const IntType = FlagsMixin(ImageCompressionFixedRateFlagsEXT).IntType;
+    pub fn toInt(self: ImageCompressionFixedRateFlagsEXT) IntType { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) ImageCompressionFixedRateFlagsEXT { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: ImageCompressionFixedRateFlagsEXT, rhs: ImageCompressionFixedRateFlagsEXT) ImageCompressionFixedRateFlagsEXT { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: ImageCompressionFixedRateFlagsEXT, rhs: ImageCompressionFixedRateFlagsEXT) ImageCompressionFixedRateFlagsEXT { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: ImageCompressionFixedRateFlagsEXT) ImageCompressionFixedRateFlagsEXT { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: ImageCompressionFixedRateFlagsEXT, rhs: ImageCompressionFixedRateFlagsEXT) ImageCompressionFixedRateFlagsEXT { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: ImageCompressionFixedRateFlagsEXT, rhs: ImageCompressionFixedRateFlagsEXT) bool { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: ImageCompressionFixedRateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ImageCompressionFixedRateFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const PipelineRobustnessBufferBehaviorEXT = enum(i32) {
     device_default_ext = 0,
@@ -15862,7 +17321,15 @@ pub const OpticalFlowGridSizeFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(OpticalFlowGridSizeFlagsNV);
+    pub const IntType = FlagsMixin(OpticalFlowGridSizeFlagsNV).IntType;
+    pub fn toInt(self: OpticalFlowGridSizeFlagsNV) IntType { return FlagsMixin(OpticalFlowGridSizeFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) OpticalFlowGridSizeFlagsNV { return FlagsMixin(OpticalFlowGridSizeFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: OpticalFlowGridSizeFlagsNV, rhs: OpticalFlowGridSizeFlagsNV) OpticalFlowGridSizeFlagsNV { return FlagsMixin(OpticalFlowGridSizeFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: OpticalFlowGridSizeFlagsNV, rhs: OpticalFlowGridSizeFlagsNV) OpticalFlowGridSizeFlagsNV { return FlagsMixin(OpticalFlowGridSizeFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: OpticalFlowGridSizeFlagsNV) OpticalFlowGridSizeFlagsNV { return FlagsMixin(OpticalFlowGridSizeFlagsNV).complement(self); }
+    pub fn subtract(lhs: OpticalFlowGridSizeFlagsNV, rhs: OpticalFlowGridSizeFlagsNV) OpticalFlowGridSizeFlagsNV { return FlagsMixin(OpticalFlowGridSizeFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: OpticalFlowGridSizeFlagsNV, rhs: OpticalFlowGridSizeFlagsNV) bool { return FlagsMixin(OpticalFlowGridSizeFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: OpticalFlowGridSizeFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(OpticalFlowGridSizeFlagsNV).format(self, fmt, options, writer); }
 };
 pub const OpticalFlowUsageFlagsNV = packed struct(Flags) {
     input_bit_nv: bool = false,
@@ -15897,7 +17364,15 @@ pub const OpticalFlowUsageFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(OpticalFlowUsageFlagsNV);
+    pub const IntType = FlagsMixin(OpticalFlowUsageFlagsNV).IntType;
+    pub fn toInt(self: OpticalFlowUsageFlagsNV) IntType { return FlagsMixin(OpticalFlowUsageFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) OpticalFlowUsageFlagsNV { return FlagsMixin(OpticalFlowUsageFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: OpticalFlowUsageFlagsNV, rhs: OpticalFlowUsageFlagsNV) OpticalFlowUsageFlagsNV { return FlagsMixin(OpticalFlowUsageFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: OpticalFlowUsageFlagsNV, rhs: OpticalFlowUsageFlagsNV) OpticalFlowUsageFlagsNV { return FlagsMixin(OpticalFlowUsageFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: OpticalFlowUsageFlagsNV) OpticalFlowUsageFlagsNV { return FlagsMixin(OpticalFlowUsageFlagsNV).complement(self); }
+    pub fn subtract(lhs: OpticalFlowUsageFlagsNV, rhs: OpticalFlowUsageFlagsNV) OpticalFlowUsageFlagsNV { return FlagsMixin(OpticalFlowUsageFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: OpticalFlowUsageFlagsNV, rhs: OpticalFlowUsageFlagsNV) bool { return FlagsMixin(OpticalFlowUsageFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: OpticalFlowUsageFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(OpticalFlowUsageFlagsNV).format(self, fmt, options, writer); }
 };
 pub const OpticalFlowPerformanceLevelNV = enum(i32) {
     unknown_nv = 0,
@@ -15951,7 +17426,15 @@ pub const OpticalFlowSessionCreateFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(OpticalFlowSessionCreateFlagsNV);
+    pub const IntType = FlagsMixin(OpticalFlowSessionCreateFlagsNV).IntType;
+    pub fn toInt(self: OpticalFlowSessionCreateFlagsNV) IntType { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) OpticalFlowSessionCreateFlagsNV { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: OpticalFlowSessionCreateFlagsNV, rhs: OpticalFlowSessionCreateFlagsNV) OpticalFlowSessionCreateFlagsNV { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: OpticalFlowSessionCreateFlagsNV, rhs: OpticalFlowSessionCreateFlagsNV) OpticalFlowSessionCreateFlagsNV { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: OpticalFlowSessionCreateFlagsNV) OpticalFlowSessionCreateFlagsNV { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).complement(self); }
+    pub fn subtract(lhs: OpticalFlowSessionCreateFlagsNV, rhs: OpticalFlowSessionCreateFlagsNV) OpticalFlowSessionCreateFlagsNV { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: OpticalFlowSessionCreateFlagsNV, rhs: OpticalFlowSessionCreateFlagsNV) bool { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: OpticalFlowSessionCreateFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(OpticalFlowSessionCreateFlagsNV).format(self, fmt, options, writer); }
 };
 pub const OpticalFlowExecuteFlagsNV = packed struct(Flags) {
     disable_temporal_hints_bit_nv: bool = false,
@@ -15986,7 +17469,15 @@ pub const OpticalFlowExecuteFlagsNV = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(OpticalFlowExecuteFlagsNV);
+    pub const IntType = FlagsMixin(OpticalFlowExecuteFlagsNV).IntType;
+    pub fn toInt(self: OpticalFlowExecuteFlagsNV) IntType { return FlagsMixin(OpticalFlowExecuteFlagsNV).toInt(self); }
+    pub fn fromInt(flags: IntType) OpticalFlowExecuteFlagsNV { return FlagsMixin(OpticalFlowExecuteFlagsNV).fromInt(flags); }
+    pub fn merge(lhs: OpticalFlowExecuteFlagsNV, rhs: OpticalFlowExecuteFlagsNV) OpticalFlowExecuteFlagsNV { return FlagsMixin(OpticalFlowExecuteFlagsNV).merge(lhs, rhs); }
+    pub fn intersect(lhs: OpticalFlowExecuteFlagsNV, rhs: OpticalFlowExecuteFlagsNV) OpticalFlowExecuteFlagsNV { return FlagsMixin(OpticalFlowExecuteFlagsNV).intersect(lhs, rhs); }
+    pub fn complement(self: OpticalFlowExecuteFlagsNV) OpticalFlowExecuteFlagsNV { return FlagsMixin(OpticalFlowExecuteFlagsNV).complement(self); }
+    pub fn subtract(lhs: OpticalFlowExecuteFlagsNV, rhs: OpticalFlowExecuteFlagsNV) OpticalFlowExecuteFlagsNV { return FlagsMixin(OpticalFlowExecuteFlagsNV).subtract(lhs, rhs); }
+    pub fn contains(lhs: OpticalFlowExecuteFlagsNV, rhs: OpticalFlowExecuteFlagsNV) bool { return FlagsMixin(OpticalFlowExecuteFlagsNV).contains(lhs, rhs); }
+    pub fn format(self: OpticalFlowExecuteFlagsNV, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(OpticalFlowExecuteFlagsNV).format(self, fmt, options, writer); }
 };
 pub const MicromapTypeEXT = enum(i32) {
     opacity_micromap_ext = 0,
@@ -16026,7 +17517,15 @@ pub const BuildMicromapFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(BuildMicromapFlagsEXT);
+    pub const IntType = FlagsMixin(BuildMicromapFlagsEXT).IntType;
+    pub fn toInt(self: BuildMicromapFlagsEXT) IntType { return FlagsMixin(BuildMicromapFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) BuildMicromapFlagsEXT { return FlagsMixin(BuildMicromapFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: BuildMicromapFlagsEXT, rhs: BuildMicromapFlagsEXT) BuildMicromapFlagsEXT { return FlagsMixin(BuildMicromapFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: BuildMicromapFlagsEXT, rhs: BuildMicromapFlagsEXT) BuildMicromapFlagsEXT { return FlagsMixin(BuildMicromapFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: BuildMicromapFlagsEXT) BuildMicromapFlagsEXT { return FlagsMixin(BuildMicromapFlagsEXT).complement(self); }
+    pub fn subtract(lhs: BuildMicromapFlagsEXT, rhs: BuildMicromapFlagsEXT) BuildMicromapFlagsEXT { return FlagsMixin(BuildMicromapFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: BuildMicromapFlagsEXT, rhs: BuildMicromapFlagsEXT) bool { return FlagsMixin(BuildMicromapFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: BuildMicromapFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(BuildMicromapFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const MicromapCreateFlagsEXT = packed struct(Flags) {
     device_address_capture_replay_bit_ext: bool = false,
@@ -16061,7 +17560,15 @@ pub const MicromapCreateFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(MicromapCreateFlagsEXT);
+    pub const IntType = FlagsMixin(MicromapCreateFlagsEXT).IntType;
+    pub fn toInt(self: MicromapCreateFlagsEXT) IntType { return FlagsMixin(MicromapCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) MicromapCreateFlagsEXT { return FlagsMixin(MicromapCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: MicromapCreateFlagsEXT, rhs: MicromapCreateFlagsEXT) MicromapCreateFlagsEXT { return FlagsMixin(MicromapCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: MicromapCreateFlagsEXT, rhs: MicromapCreateFlagsEXT) MicromapCreateFlagsEXT { return FlagsMixin(MicromapCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: MicromapCreateFlagsEXT) MicromapCreateFlagsEXT { return FlagsMixin(MicromapCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: MicromapCreateFlagsEXT, rhs: MicromapCreateFlagsEXT) MicromapCreateFlagsEXT { return FlagsMixin(MicromapCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: MicromapCreateFlagsEXT, rhs: MicromapCreateFlagsEXT) bool { return FlagsMixin(MicromapCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: MicromapCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MicromapCreateFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const CopyMicromapModeEXT = enum(i32) {
     clone_ext = 0,
@@ -16145,7 +17652,15 @@ pub const ShaderCreateFlagsEXT = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(ShaderCreateFlagsEXT);
+    pub const IntType = FlagsMixin(ShaderCreateFlagsEXT).IntType;
+    pub fn toInt(self: ShaderCreateFlagsEXT) IntType { return FlagsMixin(ShaderCreateFlagsEXT).toInt(self); }
+    pub fn fromInt(flags: IntType) ShaderCreateFlagsEXT { return FlagsMixin(ShaderCreateFlagsEXT).fromInt(flags); }
+    pub fn merge(lhs: ShaderCreateFlagsEXT, rhs: ShaderCreateFlagsEXT) ShaderCreateFlagsEXT { return FlagsMixin(ShaderCreateFlagsEXT).merge(lhs, rhs); }
+    pub fn intersect(lhs: ShaderCreateFlagsEXT, rhs: ShaderCreateFlagsEXT) ShaderCreateFlagsEXT { return FlagsMixin(ShaderCreateFlagsEXT).intersect(lhs, rhs); }
+    pub fn complement(self: ShaderCreateFlagsEXT) ShaderCreateFlagsEXT { return FlagsMixin(ShaderCreateFlagsEXT).complement(self); }
+    pub fn subtract(lhs: ShaderCreateFlagsEXT, rhs: ShaderCreateFlagsEXT) ShaderCreateFlagsEXT { return FlagsMixin(ShaderCreateFlagsEXT).subtract(lhs, rhs); }
+    pub fn contains(lhs: ShaderCreateFlagsEXT, rhs: ShaderCreateFlagsEXT) bool { return FlagsMixin(ShaderCreateFlagsEXT).contains(lhs, rhs); }
+    pub fn format(self: ShaderCreateFlagsEXT, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(ShaderCreateFlagsEXT).format(self, fmt, options, writer); }
 };
 pub const ShaderCodeTypeEXT = enum(i32) {
     binary_ext = 0,
@@ -16258,7 +17773,15 @@ pub const MemoryUnmapFlagsKHR = packed struct(Flags) {
     _reserved_bit_29: bool = false,
     _reserved_bit_30: bool = false,
     _reserved_bit_31: bool = false,
-    pub usingnamespace FlagsMixin(MemoryUnmapFlagsKHR);
+    pub const IntType = FlagsMixin(MemoryUnmapFlagsKHR).IntType;
+    pub fn toInt(self: MemoryUnmapFlagsKHR) IntType { return FlagsMixin(MemoryUnmapFlagsKHR).toInt(self); }
+    pub fn fromInt(flags: IntType) MemoryUnmapFlagsKHR { return FlagsMixin(MemoryUnmapFlagsKHR).fromInt(flags); }
+    pub fn merge(lhs: MemoryUnmapFlagsKHR, rhs: MemoryUnmapFlagsKHR) MemoryUnmapFlagsKHR { return FlagsMixin(MemoryUnmapFlagsKHR).merge(lhs, rhs); }
+    pub fn intersect(lhs: MemoryUnmapFlagsKHR, rhs: MemoryUnmapFlagsKHR) MemoryUnmapFlagsKHR { return FlagsMixin(MemoryUnmapFlagsKHR).intersect(lhs, rhs); }
+    pub fn complement(self: MemoryUnmapFlagsKHR) MemoryUnmapFlagsKHR { return FlagsMixin(MemoryUnmapFlagsKHR).complement(self); }
+    pub fn subtract(lhs: MemoryUnmapFlagsKHR, rhs: MemoryUnmapFlagsKHR) MemoryUnmapFlagsKHR { return FlagsMixin(MemoryUnmapFlagsKHR).subtract(lhs, rhs); }
+    pub fn contains(lhs: MemoryUnmapFlagsKHR, rhs: MemoryUnmapFlagsKHR) bool { return FlagsMixin(MemoryUnmapFlagsKHR).contains(lhs, rhs); }
+    pub fn format(self: MemoryUnmapFlagsKHR, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return FlagsMixin(MemoryUnmapFlagsKHR).format(self, fmt, options, writer); }
 };
 pub const PfnCreateInstance = *const fn (
     p_create_info: *const InstanceCreateInfo,
@@ -21197,41 +22720,48 @@ pub fn CommandFlagsMixin(comptime CommandFlags: type) type {
     return struct {
         pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
             var result: CommandFlags = .{};
-            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
                 @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
             }
             return result;
         }
         pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
             var result: CommandFlags = .{};
-            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
                 @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
             }
             return result;
         }
         pub fn complement(self: CommandFlags) CommandFlags {
             var result: CommandFlags = .{};
-            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
                 @field(result, field.name) = !@field(self, field.name);
             }
             return result;
         }
         pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
             var result: CommandFlags = .{};
-            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
                 @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
             }
             return result;
         }
         pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
-            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
                 if (!@field(lhs, field.name) and @field(rhs, field.name)) {
                     return false;
                 }
             }
             return true;
         }
-        pub usingnamespace FlagFormatMixin(CommandFlags);
+        pub fn format(
+            self: CommandFlags,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            return FlagFormatMixin(CommandFlags).format(self, fmt, options, writer);
+        }
     };
 }
 pub const BaseCommandFlags = packed struct {
@@ -21240,7 +22770,7 @@ pub const BaseCommandFlags = packed struct {
     enumerateInstanceVersion: bool = false,
     enumerateInstanceLayerProperties: bool = false,
     enumerateInstanceExtensionProperties: bool = false,
-    pub fn CmdType(comptime tag: std.meta.FieldEnum(BaseCommandFlags)) type {
+    pub fn CmdType(comptime tag: anytype) type {
         return switch (tag) {
             .createInstance => PfnCreateInstance,
             .getInstanceProcAddr => PfnGetInstanceProcAddr,
@@ -21249,7 +22779,7 @@ pub const BaseCommandFlags = packed struct {
             .enumerateInstanceExtensionProperties => PfnEnumerateInstanceExtensionProperties,
         };
     }
-    pub fn cmdName(tag: std.meta.FieldEnum(BaseCommandFlags)) [:0]const u8 {
+    pub fn cmdName(tag: anytype) [:0]const u8 {
         return switch (tag) {
             .createInstance => "vkCreateInstance",
             .getInstanceProcAddr => "vkGetInstanceProcAddr",
@@ -21258,7 +22788,12 @@ pub const BaseCommandFlags = packed struct {
             .enumerateInstanceExtensionProperties => "vkEnumerateInstanceExtensionProperties",
         };
     }
-    pub usingnamespace CommandFlagsMixin(BaseCommandFlags);
+    pub fn merge(lhs: BaseCommandFlags, rhs: BaseCommandFlags) BaseCommandFlags { return CommandFlagsMixin(BaseCommandFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: BaseCommandFlags, rhs: BaseCommandFlags) BaseCommandFlags { return CommandFlagsMixin(BaseCommandFlags).intersect(lhs, rhs); }
+    pub fn complement(self: BaseCommandFlags) BaseCommandFlags { return CommandFlagsMixin(BaseCommandFlags).complement(self); }
+    pub fn subtract(lhs: BaseCommandFlags, rhs: BaseCommandFlags) BaseCommandFlags { return CommandFlagsMixin(BaseCommandFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: BaseCommandFlags, rhs: BaseCommandFlags) bool { return CommandFlagsMixin(BaseCommandFlags).contains(lhs, rhs); }
+    pub fn format(self: BaseCommandFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return CommandFlagsMixin(BaseCommandFlags).format(self, fmt, options, writer); }
 };
 pub fn BaseWrapper(comptime cmds: BaseCommandFlags) type {
     return struct {
@@ -21267,39 +22802,30 @@ pub fn BaseWrapper(comptime cmds: BaseCommandFlags) type {
         const Self = @This();
         pub const commands = cmds;
         pub const Dispatch = blk: {
-            @setEvalBranchQuota(10_000);
+            @setEvalBranchQuota(100_000);
             const Type = std.builtin.Type;
             const fields_len = fields_len: {
                 var fields_len: u32 = 0;
-                for (@typeInfo(BaseCommandFlags).Struct.fields) |field| {
+                for (@typeInfo(BaseCommandFlags).@"struct".fields) |field| {
                     fields_len += @intCast(@intFromBool(@field(cmds, field.name)));
                 }
                 break :fields_len fields_len;
             };
-            var fields: [fields_len]Type.StructField = undefined;
+            var field_names: [fields_len][]const u8 = undefined;
+            var field_types: [fields_len]type = undefined;
+            var field_attrs: [fields_len]Type.StructField.Attributes = undefined;
             var i: usize = 0;
-            for (@typeInfo(BaseCommandFlags).Struct.fields) |field| {
+            for (@typeInfo(BaseCommandFlags).@"struct".fields) |field| {
                 if (@field(cmds, field.name)) {
-                    const field_tag = std.enums.nameCast(std.meta.FieldEnum(BaseCommandFlags), field.name);
+                    const field_tag = std.meta.stringToEnum(std.meta.FieldEnum(BaseCommandFlags), field.name).?;
                     const PfnType = BaseCommandFlags.CmdType(field_tag);
-                    fields[i] = .{
-                        .name = BaseCommandFlags.cmdName(field_tag),
-                        .type = PfnType,
-                        .default_value = null,
-                        .is_comptime = false,
-                        .alignment = @alignOf(PfnType),
-                    };
+                    field_names[i] = BaseCommandFlags.cmdName(field_tag);
+                    field_types[i] = PfnType;
+                    field_attrs[i] = .{ .@"align" = @alignOf(PfnType) };
                     i += 1;
                 }
             }
-            break :blk @Type(.{
-                .Struct = .{
-                    .layout = .auto,
-                    .fields = &fields,
-                    .decls = &[_]std.builtin.Type.Declaration{},
-                    .is_tuple = false,
-                },
-            });
+            break :blk @Struct(.auto, null, &field_names, &field_types, &field_attrs);
         };
         pub fn load(loader: anytype) error{CommandLoadFailure}!Self {
             var self: Self = undefined;
@@ -21541,7 +23067,7 @@ pub const InstanceCommandFlags = packed struct {
     getDrmDisplayEXT: bool = false,
     getPhysicalDeviceOpticalFlowImageFormatsNV: bool = false,
     getPhysicalDeviceCooperativeMatrixPropertiesKHR: bool = false,
-    pub fn CmdType(comptime tag: std.meta.FieldEnum(InstanceCommandFlags)) type {
+    pub fn CmdType(comptime tag: anytype) type {
         return switch (tag) {
             .destroyInstance => PfnDestroyInstance,
             .enumeratePhysicalDevices => PfnEnumeratePhysicalDevices,
@@ -21654,7 +23180,7 @@ pub const InstanceCommandFlags = packed struct {
             .getPhysicalDeviceCooperativeMatrixPropertiesKHR => PfnGetPhysicalDeviceCooperativeMatrixPropertiesKHR,
         };
     }
-    pub fn cmdName(tag: std.meta.FieldEnum(InstanceCommandFlags)) [:0]const u8 {
+    pub fn cmdName(tag: anytype) [:0]const u8 {
         return switch (tag) {
             .destroyInstance => "vkDestroyInstance",
             .enumeratePhysicalDevices => "vkEnumeratePhysicalDevices",
@@ -21767,7 +23293,12 @@ pub const InstanceCommandFlags = packed struct {
             .getPhysicalDeviceCooperativeMatrixPropertiesKHR => "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR",
         };
     }
-    pub usingnamespace CommandFlagsMixin(InstanceCommandFlags);
+    pub fn merge(lhs: InstanceCommandFlags, rhs: InstanceCommandFlags) InstanceCommandFlags { return CommandFlagsMixin(InstanceCommandFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: InstanceCommandFlags, rhs: InstanceCommandFlags) InstanceCommandFlags { return CommandFlagsMixin(InstanceCommandFlags).intersect(lhs, rhs); }
+    pub fn complement(self: InstanceCommandFlags) InstanceCommandFlags { return CommandFlagsMixin(InstanceCommandFlags).complement(self); }
+    pub fn subtract(lhs: InstanceCommandFlags, rhs: InstanceCommandFlags) InstanceCommandFlags { return CommandFlagsMixin(InstanceCommandFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: InstanceCommandFlags, rhs: InstanceCommandFlags) bool { return CommandFlagsMixin(InstanceCommandFlags).contains(lhs, rhs); }
+    pub fn format(self: InstanceCommandFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return CommandFlagsMixin(InstanceCommandFlags).format(self, fmt, options, writer); }
 };
 pub fn InstanceWrapper(comptime cmds: InstanceCommandFlags) type {
     return struct {
@@ -21776,39 +23307,30 @@ pub fn InstanceWrapper(comptime cmds: InstanceCommandFlags) type {
         const Self = @This();
         pub const commands = cmds;
         pub const Dispatch = blk: {
-            @setEvalBranchQuota(10_000);
+            @setEvalBranchQuota(100_000);
             const Type = std.builtin.Type;
             const fields_len = fields_len: {
                 var fields_len: u32 = 0;
-                for (@typeInfo(InstanceCommandFlags).Struct.fields) |field| {
+                for (@typeInfo(InstanceCommandFlags).@"struct".fields) |field| {
                     fields_len += @intCast(@intFromBool(@field(cmds, field.name)));
                 }
                 break :fields_len fields_len;
             };
-            var fields: [fields_len]Type.StructField = undefined;
+            var field_names: [fields_len][]const u8 = undefined;
+            var field_types: [fields_len]type = undefined;
+            var field_attrs: [fields_len]Type.StructField.Attributes = undefined;
             var i: usize = 0;
-            for (@typeInfo(InstanceCommandFlags).Struct.fields) |field| {
+            for (@typeInfo(InstanceCommandFlags).@"struct".fields) |field| {
                 if (@field(cmds, field.name)) {
-                    const field_tag = std.enums.nameCast(std.meta.FieldEnum(InstanceCommandFlags), field.name);
+                    const field_tag = std.meta.stringToEnum(std.meta.FieldEnum(InstanceCommandFlags), field.name).?;
                     const PfnType = InstanceCommandFlags.CmdType(field_tag);
-                    fields[i] = .{
-                        .name = InstanceCommandFlags.cmdName(field_tag),
-                        .type = PfnType,
-                        .default_value = null,
-                        .is_comptime = false,
-                        .alignment = @alignOf(PfnType),
-                    };
+                    field_names[i] = InstanceCommandFlags.cmdName(field_tag);
+                    field_types[i] = PfnType;
+                    field_attrs[i] = .{ .@"align" = @alignOf(PfnType) };
                     i += 1;
                 }
             }
-            break :blk @Type(.{
-                .Struct = .{
-                    .layout = .auto,
-                    .fields = &fields,
-                    .decls = &[_]std.builtin.Type.Declaration{},
-                    .is_tuple = false,
-                },
-            });
+            break :blk @Struct(.auto, null, &field_names, &field_types, &field_attrs);
         };
         pub fn load(instance: Instance, loader: anytype) error{CommandLoadFailure}!Self {
             var self: Self = undefined;
@@ -24765,7 +26287,7 @@ pub const DeviceCommandFlags = packed struct {
     queueNotifyOutOfBandNV: bool = false,
     cmdSetRenderingAttachmentLocationsKHR: bool = false,
     cmdSetRenderingInputAttachmentIndicesKHR: bool = false,
-    pub fn CmdType(comptime tag: std.meta.FieldEnum(DeviceCommandFlags)) type {
+    pub fn CmdType(comptime tag: anytype) type {
         return switch (tag) {
             .destroyDevice => PfnDestroyDevice,
             .getDeviceQueue => PfnGetDeviceQueue,
@@ -25355,7 +26877,7 @@ pub const DeviceCommandFlags = packed struct {
             .cmdSetRenderingInputAttachmentIndicesKHR => PfnCmdSetRenderingInputAttachmentIndicesKHR,
         };
     }
-    pub fn cmdName(tag: std.meta.FieldEnum(DeviceCommandFlags)) [:0]const u8 {
+    pub fn cmdName(tag: anytype) [:0]const u8 {
         return switch (tag) {
             .destroyDevice => "vkDestroyDevice",
             .getDeviceQueue => "vkGetDeviceQueue",
@@ -25945,7 +27467,12 @@ pub const DeviceCommandFlags = packed struct {
             .cmdSetRenderingInputAttachmentIndicesKHR => "vkCmdSetRenderingInputAttachmentIndicesKHR",
         };
     }
-    pub usingnamespace CommandFlagsMixin(DeviceCommandFlags);
+    pub fn merge(lhs: DeviceCommandFlags, rhs: DeviceCommandFlags) DeviceCommandFlags { return CommandFlagsMixin(DeviceCommandFlags).merge(lhs, rhs); }
+    pub fn intersect(lhs: DeviceCommandFlags, rhs: DeviceCommandFlags) DeviceCommandFlags { return CommandFlagsMixin(DeviceCommandFlags).intersect(lhs, rhs); }
+    pub fn complement(self: DeviceCommandFlags) DeviceCommandFlags { return CommandFlagsMixin(DeviceCommandFlags).complement(self); }
+    pub fn subtract(lhs: DeviceCommandFlags, rhs: DeviceCommandFlags) DeviceCommandFlags { return CommandFlagsMixin(DeviceCommandFlags).subtract(lhs, rhs); }
+    pub fn contains(lhs: DeviceCommandFlags, rhs: DeviceCommandFlags) bool { return CommandFlagsMixin(DeviceCommandFlags).contains(lhs, rhs); }
+    pub fn format(self: DeviceCommandFlags, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void { return CommandFlagsMixin(DeviceCommandFlags).format(self, fmt, options, writer); }
 };
 pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
     return struct {
@@ -25954,39 +27481,30 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
         const Self = @This();
         pub const commands = cmds;
         pub const Dispatch = blk: {
-            @setEvalBranchQuota(10_000);
+            @setEvalBranchQuota(100_000);
             const Type = std.builtin.Type;
             const fields_len = fields_len: {
                 var fields_len: u32 = 0;
-                for (@typeInfo(DeviceCommandFlags).Struct.fields) |field| {
+                for (@typeInfo(DeviceCommandFlags).@"struct".fields) |field| {
                     fields_len += @intCast(@intFromBool(@field(cmds, field.name)));
                 }
                 break :fields_len fields_len;
             };
-            var fields: [fields_len]Type.StructField = undefined;
+            var field_names: [fields_len][]const u8 = undefined;
+            var field_types: [fields_len]type = undefined;
+            var field_attrs: [fields_len]Type.StructField.Attributes = undefined;
             var i: usize = 0;
-            for (@typeInfo(DeviceCommandFlags).Struct.fields) |field| {
+            for (@typeInfo(DeviceCommandFlags).@"struct".fields) |field| {
                 if (@field(cmds, field.name)) {
-                    const field_tag = std.enums.nameCast(std.meta.FieldEnum(DeviceCommandFlags), field.name);
+                    const field_tag = std.meta.stringToEnum(std.meta.FieldEnum(DeviceCommandFlags), field.name).?;
                     const PfnType = DeviceCommandFlags.CmdType(field_tag);
-                    fields[i] = .{
-                        .name = DeviceCommandFlags.cmdName(field_tag),
-                        .type = PfnType,
-                        .default_value = null,
-                        .is_comptime = false,
-                        .alignment = @alignOf(PfnType),
-                    };
+                    field_names[i] = DeviceCommandFlags.cmdName(field_tag);
+                    field_types[i] = PfnType;
+                    field_attrs[i] = .{ .@"align" = @alignOf(PfnType) };
                     i += 1;
                 }
             }
-            break :blk @Type(.{
-                .Struct = .{
-                    .layout = .auto,
-                    .fields = &fields,
-                    .decls = &[_]std.builtin.Type.Declaration{},
-                    .is_tuple = false,
-                },
-            });
+            break :blk @Struct(.auto, null, &field_names, &field_types, &field_attrs);
         };
         pub fn load(device: Device, loader: anytype) error{CommandLoadFailure}!Self {
             var self: Self = undefined;

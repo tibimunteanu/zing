@@ -13,8 +13,38 @@ const NodeData = struct {
     offset: u64 = invalid_id,
     size: u64 = invalid_id,
 };
-const List = std.SinglyLinkedList(NodeData);
-const Node = List.Node;
+const List = struct {
+    first: ?*Node = null,
+
+    fn prepend(self: *List, new_node: *Node) void {
+        new_node.next = self.first;
+        self.first = new_node;
+    }
+
+    fn popFirst(self: *List) ?*Node {
+        const first = self.first orelse return null;
+        self.first = first.next;
+        first.next = null;
+        return first;
+    }
+};
+
+const Node = struct {
+    data: NodeData,
+    next: ?*Node = null,
+
+    fn insertAfter(self: *Node, new_node: *Node) void {
+        new_node.next = self.next;
+        self.next = new_node;
+    }
+
+    fn removeNext(self: *Node) ?*Node {
+        const next = self.next orelse return null;
+        self.next = next.next;
+        next.next = null;
+        return next;
+    }
+};
 
 const invalid_id = std.math.maxInt(u64);
 const invalid_node = Node{ .data = NodeData{} };

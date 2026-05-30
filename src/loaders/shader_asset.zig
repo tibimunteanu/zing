@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Shader = @import("../renderer/shader.zig");
+const file = @import("file.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -14,14 +15,10 @@ config: std.json.Parsed(Shader.Config),
 pub fn init(allocator: Allocator, name: []const u8) !ShaderAsset {
     const path_format = "assets/shaders/{s}.shader.json";
 
-    const file_path = try std.fmt.allocPrintZ(allocator, path_format, .{name});
+    const file_path = try std.fmt.allocPrintSentinel(allocator, path_format, .{name}, 0);
     defer allocator.free(file_path);
 
-    const file = try std.fs.cwd().openFile(file_path, .{ .mode = .read_only });
-    defer file.close();
-
-    const stat = try file.stat();
-    const bytes = try file.readToEndAlloc(allocator, stat.size);
+    const bytes = try file.readAlloc(allocator, file_path);
     defer allocator.free(bytes);
 
     const config = try std.json.parseFromSlice(
