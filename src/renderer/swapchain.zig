@@ -1,5 +1,4 @@
 const std = @import("std");
-const glfw = @import("../wrappers/glfw.zig");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
 

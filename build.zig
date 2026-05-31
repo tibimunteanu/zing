@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    try addObjcSupport(b, exe_mod, target, optimize);
     const exe = b.addExecutable(.{
         .name = "zing",
         .root_module = exe_mod,
@@ -23,7 +24,7 @@ pub fn build(b: *std.Build) !void {
     });
     exe.root_module.link_libc = true;
 
-    addGlfw(b, exe, target.result.os.tag, vulkan_sdk);
+    addPlatformFrameworks(b, exe, target.result.os.tag);
 
     const copy_assets = b.addSystemCommand(switch (builtin.os.tag) {
         .windows => &.{ "xcopy", "assets", "zig-out\\bin\\assets\\", "/E/D/Y" },
@@ -70,8 +71,84 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 
+    const api_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/api_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    try addZingTestImports(b, api_tests_mod, target, optimize);
+    const api_tests = b.addTest(.{
+        .root_module = api_tests_mod,
+    });
+    addPlatformFrameworks(b, api_tests, target.result.os.tag);
+    const run_api_tests = b.addRunArtifact(api_tests);
+
+    const test_api_step = b.step("test_api", "Run engine API tests");
+    test_api_step.dependOn(&run_api_tests.step);
+
+    const live_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/live_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    try addZingTestImports(b, live_tests_mod, target, optimize);
+    const live_tests = b.addTest(.{
+        .root_module = live_tests_mod,
+    });
+    addPlatformFrameworks(b, live_tests, target.result.os.tag);
+    const run_live_tests = b.addRunArtifact(live_tests);
+
+    const test_live_step = b.step("test_live", "Run local live engine tests that open and drive native windows");
+    test_live_step.dependOn(&run_live_tests.step);
+
     const test_glfw_step = b.step("test_glfw", "Run GLFW C tests");
     addGlfwTests(b, test_glfw_step, target, optimize, vulkan_sdk);
+}
+
+fn addZingTestImports(
+    b: *std.Build,
+    module: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) !void {
+    const zing_mod = b.createModule(.{
+        .root_source_file = b.path("src/zing.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    try addObjcSupport(b, zing_mod, target, optimize);
+    module.addImport("zing", zing_mod);
+}
+
+fn addObjcSupport(
+    b: *std.Build,
+    module: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) !void {
+    switch (target.result.os.tag) {
+        .macos => {
+            const objc_c = try translateObjcCModule(b, target, optimize);
+            module.addImport("objc-c", objc_c);
+            module.linkSystemLibrary("objc", .{});
+            module.linkFramework("Foundation", .{});
+            try addAppleSDK(b, module);
+        },
+        else => {},
+    }
+}
+
+fn addPlatformFrameworks(b: *std.Build, compile: *std.Build.Step.Compile, os_tag: std.Target.Os.Tag) void {
+    _ = b;
+    switch (os_tag) {
+        .macos => {
+            compile.root_module.link_libc = true;
+            compile.root_module.linkFramework("Cocoa", .{});
+            compile.root_module.linkFramework("ApplicationServices", .{});
+            compile.root_module.linkFramework("QuartzCore", .{});
+        },
+        else => {},
+    }
 }
 
 fn addGlfw(b: *std.Build, exe: *std.Build.Step.Compile, os_tag: std.Target.Os.Tag, vulkan_sdk: []const u8) void {
@@ -170,6 +247,100 @@ fn addGlfwTests(
         previous_run = &run_test.step;
         test_step.dependOn(&run_test.step);
     }
+}
+
+fn translateObjcCModule(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) !*std.Build.Module {
+    const sdk_path = try appleSDKPath(b, target);
+    const include_path = b.pathJoin(&.{ sdk_path, "/usr/include" });
+    const runtime_path = b.pathJoin(&.{ include_path, "/objc/runtime.h" });
+    const runtime_h = try std.Io.Dir.cwd().readFileAlloc(
+        b.graph.io,
+        runtime_path,
+        b.allocator,
+        .limited(1024 * 1024),
+    );
+
+    const needle =
+        \\objc_enumerateClasses(const void * _Nullable image,
+        \\                      const char * _Nullable namePrefix,
+        \\                      Protocol * _Nullable conformingTo,
+        \\                      Class _Nullable subclassing,
+        \\                      void (^ _Nonnull block)(Class _Nonnull aClass, BOOL * _Nonnull stop)
+        \\                      OBJC_NOESCAPE)
+    ;
+    if (std.mem.indexOf(u8, runtime_h, needle) == null) {
+        return error.ObjCRuntimeHeaderChanged;
+    }
+
+    const patched_runtime_h = try std.mem.replaceOwned(u8, b.allocator, runtime_h, needle,
+        \\objc_enumerateClasses(const void * _Nullable image,
+        \\                      const char * _Nullable namePrefix,
+        \\                      Protocol * _Nullable conformingTo,
+        \\                      Class _Nullable subclassing,
+        \\                      void * _Nonnull block)
+    );
+
+    const write_files = b.addWriteFiles();
+    _ = write_files.add("objc/runtime.h", patched_runtime_h);
+    const import_h = write_files.add("objc-import.h",
+        \\#include <objc/runtime.h>
+        \\#include <objc/message.h>
+        \\
+    );
+
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = import_h,
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_c.addIncludePath(write_files.getDirectory());
+    translate_c.addSystemIncludePath(.{ .cwd_relative = include_path });
+    return translate_c.createModule();
+}
+
+fn addAppleSDK(b: *std.Build, module: *std.Build.Module) !void {
+    const path = try appleSDKPath(b, module.resolved_target.?);
+    module.addSystemFrameworkPath(.{ .cwd_relative = b.pathJoin(&.{ path, "/System/Library/Frameworks" }) });
+    module.addSystemIncludePath(.{ .cwd_relative = b.pathJoin(&.{ path, "/usr/include" }) });
+    module.addLibraryPath(.{ .cwd_relative = b.pathJoin(&.{ path, "/usr/lib" }) });
+}
+
+fn appleSDKPath(b: *std.Build, target: std.Build.ResolvedTarget) ![]const u8 {
+    const Cache = struct {
+        const Key = struct {
+            arch: std.Target.Cpu.Arch,
+            os: std.Target.Os.Tag,
+            abi: std.Target.Abi,
+        };
+
+        var map: std.AutoHashMapUnmanaged(Key, ?[]const u8) = .{};
+    };
+
+    const gop = try Cache.map.getOrPut(b.allocator, .{
+        .arch = target.result.cpu.arch,
+        .os = target.result.os.tag,
+        .abi = target.result.abi,
+    });
+
+    if (!gop.found_existing) {
+        gop.value_ptr.* = std.zig.system.darwin.getSdk(
+            b.allocator,
+            b.graph.io,
+            &target.result,
+        );
+    }
+
+    return gop.value_ptr.* orelse switch (target.result.os.tag) {
+        .macos => error.XcodeMacOSSDKNotFound,
+        .ios => error.XcodeiOSSDKNotFound,
+        .tvos => error.XcodeTVOSSDKNotFound,
+        .watchos => error.XcodeWatchOSSDKNotFound,
+        else => error.XcodeAppleSDKNotFound,
+    };
 }
 
 const glfw_tests = [_][]const u8{

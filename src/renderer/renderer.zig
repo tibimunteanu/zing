@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const glfw = @import("../wrappers/glfw.zig");
+const VulkanWSI = @import("../platform/vulkan_wsi.zig");
+const Window = @import("../platform/window.zig");
 const math = @import("../math.zig");
 const vk = @import("vk.zig");
 const config = @import("../config.zig");
@@ -203,19 +204,19 @@ pub var fov: f32 = undefined;
 pub var near_clip: f32 = undefined;
 pub var far_clip: f32 = undefined;
 
-pub var desired_extent: glfw.Window.Size = undefined;
+pub var desired_extent: Window.Size = undefined;
 pub var desired_extent_generation: u32 = undefined;
 pub var frame_index: u64 = undefined;
 pub var delta_time: f32 = undefined;
 
-pub fn init(ally: Allocator, window: glfw.Window) !void {
+pub fn init(ally: Allocator, window: Window) !void {
     allocator = ally;
 
-    desired_extent = window.getFramebufferSize();
+    desired_extent = try window.getFramebufferSize();
     desired_extent_generation = 0;
 
     // load base api
-    const base_loader: vk.PfnGetInstanceProcAddr = @ptrCast(&glfw.getInstanceProcAddress);
+    const base_loader: vk.PfnGetInstanceProcAddr = @ptrCast(&VulkanWSI.getInstanceProcAddress);
     base_api = try BaseAPI.load(base_loader);
 
     // create instance and load instance api
@@ -324,8 +325,8 @@ pub fn init(ally: Allocator, window: glfw.Window) !void {
     near_clip = 0.1;
     far_clip = 1000.0;
 
-    window.setFramebufferSizeCallback(framebufferSizeCallback);
-    setProjection(window.getFramebufferSize());
+    try window.setFramebufferSizeCallback(framebufferSizeCallback);
+    setProjection(try window.getFramebufferSize());
 
     frame_index = 0;
     delta_time = config.target_frame_seconds;
@@ -368,7 +369,7 @@ pub fn allocate(requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFla
     }, null);
 }
 
-pub fn onResized(new_desired_extent: glfw.Window.Size) void {
+pub fn onResized(new_desired_extent: Window.Size) void {
     setProjection(new_desired_extent);
 
     desired_extent = new_desired_extent;
@@ -538,7 +539,7 @@ pub fn drawGeometry(data: GeometryRenderData, view: math.Mat, projection: math.M
 
 // utils
 fn createInstance(app_name: [*:0]const u8) !vk.Instance {
-    const required_instance_extensions = glfw.getRequiredInstanceExtensions() orelse return error.GetRequiredInstanceExtensionsFailed;
+    const required_instance_extensions = VulkanWSI.getRequiredInstanceExtensions() catch return error.GetRequiredInstanceExtensionsFailed;
 
     // list of extensions to be requested when creating the instance
     // includes all required extensions and optional extensions that the driver supports
@@ -562,7 +563,7 @@ fn createInstance(app_name: [*:0]const u8) !vk.Instance {
         for (existing_instance_extensions) |existing_inst_ext| {
             // this covers both 0 terminated strings and string slices
             const len = std.mem.indexOfScalar(u8, &existing_inst_ext.extension_name, 0) //
-            orelse existing_inst_ext.extension_name.len;
+                orelse existing_inst_ext.extension_name.len;
 
             if (std.mem.eql(u8, existing_inst_ext.extension_name[0..len], std.mem.span(optional_inst_ext))) {
                 try instance_extensions.append(allocator, optional_inst_ext);
@@ -587,11 +588,9 @@ fn createInstance(app_name: [*:0]const u8) !vk.Instance {
     }, null);
 }
 
-fn createSurface(window: glfw.Window) !vk.SurfaceKHR {
+fn createSurface(window: Window) !vk.SurfaceKHR {
     var window_surface: vk.SurfaceKHR = undefined;
-    if (glfw.createWindowSurface(instance, window, null, &window_surface) != @intFromEnum(vk.Result.success)) {
-        return error.SurfaceCreationFailed;
-    }
+    VulkanWSI.createWindowSurface(instance, window, null, &window_surface) catch return error.SurfaceCreationFailed;
     return window_surface;
 }
 
@@ -788,7 +787,7 @@ fn reinitSwapchainFramebuffersAndCmdBuffers() !void {
     swapchain.extent_generation = desired_extent_generation;
 }
 
-fn setProjection(size: glfw.Window.Size) void {
+fn setProjection(size: Window.Size) void {
     const width: f32 = @floatFromInt(size.width);
     const height: f32 = @floatFromInt(size.height);
 
@@ -796,8 +795,8 @@ fn setProjection(size: glfw.Window.Size) void {
     ui_projection = math.orthographicOffCenterLh(0, width, height, 0, -1.0, 1.0);
 }
 
-fn framebufferSizeCallback(_: glfw.Window, width: u32, height: u32) void {
-    onResized(glfw.Window.Size{ .width = width, .height = height });
+fn framebufferSizeCallback(_: Window, width: u32, height: u32) void {
+    onResized(Window.Size{ .width = width, .height = height });
 }
 
 const PhysicalDevice = struct {

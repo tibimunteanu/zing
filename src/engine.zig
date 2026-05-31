@@ -1,8 +1,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const math = @import("math.zig");
-const glfw = @import("wrappers/glfw.zig");
 const utils = @import("utils.zig");
+const Errors = @import("platform/errors.zig");
+const Events = @import("platform/events.zig");
+const Input = @import("platform/input.zig");
+const Time = @import("platform/time.zig");
+const VulkanWSI = @import("platform/vulkan_wsi.zig");
+const Window = @import("platform/window.zig");
 
 const Renderer = @import("renderer/renderer.zig");
 const Image = @import("renderer/image.zig");
@@ -20,7 +25,7 @@ const Allocator = std.mem.Allocator;
 
 const Engine = @This();
 
-var window: glfw.Window = undefined;
+var window: Window = undefined;
 var last_time: f64 = 0;
 
 var camera_view: math.Mat = undefined;
@@ -28,24 +33,27 @@ var camera_view_dirty: bool = true;
 var camera_position: math.Vec = math.Vec{ 0.0, 0.0, -30.0, 0.0 };
 var camera_euler: math.Vec = math.splat(math.Vec, 0.0); // pitch, yaw, roll
 
-var prevPressN: glfw.Action = .release;
+var prevPressN: Input.Action = .release;
 
 pub fn init(allocator: Allocator) !void {
-    glfw.setErrorCallback(errorCallback);
+    _ = Errors.setCallback(errorCallback);
 
-    if (!glfw.init(.{})) {
-        std.log.err("Failed to initialize GLFW: {?s}", .{glfw.getErrorString()});
-        return error.GLFWInitFailed;
-    }
-    errdefer glfw.terminate();
+    try Time.initSystem();
+    errdefer Time.deinitSystem();
 
-    window = glfw.Window.create(960, 540, "Zing", null, null, .{
+    try VulkanWSI.initSystem(null);
+    errdefer VulkanWSI.deinitSystem();
+
+    try Window.initSystem();
+    errdefer Window.deinitSystem();
+
+    window = Window.create(960, 540, "Zing", null, null, .{
         .client_api = .no_api,
-    }) orelse return blk: {
-        std.log.err("Failed to create window: {?s}", .{glfw.getErrorString()});
-        break :blk error.CreateWindowFailed;
+    }) catch |err| {
+        std.log.err("Failed to create window: {?s}", .{Errors.getString()});
+        return err;
     };
-    errdefer window.destroy();
+    errdefer window.destroy() catch {};
 
     try Renderer.init(allocator, window);
     errdefer Renderer.deinit();
@@ -76,17 +84,19 @@ pub fn deinit() void {
     Image.deinitSystem();
     Renderer.deinit();
 
-    window.destroy();
+    window.destroy() catch {};
 
-    glfw.terminate();
+    Window.deinitSystem();
+    VulkanWSI.deinitSystem();
+    Time.deinitSystem();
 }
 
 pub fn run() !void {
-    last_time = glfw.getTime();
+    last_time = try Time.get();
 
-    while (!window.shouldClose()) {
-        if (window.getAttrib(.iconified) == 0) {
-            const frame_start_time = glfw.getTime();
+    while (!try window.shouldClose()) {
+        if (!try window.getAttrib(.iconified)) {
+            const frame_start_time = try Time.get();
             const precise_delta_time = frame_start_time - last_time;
             const delta_time: f32 = @floatCast(precise_delta_time);
 
@@ -110,14 +120,14 @@ pub fn run() !void {
 
             try Renderer.drawFrame(packet);
 
-            // const frame_end_time = glfw.getTime();
+            // const frame_end_time = try Time.get();
             // const frame_elapsed_time = frame_end_time - frame_start_time;
             // const fps = 1.0 / frame_elapsed_time;
             // std.log.info("{d:.0}", .{fps});
 
             last_time = frame_start_time;
         }
-        glfw.pollEvents();
+        try Events.poll();
     }
 
     Renderer.waitIdle();
@@ -125,34 +135,34 @@ pub fn run() !void {
 
 // utils
 fn updateCamera(delta_time: f32) !void {
-    if (window.getKey(.d) == .press) {
+    if (try window.getKey(.d) == .press) {
         cameraYaw(1.0 * delta_time);
     }
-    if (window.getKey(.a) == .press) {
+    if (try window.getKey(.a) == .press) {
         cameraYaw(-1.0 * delta_time);
     }
-    if (window.getKey(.j) == .press) {
+    if (try window.getKey(.j) == .press) {
         cameraPitch(1.0 * delta_time);
     }
-    if (window.getKey(.k) == .press) {
+    if (try window.getKey(.k) == .press) {
         cameraPitch(-1.0 * delta_time);
     }
 
     var velocity: math.Vec = math.splat(math.Vec, 0.0);
 
-    if (window.getKey(.s) == .press) {
+    if (try window.getKey(.s) == .press) {
         const forward = utils.getForwardVec(camera_view);
         velocity += forward;
     }
-    if (window.getKey(.w) == .press) {
+    if (try window.getKey(.w) == .press) {
         const backward = utils.getBackwardVec(camera_view);
         velocity += backward;
     }
-    if (window.getKey(.h) == .press) {
+    if (try window.getKey(.h) == .press) {
         const left = utils.getLeftVec(camera_view);
         velocity += left;
     }
-    if (window.getKey(.l) == .press) {
+    if (try window.getKey(.l) == .press) {
         const right = utils.getRightVec(camera_view);
         velocity += right;
     }
@@ -168,7 +178,7 @@ fn updateCamera(delta_time: f32) !void {
     recomputeCameraView();
     Renderer.world_view = camera_view;
 
-    const pressN = window.getKey(.n);
+    const pressN = try window.getKey(.n);
     if (pressN == .press and prevPressN == .release) {
         choice += 1;
         choice %= names.len;
@@ -206,8 +216,8 @@ fn cameraYaw(amount: f32) void {
     camera_view_dirty = true;
 }
 
-fn errorCallback(error_code: glfw.ErrorCode, description: [:0]const u8) void {
-    std.log.err("glfw: {}: {s}\n", .{ error_code, description });
+fn errorCallback(error_code: Errors.Code, description: [:0]const u8) void {
+    std.log.err("zing: {}: {s}", .{ error_code, description });
 }
 
 // TODO: temporary
