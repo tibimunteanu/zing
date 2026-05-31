@@ -668,9 +668,6 @@ GLFWbool _glfwConnectWin32(int platformID, _GLFWplatform* platform)
         .waitEvents = _glfwWaitEventsWin32,
         .waitEventsTimeout = _glfwWaitEventsTimeoutWin32,
         .postEmptyEvent = _glfwPostEmptyEventWin32,
-        .getEGLPlatform = _glfwGetEGLPlatformWin32,
-        .getEGLNativeDisplay = _glfwGetEGLNativeDisplayWin32,
-        .getEGLNativeWindow = _glfwGetEGLNativeWindowWin32,
         .getRequiredInstanceExtensions = _glfwGetRequiredInstanceExtensionsWin32,
         .getPhysicalDevicePresentationSupport = _glfwGetPhysicalDevicePresentationSupportWin32,
         .createWindowSurface = _glfwCreateWindowSurfaceWin32
@@ -720,12 +717,7 @@ void _glfwTerminateWin32(void)
     _glfw_free(_glfw.win32.clipboardString);
     _glfw_free(_glfw.win32.rawInput);
 
-    _glfwTerminateWGL();
-    _glfwTerminateEGL();
-    _glfwTerminateOSMesa();
-
     freeLibraries();
 }
 
 #endif // _GLFW_WIN32
-

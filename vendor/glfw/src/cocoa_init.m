@@ -409,12 +409,6 @@ static GLFWbool initializeTIS(void)
 
 - (void)applicationDidChangeScreenParameters:(NSNotification *) notification
 {
-    for (_GLFWwindow* window = _glfw.windowListHead;  window;  window = window->next)
-    {
-        if (window->context.client != GLFW_NO_API)
-            [window->context.nsgl.object update];
-    }
-
     _glfwPollMonitorsCocoa();
 }
 
@@ -559,9 +553,6 @@ GLFWbool _glfwConnectCocoa(int platformID, _GLFWplatform* platform)
         .waitEvents = _glfwWaitEventsCocoa,
         .waitEventsTimeout = _glfwWaitEventsTimeoutCocoa,
         .postEmptyEvent = _glfwPostEmptyEventCocoa,
-        .getEGLPlatform = _glfwGetEGLPlatformCocoa,
-        .getEGLNativeDisplay = _glfwGetEGLNativeDisplayCocoa,
-        .getEGLNativeWindow = _glfwGetEGLNativeWindowCocoa,
         .getRequiredInstanceExtensions = _glfwGetRequiredInstanceExtensionsCocoa,
         .getPhysicalDevicePresentationSupport = _glfwGetPhysicalDevicePresentationSupportCocoa,
         .createWindowSurface = _glfwCreateWindowSurfaceCocoa
@@ -684,12 +675,7 @@ void _glfwTerminateCocoa(void)
 
     _glfw_free(_glfw.ns.clipboardString);
 
-    _glfwTerminateNSGL();
-    _glfwTerminateEGL();
-    _glfwTerminateOSMesa();
-
     } // autoreleasepool
 }
 
 #endif // _GLFW_COCOA
-

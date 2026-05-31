@@ -445,8 +445,8 @@ static void acquireMonitor(_GLFWwindow* window)
     {
         SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED);
 
-        // HACK: When mouse trails are enabled the cursor becomes invisible when
-        //       the OpenGL ICD switches to page flipping
+        // HACK: When mouse trails are enabled the cursor can become invisible
+        //       when switching to page flipping
         SystemParametersInfoW(SPI_GETMOUSETRAILS, 0, &_glfw.win32.mouseTrailSize, 0);
         SystemParametersInfoW(SPI_SETMOUSETRAILS, 0, 0, 0);
     }
@@ -1493,39 +1493,10 @@ static int createNativeWindow(_GLFWwindow* window,
 
 GLFWbool _glfwCreateWindowWin32(_GLFWwindow* window,
                                 const _GLFWwndconfig* wndconfig,
-                                const _GLFWctxconfig* ctxconfig,
                                 const _GLFWfbconfig* fbconfig)
 {
     if (!createNativeWindow(window, wndconfig, fbconfig))
         return GLFW_FALSE;
-
-    if (ctxconfig->client != GLFW_NO_API)
-    {
-        if (ctxconfig->source == GLFW_NATIVE_CONTEXT_API)
-        {
-            if (!_glfwInitWGL())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextWGL(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_EGL_CONTEXT_API)
-        {
-            if (!_glfwInitEGL())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextEGL(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_OSMESA_CONTEXT_API)
-        {
-            if (!_glfwInitOSMesa())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextOSMesa(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-
-        if (!_glfwRefreshContextAttribs(window, ctxconfig))
-            return GLFW_FALSE;
-    }
 
     if (wndconfig->mousePassthrough)
         _glfwSetWindowMousePassthroughWin32(window, GLFW_TRUE);
@@ -1557,9 +1528,6 @@ void _glfwDestroyWindowWin32(_GLFWwindow* window)
 {
     if (window->monitor)
         releaseMonitor(window);
-
-    if (window->context.destroy)
-        window->context.destroy(window);
 
     if (_glfw.win32.disabledCursorWindow == window)
         enableCursor(window);
@@ -2462,57 +2430,6 @@ const char* _glfwGetClipboardStringWin32(void)
     return _glfw.win32.clipboardString;
 }
 
-EGLenum _glfwGetEGLPlatformWin32(EGLint** attribs)
-{
-    if (_glfw.egl.ANGLE_platform_angle)
-    {
-        int type = 0;
-
-        if (_glfw.egl.ANGLE_platform_angle_opengl)
-        {
-            if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_OPENGL)
-                type = EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE;
-            else if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_OPENGLES)
-                type = EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE;
-        }
-
-        if (_glfw.egl.ANGLE_platform_angle_d3d)
-        {
-            if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_D3D9)
-                type = EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE;
-            else if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_D3D11)
-                type = EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE;
-        }
-
-        if (_glfw.egl.ANGLE_platform_angle_vulkan)
-        {
-            if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_VULKAN)
-                type = EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE;
-        }
-
-        if (type)
-        {
-            *attribs = _glfw_calloc(3, sizeof(EGLint));
-            (*attribs)[0] = EGL_PLATFORM_ANGLE_TYPE_ANGLE;
-            (*attribs)[1] = type;
-            (*attribs)[2] = EGL_NONE;
-            return EGL_PLATFORM_ANGLE_ANGLE;
-        }
-    }
-
-    return 0;
-}
-
-EGLNativeDisplayType _glfwGetEGLNativeDisplayWin32(void)
-{
-    return GetDC(_glfw.win32.helperWindowHandle);
-}
-
-EGLNativeWindowType _glfwGetEGLNativeWindowWin32(_GLFWwindow* window)
-{
-    return window->win32.handle;
-}
-
 void _glfwGetRequiredInstanceExtensionsWin32(char** extensions)
 {
     if (!_glfw.vk.KHR_surface || !_glfw.vk.KHR_win32_surface)
@@ -2590,4 +2507,3 @@ GLFWAPI HWND glfwGetWin32Window(GLFWwindow* handle)
 }
 
 #endif // _GLFW_WIN32
-

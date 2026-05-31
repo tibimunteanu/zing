@@ -132,7 +132,6 @@ static void terminate(void)
         _glfw_free(error);
     }
 
-    _glfwPlatformDestroyTls(&_glfw.contextSlot);
     _glfwPlatformDestroyTls(&_glfw.errorSlot);
     _glfwPlatformDestroyMutex(&_glfw.errorLock);
 
@@ -409,8 +408,7 @@ GLFWAPI int glfwInit(void)
     }
 
     if (!_glfwPlatformCreateMutex(&_glfw.errorLock) ||
-        !_glfwPlatformCreateTls(&_glfw.errorSlot) ||
-        !_glfwPlatformCreateTls(&_glfw.contextSlot))
+        !_glfwPlatformCreateTls(&_glfw.errorSlot))
     {
         terminate();
         return GLFW_FALSE;
@@ -525,4 +523,3 @@ GLFWAPI GLFWerrorfun glfwSetErrorCallback(GLFWerrorfun cbfun)
     _GLFW_SWAP(GLFWerrorfun, _glfwErrorCallback, cbfun);
     return cbfun;
 }
-

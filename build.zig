@@ -69,6 +69,9 @@ pub fn build(b: *std.Build) !void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    const test_glfw_step = b.step("test_glfw", "Run GLFW C tests");
+    addGlfwTests(b, test_glfw_step, target, optimize, vulkan_sdk);
 }
 
 fn addGlfw(b: *std.Build, exe: *std.Build.Step.Compile, os_tag: std.Target.Os.Tag, vulkan_sdk: []const u8) void {
@@ -131,16 +134,60 @@ fn addGlfw(b: *std.Build, exe: *std.Build.Step.Compile, os_tag: std.Target.Os.Ta
     }
 }
 
+fn addGlfwTests(
+    b: *std.Build,
+    test_step: *std.Build.Step,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    vulkan_sdk: []const u8,
+) void {
+    var previous_run: ?*std.Build.Step = null;
+
+    for (glfw_tests) |test_name| {
+        const test_mod = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        });
+        const test_exe = b.addExecutable(.{
+            .name = b.fmt("glfw-{s}-tests", .{test_name}),
+            .root_module = test_mod,
+        });
+
+        test_exe.root_module.link_libc = true;
+        test_exe.root_module.addIncludePath(b.path("vendor/glfw/include"));
+        test_exe.root_module.addIncludePath(b.path("vendor/glfw/tests"));
+        test_exe.root_module.addCSourceFile(.{
+            .file = b.path(b.fmt("vendor/glfw/tests/{s}.c", .{test_name})),
+            .flags = &.{ "-std=c99", "-fno-sanitize=undefined" },
+        });
+
+        addGlfw(b, test_exe, target.result.os.tag, vulkan_sdk);
+
+        const run_test = b.addRunArtifact(test_exe);
+        if (previous_run) |step|
+            run_test.step.dependOn(step);
+
+        previous_run = &run_test.step;
+        test_step.dependOn(&run_test.step);
+    }
+}
+
+const glfw_tests = [_][]const u8{
+    "window",
+    "monitor",
+    "time",
+    "joystick",
+    "cursor",
+    "thread",
+};
+
 const glfw_common_sources = [_][]const u8{
-    "vendor/glfw/src/context.c",
     "vendor/glfw/src/init.c",
     "vendor/glfw/src/input.c",
     "vendor/glfw/src/monitor.c",
     "vendor/glfw/src/platform.c",
     "vendor/glfw/src/vulkan.c",
     "vendor/glfw/src/window.c",
-    "vendor/glfw/src/egl_context.c",
-    "vendor/glfw/src/osmesa_context.c",
     "vendor/glfw/src/null_init.c",
     "vendor/glfw/src/null_monitor.c",
     "vendor/glfw/src/null_window.c",
@@ -155,7 +202,6 @@ const glfw_macos_sources = [_][]const u8{
     "vendor/glfw/src/cocoa_joystick.m",
     "vendor/glfw/src/cocoa_monitor.m",
     "vendor/glfw/src/cocoa_window.m",
-    "vendor/glfw/src/nsgl_context.m",
 };
 
 const glfw_windows_sources = [_][]const u8{
@@ -166,7 +212,6 @@ const glfw_windows_sources = [_][]const u8{
     "vendor/glfw/src/win32_thread.c",
     "vendor/glfw/src/win32_time.c",
     "vendor/glfw/src/win32_window.c",
-    "vendor/glfw/src/wgl_context.c",
 };
 
 const glfw_linux_x11_sources = [_][]const u8{
@@ -179,7 +224,6 @@ const glfw_linux_x11_sources = [_][]const u8{
     "vendor/glfw/src/x11_monitor.c",
     "vendor/glfw/src/x11_window.c",
     "vendor/glfw/src/xkb_unicode.c",
-    "vendor/glfw/src/glx_context.c",
 };
 
 fn compileShaders(b: *std.Build, copy_assets: *std.Build.Step, comptime shaders: []const []const u8) void {

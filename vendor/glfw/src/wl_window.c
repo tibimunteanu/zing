@@ -2125,43 +2125,10 @@ void _glfwAddDataDeviceListenerWayland(struct wl_data_device* device)
 
 GLFWbool _glfwCreateWindowWayland(_GLFWwindow* window,
                                   const _GLFWwndconfig* wndconfig,
-                                  const _GLFWctxconfig* ctxconfig,
                                   const _GLFWfbconfig* fbconfig)
 {
     if (!createNativeSurface(window, wndconfig, fbconfig))
         return GLFW_FALSE;
-
-    if (ctxconfig->client != GLFW_NO_API)
-    {
-        if (ctxconfig->source == GLFW_EGL_CONTEXT_API ||
-            ctxconfig->source == GLFW_NATIVE_CONTEXT_API)
-        {
-            window->wl.egl.window = wl_egl_window_create(window->wl.surface,
-                                                         window->wl.fbWidth,
-                                                         window->wl.fbHeight);
-            if (!window->wl.egl.window)
-            {
-                _glfwInputError(GLFW_PLATFORM_ERROR,
-                                "Wayland: Failed to create EGL window");
-                return GLFW_FALSE;
-            }
-
-            if (!_glfwInitEGL())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextEGL(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_OSMESA_CONTEXT_API)
-        {
-            if (!_glfwInitOSMesa())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextOSMesa(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-
-        if (!_glfwRefreshContextAttribs(window, ctxconfig))
-            return GLFW_FALSE;
-    }
 
     if (wndconfig->mousePassthrough)
         _glfwSetWindowMousePassthroughWayland(window, GLFW_TRUE);
@@ -2197,9 +2164,6 @@ void _glfwDestroyWindowWayland(_GLFWwindow* window)
 
     if (window->wl.confinedPointer)
         zwp_confined_pointer_v1_destroy(window->wl.confinedPointer);
-
-    if (window->context.destroy)
-        window->context.destroy(window);
 
     destroyShellObjects(window);
 
@@ -3189,24 +3153,6 @@ const char* _glfwGetClipboardStringWayland(void)
     return _glfw.wl.clipboardString;
 }
 
-EGLenum _glfwGetEGLPlatformWayland(EGLint** attribs)
-{
-    if (_glfw.egl.EXT_platform_base && _glfw.egl.EXT_platform_wayland)
-        return EGL_PLATFORM_WAYLAND_EXT;
-    else
-        return 0;
-}
-
-EGLNativeDisplayType _glfwGetEGLNativeDisplayWayland(void)
-{
-    return _glfw.wl.display;
-}
-
-EGLNativeWindowType _glfwGetEGLNativeWindowWayland(_GLFWwindow* window)
-{
-    return window->wl.egl.window;
-}
-
 void _glfwGetRequiredInstanceExtensionsWayland(char** extensions)
 {
     if (!_glfw.vk.KHR_surface || !_glfw.vk.KHR_wayland_surface)
@@ -3305,4 +3251,3 @@ GLFWAPI struct wl_surface* glfwGetWaylandWindow(GLFWwindow* handle)
 }
 
 #endif // _GLFW_WAYLAND
-

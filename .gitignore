@@ -10,3 +10,4 @@ zig-*/
 scratchpad.*
 *.todo
 .DS_Store
+AGENTS.md

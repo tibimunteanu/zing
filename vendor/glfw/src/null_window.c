@@ -112,33 +112,10 @@ static int createNativeWindow(_GLFWwindow* window,
 
 GLFWbool _glfwCreateWindowNull(_GLFWwindow* window,
                                const _GLFWwndconfig* wndconfig,
-                               const _GLFWctxconfig* ctxconfig,
                                const _GLFWfbconfig* fbconfig)
 {
     if (!createNativeWindow(window, wndconfig, fbconfig))
         return GLFW_FALSE;
-
-    if (ctxconfig->client != GLFW_NO_API)
-    {
-        if (ctxconfig->source == GLFW_NATIVE_CONTEXT_API ||
-            ctxconfig->source == GLFW_OSMESA_CONTEXT_API)
-        {
-            if (!_glfwInitOSMesa())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextOSMesa(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_EGL_CONTEXT_API)
-        {
-            if (!_glfwInitEGL())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextEGL(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-
-        if (!_glfwRefreshContextAttribs(window, ctxconfig))
-            return GLFW_FALSE;
-    }
 
     if (wndconfig->mousePassthrough)
         _glfwSetWindowMousePassthroughNull(window, GLFW_TRUE);
@@ -172,9 +149,6 @@ void _glfwDestroyWindowNull(_GLFWwindow* window)
 
     if (_glfw.null.focusedWindow == window)
         _glfw.null.focusedWindow = NULL;
-
-    if (window->context.destroy)
-        window->context.destroy(window);
 }
 
 void _glfwSetWindowTitleNull(_GLFWwindow* window, const char* title)
@@ -550,21 +524,6 @@ const char* _glfwGetClipboardStringNull(void)
     return _glfw.null.clipboardString;
 }
 
-EGLenum _glfwGetEGLPlatformNull(EGLint** attribs)
-{
-    return 0;
-}
-
-EGLNativeDisplayType _glfwGetEGLNativeDisplayNull(void)
-{
-    return 0;
-}
-
-EGLNativeWindowType _glfwGetEGLNativeWindowNull(_GLFWwindow* window)
-{
-    return 0;
-}
-
 const char* _glfwGetScancodeNameNull(int scancode)
 {
     if (scancode < GLFW_NULL_SC_FIRST || scancode > GLFW_NULL_SC_LAST)
@@ -716,4 +675,3 @@ VkResult _glfwCreateWindowSurfaceNull(VkInstance instance,
     // This seems like the most appropriate error to return here
     return VK_ERROR_EXTENSION_NOT_PRESENT;
 }
-

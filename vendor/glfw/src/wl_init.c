@@ -503,9 +503,6 @@ GLFWbool _glfwConnectWayland(int platformID, _GLFWplatform* platform)
         .waitEvents = _glfwWaitEventsWayland,
         .waitEventsTimeout = _glfwWaitEventsTimeoutWayland,
         .postEmptyEvent = _glfwPostEmptyEventWayland,
-        .getEGLPlatform = _glfwGetEGLPlatformWayland,
-        .getEGLNativeDisplay = _glfwGetEGLNativeDisplayWayland,
-        .getEGLNativeWindow = _glfwGetEGLNativeWindowWayland,
         .getRequiredInstanceExtensions = _glfwGetRequiredInstanceExtensionsWayland,
         .getPhysicalDevicePresentationSupport = _glfwGetPhysicalDevicePresentationSupportWayland,
         .createWindowSurface = _glfwCreateWindowSurfaceWayland
@@ -889,9 +886,6 @@ int _glfwInitWayland(void)
 
 void _glfwTerminateWayland(void)
 {
-    _glfwTerminateEGL();
-    _glfwTerminateOSMesa();
-
     if (_glfw.wl.libdecor.context)
     {
         // Allow libdecor to finish receiving all its requested globals
@@ -1000,4 +994,3 @@ void _glfwTerminateWayland(void)
 }
 
 #endif // _GLFW_WAYLAND
-

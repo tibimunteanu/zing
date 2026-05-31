@@ -1240,9 +1240,6 @@ GLFWbool _glfwConnectX11(int platformID, _GLFWplatform* platform)
         .waitEvents = _glfwWaitEventsX11,
         .waitEventsTimeout = _glfwWaitEventsTimeoutX11,
         .postEmptyEvent = _glfwPostEmptyEventX11,
-        .getEGLPlatform = _glfwGetEGLPlatformX11,
-        .getEGLNativeDisplay = _glfwGetEGLNativeDisplayX11,
-        .getEGLNativeWindow = _glfwGetEGLNativeWindowX11,
         .getRequiredInstanceExtensions = _glfwGetRequiredInstanceExtensionsX11,
         .getPhysicalDevicePresentationSupport = _glfwGetPhysicalDevicePresentationSupportX11,
         .createWindowSurface = _glfwCreateWindowSurfaceX11
@@ -1633,12 +1630,6 @@ void _glfwTerminateX11(void)
         _glfw.x11.xi.handle = NULL;
     }
 
-    _glfwTerminateOSMesa();
-    // NOTE: These need to be unloaded after XCloseDisplay, as they register
-    //       cleanup callbacks that get called by that function
-    _glfwTerminateEGL();
-    _glfwTerminateGLX();
-
     if (_glfw.x11.xlib.handle)
     {
         _glfwPlatformFreeModule(_glfw.x11.xlib.handle);
@@ -1653,4 +1644,3 @@ void _glfwTerminateX11(void)
 }
 
 #endif // _GLFW_X11
-

@@ -104,11 +104,9 @@ pub const Window = struct {
     };
 
     pub const Hints = struct {
-        client_api: ClientAPI = .opengl_api,
+        client_api: ClientAPI = .no_api,
 
         pub const ClientAPI = enum(c_int) {
-            opengl_api = c.GLFW_OPENGL_API,
-            opengl_es_api = c.GLFW_OPENGL_ES_API,
             no_api = c.GLFW_NO_API,
         };
     };

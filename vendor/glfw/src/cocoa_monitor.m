@@ -218,72 +218,12 @@ static void endFadeReservation(CGDisplayFadeReservationToken token)
     }
 }
 
-// Returns the display refresh rate queried from the I/O registry
+// Returns the fallback display refresh rate
 //
 static double getFallbackRefreshRate(CGDirectDisplayID displayID)
 {
-    double refreshRate = 60.0;
-
-    io_iterator_t it;
-    io_service_t service;
-
-    if (IOServiceGetMatchingServices(MACH_PORT_NULL,
-                                     IOServiceMatching("IOFramebuffer"),
-                                     &it) != 0)
-    {
-        return refreshRate;
-    }
-
-    while ((service = IOIteratorNext(it)) != 0)
-    {
-        const CFNumberRef indexRef =
-            IORegistryEntryCreateCFProperty(service,
-                                            CFSTR("IOFramebufferOpenGLIndex"),
-                                            kCFAllocatorDefault,
-                                            kNilOptions);
-        if (!indexRef)
-            continue;
-
-        uint32_t index = 0;
-        CFNumberGetValue(indexRef, kCFNumberIntType, &index);
-        CFRelease(indexRef);
-
-        if (CGOpenGLDisplayMaskToDisplayID(1 << index) != displayID)
-            continue;
-
-        const CFNumberRef clockRef =
-            IORegistryEntryCreateCFProperty(service,
-                                            CFSTR("IOFBCurrentPixelClock"),
-                                            kCFAllocatorDefault,
-                                            kNilOptions);
-        const CFNumberRef countRef =
-            IORegistryEntryCreateCFProperty(service,
-                                            CFSTR("IOFBCurrentPixelCount"),
-                                            kCFAllocatorDefault,
-                                            kNilOptions);
-
-        uint32_t clock = 0, count = 0;
-
-        if (clockRef)
-        {
-            CFNumberGetValue(clockRef, kCFNumberIntType, &clock);
-            CFRelease(clockRef);
-        }
-
-        if (countRef)
-        {
-            CFNumberGetValue(countRef, kCFNumberIntType, &count);
-            CFRelease(countRef);
-        }
-
-        if (clock > 0 && count > 0)
-            refreshRate = clock / (double) count;
-
-        break;
-    }
-
-    IOObjectRelease(it);
-    return refreshRate;
+    (void) displayID;
+    return 60.0;
 }
 
 
@@ -640,4 +580,3 @@ GLFWAPI CGDirectDisplayID glfwGetCocoaMonitor(GLFWmonitor* handle)
 }
 
 #endif // _GLFW_COCOA
-

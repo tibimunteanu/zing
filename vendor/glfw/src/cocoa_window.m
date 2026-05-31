@@ -228,9 +228,6 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (void)windowDidResize:(NSNotification *)notification
 {
-    if (window->context.source == GLFW_NATIVE_CONTEXT_API)
-        [window->context.nsgl.object update];
-
     if (_glfw.ns.disabledCursorWindow == window)
         _glfwCenterCursorInContentArea(window);
 
@@ -263,9 +260,6 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (void)windowDidMove:(NSNotification *)notification
 {
-    if (window->context.source == GLFW_NATIVE_CONTEXT_API)
-        [window->context.nsgl.object update];
-
     if (_glfw.ns.disabledCursorWindow == window)
         _glfwCenterCursorInContentArea(window);
 
@@ -385,9 +379,6 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (void)updateLayer
 {
-    if (window->context.source == GLFW_NATIVE_CONTEXT_API)
-        [window->context.nsgl.object update];
-
     _glfwInputWindowDamage(window);
 }
 
@@ -918,46 +909,12 @@ float _glfwTransformYCocoa(float y)
 
 GLFWbool _glfwCreateWindowCocoa(_GLFWwindow* window,
                                 const _GLFWwndconfig* wndconfig,
-                                const _GLFWctxconfig* ctxconfig,
                                 const _GLFWfbconfig* fbconfig)
 {
     @autoreleasepool {
 
     if (!createNativeWindow(window, wndconfig, fbconfig))
         return GLFW_FALSE;
-
-    if (ctxconfig->client != GLFW_NO_API)
-    {
-        if (ctxconfig->source == GLFW_NATIVE_CONTEXT_API)
-        {
-            if (!_glfwInitNSGL())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextNSGL(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_EGL_CONTEXT_API)
-        {
-            // EGL implementation on macOS use CALayer* EGLNativeWindowType so we
-            // need to get the layer for EGL window surface creation.
-            [window->ns.view setWantsLayer:YES];
-            window->ns.layer = [window->ns.view layer];
-
-            if (!_glfwInitEGL())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextEGL(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_OSMESA_CONTEXT_API)
-        {
-            if (!_glfwInitOSMesa())
-                return GLFW_FALSE;
-            if (!_glfwCreateContextOSMesa(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-
-        if (!_glfwRefreshContextAttribs(window, ctxconfig))
-            return GLFW_FALSE;
-    }
 
     if (wndconfig->mousePassthrough)
         _glfwSetWindowMousePassthroughCocoa(window, GLFW_TRUE);
@@ -997,9 +954,6 @@ void _glfwDestroyWindowCocoa(_GLFWwindow* window)
 
     if (window->monitor)
         releaseMonitor(window);
-
-    if (window->context.destroy)
-        window->context.destroy(window);
 
     [window->ns.object setDelegate:nil];
     [window->ns.delegate release];
@@ -1880,47 +1834,6 @@ const char* _glfwGetClipboardStringCocoa(void)
     } // autoreleasepool
 }
 
-EGLenum _glfwGetEGLPlatformCocoa(EGLint** attribs)
-{
-    if (_glfw.egl.ANGLE_platform_angle)
-    {
-        int type = 0;
-
-        if (_glfw.egl.ANGLE_platform_angle_opengl)
-        {
-            if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_OPENGL)
-                type = EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE;
-        }
-
-        if (_glfw.egl.ANGLE_platform_angle_metal)
-        {
-            if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_METAL)
-                type = EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE;
-        }
-
-        if (type)
-        {
-            *attribs = _glfw_calloc(3, sizeof(EGLint));
-            (*attribs)[0] = EGL_PLATFORM_ANGLE_TYPE_ANGLE;
-            (*attribs)[1] = type;
-            (*attribs)[2] = EGL_NONE;
-            return EGL_PLATFORM_ANGLE_ANGLE;
-        }
-    }
-
-    return 0;
-}
-
-EGLNativeDisplayType _glfwGetEGLNativeDisplayCocoa(void)
-{
-    return EGL_DEFAULT_DISPLAY;
-}
-
-EGLNativeWindowType _glfwGetEGLNativeWindowCocoa(_GLFWwindow* window)
-{
-    return window->ns.layer;
-}
-
 void _glfwGetRequiredInstanceExtensionsCocoa(char** extensions)
 {
     if (_glfw.vk.KHR_surface && _glfw.vk.EXT_metal_surface)
@@ -2069,4 +1982,3 @@ GLFWAPI id glfwGetCocoaView(GLFWwindow* handle)
 }
 
 #endif // _GLFW_COCOA
-

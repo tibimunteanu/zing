@@ -57,8 +57,7 @@
 #define _GLFW_XDND_VERSION 5
 
 // Wait for event data to arrive on the X11 display socket
-// This avoids blocking other threads via the per-display Xlib lock that also
-// covers GLX functions
+// This avoids blocking other threads via the per-display Xlib lock
 //
 static GLFWbool waitForX11Event(double* timeout)
 {
@@ -74,8 +73,7 @@ static GLFWbool waitForX11Event(double* timeout)
 }
 
 // Wait for event data to arrive on any event file descriptor
-// This avoids blocking other threads via the per-display Xlib lock that also
-// covers GLX functions
+// This avoids blocking other threads via the per-display Xlib lock
 //
 static GLFWbool waitForAnyEvent(double* timeout)
 {
@@ -1958,34 +1956,10 @@ void _glfwCreateInputContextX11(_GLFWwindow* window)
 
 GLFWbool _glfwCreateWindowX11(_GLFWwindow* window,
                               const _GLFWwndconfig* wndconfig,
-                              const _GLFWctxconfig* ctxconfig,
                               const _GLFWfbconfig* fbconfig)
 {
     Visual* visual = NULL;
     int depth;
-
-    if (ctxconfig->client != GLFW_NO_API)
-    {
-        if (ctxconfig->source == GLFW_NATIVE_CONTEXT_API)
-        {
-            if (!_glfwInitGLX())
-                return GLFW_FALSE;
-            if (!_glfwChooseVisualGLX(wndconfig, ctxconfig, fbconfig, &visual, &depth))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_EGL_CONTEXT_API)
-        {
-            if (!_glfwInitEGL())
-                return GLFW_FALSE;
-            if (!_glfwChooseVisualEGL(wndconfig, ctxconfig, fbconfig, &visual, &depth))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_OSMESA_CONTEXT_API)
-        {
-            if (!_glfwInitOSMesa())
-                return GLFW_FALSE;
-        }
-    }
 
     if (!visual)
     {
@@ -1995,28 +1969,6 @@ GLFWbool _glfwCreateWindowX11(_GLFWwindow* window,
 
     if (!createNativeWindow(window, wndconfig, visual, depth))
         return GLFW_FALSE;
-
-    if (ctxconfig->client != GLFW_NO_API)
-    {
-        if (ctxconfig->source == GLFW_NATIVE_CONTEXT_API)
-        {
-            if (!_glfwCreateContextGLX(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_EGL_CONTEXT_API)
-        {
-            if (!_glfwCreateContextEGL(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-        else if (ctxconfig->source == GLFW_OSMESA_CONTEXT_API)
-        {
-            if (!_glfwCreateContextOSMesa(window, ctxconfig, fbconfig))
-                return GLFW_FALSE;
-        }
-
-        if (!_glfwRefreshContextAttribs(window, ctxconfig))
-            return GLFW_FALSE;
-    }
 
     if (wndconfig->mousePassthrough)
         _glfwSetWindowMousePassthroughX11(window, GLFW_TRUE);
@@ -2057,9 +2009,6 @@ void _glfwDestroyWindowX11(_GLFWwindow* window)
         XDestroyIC(window->x11.ic);
         window->x11.ic = NULL;
     }
-
-    if (window->context.destroy)
-        window->context.destroy(window);
 
     if (window->x11.handle)
     {
@@ -3084,55 +3033,6 @@ const char* _glfwGetClipboardStringX11(void)
     return getSelectionString(_glfw.x11.CLIPBOARD);
 }
 
-EGLenum _glfwGetEGLPlatformX11(EGLint** attribs)
-{
-    if (_glfw.egl.ANGLE_platform_angle)
-    {
-        int type = 0;
-
-        if (_glfw.egl.ANGLE_platform_angle_opengl)
-        {
-            if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_OPENGL)
-                type = EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE;
-        }
-
-        if (_glfw.egl.ANGLE_platform_angle_vulkan)
-        {
-            if (_glfw.hints.init.angleType == GLFW_ANGLE_PLATFORM_TYPE_VULKAN)
-                type = EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE;
-        }
-
-        if (type)
-        {
-            *attribs = _glfw_calloc(5, sizeof(EGLint));
-            (*attribs)[0] = EGL_PLATFORM_ANGLE_TYPE_ANGLE;
-            (*attribs)[1] = type;
-            (*attribs)[2] = EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE;
-            (*attribs)[3] = EGL_PLATFORM_X11_EXT;
-            (*attribs)[4] = EGL_NONE;
-            return EGL_PLATFORM_ANGLE_ANGLE;
-        }
-    }
-
-    if (_glfw.egl.EXT_platform_base && _glfw.egl.EXT_platform_x11)
-        return EGL_PLATFORM_X11_EXT;
-
-    return 0;
-}
-
-EGLNativeDisplayType _glfwGetEGLNativeDisplayX11(void)
-{
-    return _glfw.x11.display;
-}
-
-EGLNativeWindowType _glfwGetEGLNativeWindowX11(_GLFWwindow* window)
-{
-    if (_glfw.egl.platform)
-        return &window->x11.handle;
-    else
-        return (EGLNativeWindowType) window->x11.handle;
-}
-
 void _glfwGetRequiredInstanceExtensionsX11(char** extensions)
 {
     if (!_glfw.vk.KHR_surface)
@@ -3354,4 +3254,3 @@ GLFWAPI const char* glfwGetX11SelectionString(void)
 }
 
 #endif // _GLFW_X11
-
