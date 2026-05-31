@@ -62,10 +62,6 @@ static _GLFWinitconfig _glfwInitHints =
     {
         .xcbVulkanSurface = GLFW_TRUE,
     },
-    .wl =
-    {
-        .libdecorMode = GLFW_WAYLAND_PREFER_LIBDECOR
-    },
 };
 
 // The allocation function used when no custom allocator is set
@@ -456,9 +452,6 @@ GLFWAPI void glfwInitHint(int hint, int value)
             return;
         case GLFW_X11_XCB_VULKAN_SURFACE:
             _glfwInitHints.x11.xcbVulkanSurface = value;
-            return;
-        case GLFW_WAYLAND_LIBDECOR:
-            _glfwInitHints.wl.libdecorMode = value;
             return;
     }
 

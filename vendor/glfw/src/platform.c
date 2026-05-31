@@ -50,9 +50,6 @@ static const struct
 #if defined(_GLFW_COCOA)
     { GLFW_PLATFORM_COCOA, _glfwConnectCocoa },
 #endif
-#if defined(_GLFW_WAYLAND)
-    { GLFW_PLATFORM_WAYLAND, _glfwConnectWayland },
-#endif
 #if defined(_GLFW_X11)
     { GLFW_PLATFORM_X11, _glfwConnectX11 },
 #endif
@@ -66,38 +63,17 @@ GLFWbool _glfwSelectPlatform(int desiredID, _GLFWplatform* platform)
     if (desiredID != GLFW_ANY_PLATFORM &&
         desiredID != GLFW_PLATFORM_WIN32 &&
         desiredID != GLFW_PLATFORM_COCOA &&
-        desiredID != GLFW_PLATFORM_WAYLAND &&
-        desiredID != GLFW_PLATFORM_X11 &&
-        desiredID != GLFW_PLATFORM_NULL)
+        desiredID != GLFW_PLATFORM_X11)
     {
         _glfwInputError(GLFW_INVALID_ENUM, "Invalid platform ID 0x%08X", desiredID);
         return GLFW_FALSE;
     }
 
-    // Only allow the Null platform if specifically requested
-    if (desiredID == GLFW_PLATFORM_NULL)
-        return _glfwConnectNull(desiredID, platform);
-    else if (count == 0)
+    if (count == 0)
     {
-        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE, "This binary only supports the Null platform");
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE, "This binary does not support any platform");
         return GLFW_FALSE;
     }
-
-#if defined(_GLFW_WAYLAND) && defined(_GLFW_X11)
-    if (desiredID == GLFW_ANY_PLATFORM)
-    {
-        const char* const session = getenv("XDG_SESSION_TYPE");
-        if (session)
-        {
-            // Only follow XDG_SESSION_TYPE if it is set correctly and the
-            // environment looks plausble; otherwise fall back to detection
-            if (strcmp(session, "wayland") == 0 && getenv("WAYLAND_DISPLAY"))
-                desiredID = GLFW_PLATFORM_WAYLAND;
-            else if (strcmp(session, "x11") == 0 && getenv("DISPLAY"))
-                desiredID = GLFW_PLATFORM_X11;
-        }
-    }
-#endif
 
     if (desiredID == GLFW_ANY_PLATFORM)
     {
@@ -145,16 +121,11 @@ GLFWAPI int glfwPlatformSupported(int platformID)
 
     if (platformID != GLFW_PLATFORM_WIN32 &&
         platformID != GLFW_PLATFORM_COCOA &&
-        platformID != GLFW_PLATFORM_WAYLAND &&
-        platformID != GLFW_PLATFORM_X11 &&
-        platformID != GLFW_PLATFORM_NULL)
+        platformID != GLFW_PLATFORM_X11)
     {
         _glfwInputError(GLFW_INVALID_ENUM, "Invalid platform ID 0x%08X", platformID);
         return GLFW_FALSE;
     }
-
-    if (platformID == GLFW_PLATFORM_NULL)
-        return GLFW_TRUE;
 
     for (i = 0;  i < count;  i++)
     {
@@ -176,13 +147,9 @@ GLFWAPI const char* glfwGetVersionString(void)
 #if defined(_GLFW_COCOA)
         " Cocoa"
 #endif
-#if defined(_GLFW_WAYLAND)
-        " Wayland"
-#endif
 #if defined(_GLFW_X11)
         " X11"
 #endif
-        " Null"
 #if defined(__MINGW64_VERSION_MAJOR)
         " MinGW-w64"
 #elif defined(__MINGW32__)

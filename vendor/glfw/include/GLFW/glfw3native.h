@@ -24,9 +24,6 @@ extern "C" {
   #include <X11/Xlib.h>
   #include <X11/extensions/Xrandr.h>
  #endif
- #if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
-  #include <wayland-client.h>
- #endif
 #endif
 
 #if defined(GLFW_EXPOSE_NATIVE_WIN32)
@@ -48,12 +45,6 @@ GLFWAPI RROutput glfwGetX11Monitor(GLFWmonitor* monitor);
 GLFWAPI Window glfwGetX11Window(GLFWwindow* window);
 GLFWAPI void glfwSetX11SelectionString(const char* string);
 GLFWAPI const char* glfwGetX11SelectionString(void);
-#endif
-
-#if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
-GLFWAPI struct wl_display* glfwGetWaylandDisplay(void);
-GLFWAPI struct wl_output* glfwGetWaylandMonitor(GLFWmonitor* monitor);
-GLFWAPI struct wl_surface* glfwGetWaylandWindow(GLFWwindow* window);
 #endif
 
 #ifdef __cplusplus

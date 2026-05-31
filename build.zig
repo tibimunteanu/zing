@@ -188,10 +188,6 @@ const glfw_common_sources = [_][]const u8{
     "vendor/glfw/src/platform.c",
     "vendor/glfw/src/vulkan.c",
     "vendor/glfw/src/window.c",
-    "vendor/glfw/src/null_init.c",
-    "vendor/glfw/src/null_monitor.c",
-    "vendor/glfw/src/null_window.c",
-    "vendor/glfw/src/null_joystick.c",
 };
 
 const glfw_macos_sources = [_][]const u8{

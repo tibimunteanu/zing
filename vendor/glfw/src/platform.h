@@ -37,8 +37,6 @@
  #error "You must not define these; define zero or more _GLFW_<platform> macros instead"
 #endif
 
-#include "null_platform.h"
-
 #if defined(_GLFW_WIN32)
  #include "win32_platform.h"
  #define GLFW_EXPOSE_NATIVE_WIN32
@@ -59,16 +57,6 @@
  #define GLFW_COCOA_LIBRARY_WINDOW_STATE
 #endif
 
-#if defined(_GLFW_WAYLAND)
- #include "wl_platform.h"
- #define GLFW_EXPOSE_NATIVE_WAYLAND
-#else
- #define GLFW_WAYLAND_WINDOW_STATE
- #define GLFW_WAYLAND_MONITOR_STATE
- #define GLFW_WAYLAND_CURSOR_STATE
- #define GLFW_WAYLAND_LIBRARY_WINDOW_STATE
-#endif
-
 #if defined(_GLFW_X11)
  #include "x11_platform.h"
  #define GLFW_EXPOSE_NATIVE_X11
@@ -78,8 +66,6 @@
  #define GLFW_X11_CURSOR_STATE
  #define GLFW_X11_LIBRARY_WINDOW_STATE
 #endif
-
-#include "null_joystick.h"
 
 #if defined(_GLFW_WIN32)
  #include "win32_joystick.h"
@@ -95,7 +81,7 @@
  #define GLFW_COCOA_LIBRARY_JOYSTICK_STATE
 #endif
 
-#if (defined(_GLFW_X11) || defined(_GLFW_WAYLAND)) && defined(__linux__)
+#if defined(_GLFW_X11) && defined(__linux__)
  #define GLFW_BUILD_LINUX_JOYSTICK
 #endif
 
@@ -109,23 +95,17 @@
 #define GLFW_PLATFORM_WINDOW_STATE \
         GLFW_WIN32_WINDOW_STATE \
         GLFW_COCOA_WINDOW_STATE \
-        GLFW_WAYLAND_WINDOW_STATE \
-        GLFW_X11_WINDOW_STATE \
-        GLFW_NULL_WINDOW_STATE \
+        GLFW_X11_WINDOW_STATE
 
 #define GLFW_PLATFORM_MONITOR_STATE \
         GLFW_WIN32_MONITOR_STATE \
         GLFW_COCOA_MONITOR_STATE \
-        GLFW_WAYLAND_MONITOR_STATE \
-        GLFW_X11_MONITOR_STATE \
-        GLFW_NULL_MONITOR_STATE \
+        GLFW_X11_MONITOR_STATE
 
 #define GLFW_PLATFORM_CURSOR_STATE \
         GLFW_WIN32_CURSOR_STATE \
         GLFW_COCOA_CURSOR_STATE \
-        GLFW_WAYLAND_CURSOR_STATE \
-        GLFW_X11_CURSOR_STATE \
-        GLFW_NULL_CURSOR_STATE \
+        GLFW_X11_CURSOR_STATE
 
 #define GLFW_PLATFORM_JOYSTICK_STATE \
         GLFW_WIN32_JOYSTICK_STATE \
@@ -135,9 +115,7 @@
 #define GLFW_PLATFORM_LIBRARY_WINDOW_STATE \
         GLFW_WIN32_LIBRARY_WINDOW_STATE \
         GLFW_COCOA_LIBRARY_WINDOW_STATE \
-        GLFW_WAYLAND_LIBRARY_WINDOW_STATE \
-        GLFW_X11_LIBRARY_WINDOW_STATE \
-        GLFW_NULL_LIBRARY_WINDOW_STATE \
+        GLFW_X11_LIBRARY_WINDOW_STATE
 
 #define GLFW_PLATFORM_LIBRARY_JOYSTICK_STATE \
         GLFW_WIN32_LIBRARY_JOYSTICK_STATE \
@@ -185,6 +163,6 @@
  #define GLFW_BUILD_POSIX_MODULE
 #endif
 
-#if defined(_GLFW_WAYLAND) || defined(_GLFW_X11)
+#if defined(_GLFW_X11)
  #define GLFW_BUILD_POSIX_POLL
 #endif

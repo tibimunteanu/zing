@@ -80,7 +80,6 @@ typedef enum VkStructureType
 {
     VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR = 1000004000,
     VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR = 1000005000,
-    VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR = 1000006000,
     VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000,
     VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK = 1000123000,
     VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT = 1000217000,
@@ -183,9 +182,6 @@ struct _GLFWinitconfig
     struct {
         GLFWbool  xcbVulkanSurface;
     } x11;
-    struct {
-        int       libdecorMode;
-    } wl;
 };
 
 // Window configuration
@@ -224,9 +220,6 @@ struct _GLFWwndconfig
         GLFWbool  keymenu;
         GLFWbool  showDefault;
     } win32;
-    struct {
-        char      appId[256];
-    } wl;
 };
 
 // Framebuffer configuration
@@ -534,7 +527,6 @@ struct _GLFWlibrary
         GLFWbool        EXT_metal_surface;
         GLFWbool        KHR_xlib_surface;
         GLFWbool        KHR_xcb_surface;
-        GLFWbool        KHR_wayland_surface;
     } vk;
 
     struct {
