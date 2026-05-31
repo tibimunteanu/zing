@@ -5,16 +5,19 @@ const vk = @import("../renderer/vk.zig");
 const Window = @import("window.zig");
 const Errors = @import("errors.zig");
 const platform = @import("platform.zig");
+const win32_types = if (builtin.os.tag == .windows) @import("win32/types.zig") else struct {};
 
 pub const GetInstanceProcAddress = *const fn (vk.Instance, [*:0]const u8) callconv(vk.vulkan_call_conv) vk.PfnVoidFunction;
+const VulkanLibrary = if (builtin.os.tag == .windows) WindowsVulkanLibrary else std.DynLib;
 
 var loader: ?GetInstanceProcAddress = null;
-var vulkan_library: ?std.DynLib = null;
+var vulkan_library: ?VulkanLibrary = null;
 var owns_loader = false;
 var available = false;
 var has_khr_surface = false;
 var has_ext_metal_surface = false;
 var has_mvk_macos_surface = false;
+var has_khr_win32_surface = false;
 const macos_extensions = [_][*:0]const u8{
     "VK_KHR_surface",
     "VK_EXT_metal_surface",
@@ -65,6 +68,7 @@ pub fn deinitSystem() void {
     has_khr_surface = false;
     has_ext_metal_surface = false;
     has_mvk_macos_surface = false;
+    has_khr_win32_surface = false;
     if (owns_loader) {
         if (vulkan_library) |*library| {
             library.close();
@@ -75,16 +79,31 @@ pub fn deinitSystem() void {
 }
 
 pub fn supported() !bool {
-    return platform.os_tag == .macos and available;
+    return switch (platform.os_tag) {
+        .macos => available,
+        .windows => available,
+        else => false,
+    };
 }
 
 pub fn getRequiredInstanceExtensions() ![]const [*:0]const u8 {
-    if (platform.os_tag != .macos) return error.PlatformUnavailable;
-    if (!has_khr_surface or (!has_ext_metal_surface and !has_mvk_macos_surface)) {
-        Errors.report(.api_unavailable, "Vulkan: window surface creation extensions not found", .{});
-        return error.ApiUnavailable;
+    switch (platform.os_tag) {
+        .macos => {
+            if (!has_khr_surface or (!has_ext_metal_surface and !has_mvk_macos_surface)) {
+                Errors.report(.api_unavailable, "Vulkan: window surface creation extensions not found", .{});
+                return error.ApiUnavailable;
+            }
+            return if (has_ext_metal_surface) &macos_extensions else &macos_mvk_extensions;
+        },
+        .windows => {
+            if (!has_khr_surface or !has_khr_win32_surface) {
+                Errors.report(.api_unavailable, "Vulkan: window surface creation extensions not found", .{});
+                return error.ApiUnavailable;
+            }
+            return &platform.VulkanWSI.RequiredExtensions;
+        },
+        else => return error.PlatformUnavailable,
     }
-    return if (has_ext_metal_surface) &macos_extensions else &macos_mvk_extensions;
 }
 
 pub fn getInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) callconv(vk.vulkan_call_conv) vk.PfnVoidFunction {
@@ -101,14 +120,38 @@ pub fn getInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) callco
 }
 
 pub fn getPhysicalDevicePresentationSupport(instance: vk.Instance, physical_device: vk.PhysicalDevice, queue_family: u32) !bool {
-    _ = instance;
-    _ = physical_device;
-    _ = queue_family;
-    return platform.os_tag == .macos and available and has_khr_surface and (has_ext_metal_surface or has_mvk_macos_surface);
+    if (platform.os_tag == .macos) {
+        return available and has_khr_surface and (has_ext_metal_surface or has_mvk_macos_surface);
+    }
+    if (platform.os_tag == .windows) {
+        if (!available or !has_khr_surface or !has_khr_win32_surface) return false;
+        const get_proc = getInstanceProcAddress(instance, "vkGetPhysicalDeviceWin32PresentationSupportKHR") orelse return false;
+        const get_support: vk.PfnGetPhysicalDeviceWin32PresentationSupportKHR = @ptrCast(get_proc);
+        return get_support(physical_device, queue_family) != 0;
+    }
+    return false;
 }
 
 pub fn createWindowSurface(instance: vk.Instance, window: Window, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) !void {
     surface.* = .null_handle;
+    if (platform.os_tag == .windows) {
+        if (!has_khr_surface or !has_khr_win32_surface) return error.ApiUnavailable;
+        const get_proc = getInstanceProcAddress(instance, "vkCreateWin32SurfaceKHR") orelse return error.ApiUnavailable;
+        const create_win32_surface: vk.PfnCreateWin32SurfaceKHR = @ptrCast(get_proc);
+        const create_info = vk.Win32SurfaceCreateInfoKHR{
+            .hinstance = @ptrCast(platform.VulkanWSI.getNativeInstance() orelse return error.PlatformError),
+            .hwnd = @ptrCast(platform.VulkanWSI.getNativeWindow(try window.nativeHandle()) orelse return error.PlatformError),
+        };
+        const result = create_win32_surface(instance, &create_info, allocation_callbacks, surface);
+        return switch (result) {
+            .success => {},
+            .error_out_of_host_memory => error.OutOfHostMemory,
+            .error_out_of_device_memory => error.OutOfDeviceMemory,
+            .error_native_window_in_use_khr => error.NativeWindowInUse,
+            else => error.PlatformError,
+        };
+    }
+
     if (platform.os_tag != .macos) return error.PlatformUnavailable;
     if (!has_khr_surface or (!has_ext_metal_surface and !has_mvk_macos_surface)) return error.ApiUnavailable;
 
@@ -141,6 +184,7 @@ fn loadExtensionAvailability() !void {
     has_khr_surface = false;
     has_ext_metal_surface = false;
     has_mvk_macos_surface = false;
+    has_khr_win32_surface = false;
 
     const get_proc = loader orelse return;
     const enumerate_proc = get_proc(.null_handle, "vkEnumerateInstanceExtensionProperties") orelse {
@@ -180,12 +224,21 @@ fn loadExtensionAvailability() !void {
         if (std.mem.eql(u8, name, "VK_KHR_surface")) has_khr_surface = true;
         if (std.mem.eql(u8, name, "VK_EXT_metal_surface")) has_ext_metal_surface = true;
         if (std.mem.eql(u8, name, "VK_MVK_macos_surface")) has_mvk_macos_surface = true;
+        if (std.mem.eql(u8, name, "VK_KHR_win32_surface")) has_khr_win32_surface = true;
     }
 
-    available = has_khr_surface and (has_ext_metal_surface or has_mvk_macos_surface);
+    available = switch (platform.os_tag) {
+        .macos => has_khr_surface and (has_ext_metal_surface or has_mvk_macos_surface),
+        .windows => has_khr_surface and has_khr_win32_surface,
+        else => false,
+    };
 }
 
-fn openVulkanLibrary() !std.DynLib {
+fn openVulkanLibrary() !VulkanLibrary {
+    if (builtin.os.tag == .windows) {
+        const handle = win32_types.LoadLibraryA("vulkan-1.dll") orelse return error.PlatformUnavailable;
+        return .{ .handle = handle };
+    }
     if (builtin.os.tag == .macos) {
         if (std.c.getenv("VULKAN_SDK")) |sdk| {
             var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
@@ -200,9 +253,22 @@ fn openVulkanLibrary() !std.DynLib {
         return std.DynLib.open("libvulkan.so.1") catch std.DynLib.open("libvulkan.so");
     }
 
-    if (builtin.os.tag == .windows) {
-        return std.DynLib.open("vulkan-1.dll");
-    }
-
     return error.PlatformUnavailable;
 }
+
+const WindowsVulkanLibrary = struct {
+    handle: win32_types.HMODULE,
+
+    fn close(self: *WindowsVulkanLibrary) void {
+        _ = win32_types.FreeLibrary(self.handle);
+        self.handle = null;
+    }
+
+    fn lookup(self: *WindowsVulkanLibrary, comptime T: type, name: []const u8) ?T {
+        var buffer: [128:0]u8 = @splat(0);
+        if (name.len >= buffer.len) return null;
+        @memcpy(buffer[0..name.len], name);
+        const proc = win32_types.GetProcAddress(self.handle, &buffer) orelse return null;
+        return @ptrCast(@alignCast(proc));
+    }
+};

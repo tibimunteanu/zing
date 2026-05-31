@@ -101,6 +101,9 @@ pub fn build(b: *std.Build) !void {
     const test_live_step = b.step("test_live", "Run local live engine tests that open and drive native windows");
     test_live_step.dependOn(&run_live_tests.step);
 
+    const test_win32_live_step = b.step("test_win32_live", "Build and run Win32 live tests in the UTM Windows ARM64 VM");
+    try addWin32LiveTests(b, test_win32_live_step, optimize);
+
     const test_glfw_step = b.step("test_glfw", "Run GLFW C tests");
     addGlfwTests(b, test_glfw_step, target, optimize, vulkan_sdk);
 }
@@ -146,6 +149,13 @@ fn addPlatformFrameworks(b: *std.Build, compile: *std.Build.Step.Compile, os_tag
             compile.root_module.linkFramework("Cocoa", .{});
             compile.root_module.linkFramework("ApplicationServices", .{});
             compile.root_module.linkFramework("QuartzCore", .{});
+        },
+        .windows => {
+            compile.root_module.link_libc = true;
+            compile.root_module.linkSystemLibrary("user32", .{});
+            compile.root_module.linkSystemLibrary("gdi32", .{});
+            compile.root_module.linkSystemLibrary("shell32", .{});
+            compile.root_module.linkSystemLibrary("kernel32", .{});
         },
         else => {},
     }
@@ -247,6 +257,38 @@ fn addGlfwTests(
         previous_run = &run_test.step;
         test_step.dependOn(&run_test.step);
     }
+}
+
+fn addWin32LiveTests(
+    b: *std.Build,
+    test_step: *std.Build.Step,
+    optimize: std.builtin.OptimizeMode,
+) !void {
+    const target = b.resolveTargetQuery(.{
+        .cpu_arch = .aarch64,
+        .os_tag = .windows,
+    });
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("tests/win32_live_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    try addZingTestImports(b, test_mod, target, optimize);
+
+    const test_exe = b.addExecutable(.{
+        .name = "zing-win32-live-tests",
+        .root_module = test_mod,
+    });
+    addPlatformFrameworks(b, test_exe, .windows);
+
+    const install_test = b.addInstallArtifact(test_exe, .{});
+    const run_in_vm = b.addSystemCommand(&.{
+        "/bin/zsh",
+        "scripts/run-utm-windows-test.zsh",
+        "zig-out/bin/zing-win32-live-tests.exe",
+    });
+    run_in_vm.step.dependOn(&install_test.step);
+    test_step.dependOn(&run_in_vm.step);
 }
 
 fn translateObjcCModule(

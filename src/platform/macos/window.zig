@@ -347,7 +347,7 @@ pub fn focus(handle: *anyopaque) void {
     windowObject(handle).msgSend(void, "makeKeyAndOrderFront:", .{@as(objc.c.id, null)});
 }
 
-pub fn requestAttention() void {
+pub fn requestAttention(_: *anyopaque) void {
     sharedApplication().msgSend(void, "requestUserAttention:", .{@as(c_int, 10)});
 }
 

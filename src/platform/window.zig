@@ -471,8 +471,8 @@ pub fn focus(self: Window) !void {
 }
 
 pub fn requestAttention(self: Window) !void {
-    _ = try getState(self);
-    platform.Window.requestAttention();
+    const state = try getState(self);
+    platform.Window.requestAttention(state.native);
 }
 
 pub fn getMonitor(self: Window) !?Monitor {
@@ -628,6 +628,7 @@ pub fn setInputMode(self: Window, mode: InputMode) !void {
                 return error.PlatformError;
             }
             state.raw_mouse_motion = enabled;
+            platform.Window.setInputMode(state.native, 1, @intFromBool(enabled));
         },
     }
 }

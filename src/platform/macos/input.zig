@@ -115,6 +115,10 @@ pub fn getKeyScancode(key: c_int) c_int {
     };
 }
 
+pub fn rawMouseMotionSupported() bool {
+    return false;
+}
+
 pub fn getScancodeName(scancode: c_int) ?[*:0]const u8 {
     if (scancode < 0 or scancode > 0xff) return null;
     return keyName(translateKey(@intCast(scancode)));

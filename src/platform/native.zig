@@ -20,8 +20,8 @@ pub fn getCocoaView(window: Window) !*CocoaView {
 }
 
 pub fn getWin32Window(window: Window) !*Win32Window {
-    _ = window;
-    return error.PlatformUnavailable;
+    if (platform.os_tag != .windows) return error.PlatformUnavailable;
+    return @ptrCast(platform.Native.getWin32Window(try window.nativeHandle()) orelse return error.PlatformError);
 }
 
 pub fn getX11Display() !*X11Display {

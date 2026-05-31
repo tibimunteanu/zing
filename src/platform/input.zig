@@ -225,7 +225,7 @@ pub fn initSystem() !void {
 pub fn deinitSystem() void {}
 
 pub fn rawMouseMotionSupported() !bool {
-    return false;
+    return platform.Input.rawMouseMotionSupported();
 }
 
 pub fn getKeyScancode(key: Key) !i32 {
