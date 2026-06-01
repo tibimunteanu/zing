@@ -285,6 +285,8 @@ fn openVulkanLibrary() !VulkanLibrary {
         return .{ .handle = handle };
     }
     if (builtin.os.tag == .macos) {
+        if (platform.VulkanWSI.openLocalVulkanLoader()) |library| return library;
+
         if (std.c.getenv("VULKAN_SDK")) |sdk| {
             var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
             const path = try std.fmt.bufPrint(&path_buffer, "{s}/lib/libvulkan.1.dylib", .{std.mem.span(sdk)});

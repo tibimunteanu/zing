@@ -219,10 +219,17 @@ pub const ScrollOffset = struct {
 };
 
 pub fn initSystem() !void {
-    return;
+    if (@hasDecl(platform.Input, "init")) {
+        if (!platform.Input.init()) {
+            Errors.report(.platform_error, "failed to initialize platform input system", .{});
+            return error.PlatformError;
+        }
+    }
 }
 
-pub fn deinitSystem() void {}
+pub fn deinitSystem() void {
+    if (@hasDecl(platform.Input, "deinit")) platform.Input.deinit();
+}
 
 pub fn rawMouseMotionSupported() !bool {
     return platform.Input.rawMouseMotionSupported();

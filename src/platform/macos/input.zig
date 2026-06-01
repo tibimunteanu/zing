@@ -119,15 +119,43 @@ pub fn rawMouseMotionSupported() bool {
     return false;
 }
 
+pub fn init() bool {
+    return initializeTIS();
+}
+
+pub fn deinit() void {
+    if (input_source) |source| {
+        CFRelease(source);
+        input_source = null;
+    }
+    unicode_data = null;
+}
+
+pub fn updateUnicodeData() bool {
+    if (input_source) |source| {
+        CFRelease(source);
+        input_source = null;
+        unicode_data = null;
+    }
+
+    const copy_current = tis.CopyCurrentKeyboardLayoutInputSource orelse return false;
+    const get_property = tis.GetInputSourceProperty orelse return false;
+    const property = tis.kPropertyUnicodeKeyLayoutData orelse return false;
+
+    const source = copy_current() orelse return false;
+    input_source = source;
+    unicode_data = get_property(source, property) orelse return false;
+    return true;
+}
+
 pub fn getScancodeName(scancode: c_int) ?[*:0]const u8 {
     if (scancode < 0 or scancode > 0xff) return null;
     const key = translateKey(@intCast(scancode));
     if (key == 0) return null;
 
-    const source = TISCopyCurrentKeyboardLayoutInputSource() orelse return keyName(key);
-    defer CFRelease(source);
-    const data = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) orelse return keyName(key);
-    const layout = CFDataGetBytePtr(data) orelse return keyName(key);
+    if (unicode_data == null and !updateUnicodeData()) return null;
+    const data = unicode_data orelse return null;
+    const layout = CFDataGetBytePtr(data) orelse return null;
 
     var dead_key_state: u32 = 0;
     var chars: [4]u16 = @splat(0);
@@ -137,7 +165,7 @@ pub fn getScancodeName(scancode: c_int) ?[*:0]const u8 {
         @intCast(scancode),
         kUCKeyActionDisplay,
         0,
-        LMGetKbdType(),
+        (tis.GetKbdType orelse return null)(),
         kUCKeyTranslateNoDeadKeysBit,
         &dead_key_state,
         chars.len,
@@ -272,75 +300,32 @@ pub fn translateKey(scancode: u16) c_int {
     };
 }
 
-fn keyName(key: c_int) ?[*:0]const u8 {
-    return switch (key) {
-        32 => " ",
-        39 => "'",
-        44 => ",",
-        45 => "-",
-        46 => ".",
-        47 => "/",
-        48 => "0",
-        49 => "1",
-        50 => "2",
-        51 => "3",
-        52 => "4",
-        53 => "5",
-        54 => "6",
-        55 => "7",
-        56 => "8",
-        57 => "9",
-        59 => ";",
-        61 => "=",
-        65 => "A",
-        66 => "B",
-        67 => "C",
-        68 => "D",
-        69 => "E",
-        70 => "F",
-        71 => "G",
-        72 => "H",
-        73 => "I",
-        74 => "J",
-        75 => "K",
-        76 => "L",
-        77 => "M",
-        78 => "N",
-        79 => "O",
-        80 => "P",
-        81 => "Q",
-        82 => "R",
-        83 => "S",
-        84 => "T",
-        85 => "U",
-        86 => "V",
-        87 => "W",
-        88 => "X",
-        89 => "Y",
-        90 => "Z",
-        91 => "[",
-        92 => "\\",
-        93 => "]",
-        96 => "`",
-        else => null,
-    };
-}
-
 const std = @import("std");
 
-const CFTypeRef = *const opaque {};
-const CFDataRef = *const opaque {};
-const TISInputSourceRef = *const opaque {};
+const CFTypeRef = *const anyopaque;
+const CFDataRef = *const anyopaque;
+const CFStringRef = *const anyopaque;
+const CFBundleRef = *const anyopaque;
+const TISInputSourceRef = *const anyopaque;
 
 const kUCKeyActionDisplay: u16 = 3;
 const kUCKeyTranslateNoDeadKeysBit: u32 = 1;
+const kCFStringEncodingUTF8: u32 = 0x08000100;
 const noErr: i32 = 0;
 
-var key_names: [512][17:0]u8 = @splat(@splat(0));
+const TIS = struct {
+    bundle: ?CFBundleRef = null,
+    kPropertyUnicodeKeyLayoutData: ?CFTypeRef = null,
+    CopyCurrentKeyboardLayoutInputSource: ?*const fn () callconv(.c) ?TISInputSourceRef = null,
+    GetInputSourceProperty: ?*const fn (TISInputSourceRef, CFTypeRef) callconv(.c) ?CFDataRef = null,
+    GetKbdType: ?*const fn () callconv(.c) u32 = null,
+};
 
-extern "c" fn TISCopyCurrentKeyboardLayoutInputSource() ?TISInputSourceRef;
-extern "c" fn TISGetInputSourceProperty(input_source: TISInputSourceRef, property_key: CFTypeRef) ?CFDataRef;
-extern "c" fn LMGetKbdType() u32;
+var tis: TIS = .{};
+var key_names: [512][17:0]u8 = @splat(@splat(0));
+var input_source: ?TISInputSourceRef = null;
+var unicode_data: ?CFDataRef = null;
+
 extern "c" fn UCKeyTranslate(
     key_layout_ptr: [*]const u8,
     virtual_key_code: u16,
@@ -355,4 +340,36 @@ extern "c" fn UCKeyTranslate(
 ) i32;
 extern "c" fn CFDataGetBytePtr(data: CFDataRef) ?[*]const u8;
 extern "c" fn CFRelease(object: CFTypeRef) void;
-extern "c" var kTISPropertyUnicodeKeyLayoutData: CFTypeRef;
+extern "c" fn CFStringCreateWithCString(allocator: ?CFTypeRef, c_string: [*:0]const u8, encoding: u32) ?CFStringRef;
+extern "c" fn CFBundleGetBundleWithIdentifier(bundle_id: CFStringRef) ?CFBundleRef;
+extern "c" fn CFBundleGetDataPointerForName(bundle: CFBundleRef, symbol_name: CFStringRef) ?*anyopaque;
+extern "c" fn CFBundleGetFunctionPointerForName(bundle: CFBundleRef, function_name: CFStringRef) ?*const anyopaque;
+
+fn initializeTIS() bool {
+    const bundle_id = cfString("com.apple.HIToolbox") orelse return false;
+    defer CFRelease(bundle_id);
+
+    const bundle = CFBundleGetBundleWithIdentifier(bundle_id) orelse return false;
+    tis.bundle = bundle;
+
+    const property_name = cfString("kTISPropertyUnicodeKeyLayoutData") orelse return false;
+    defer CFRelease(property_name);
+    const copy_name = cfString("TISCopyCurrentKeyboardLayoutInputSource") orelse return false;
+    defer CFRelease(copy_name);
+    const get_property_name = cfString("TISGetInputSourceProperty") orelse return false;
+    defer CFRelease(get_property_name);
+    const get_kbd_type_name = cfString("LMGetKbdType") orelse return false;
+    defer CFRelease(get_kbd_type_name);
+
+    const property_pointer = CFBundleGetDataPointerForName(bundle, property_name) orelse return false;
+    tis.kPropertyUnicodeKeyLayoutData = @as(*const CFTypeRef, @ptrCast(@alignCast(property_pointer))).*;
+    tis.CopyCurrentKeyboardLayoutInputSource = @ptrCast(@alignCast(CFBundleGetFunctionPointerForName(bundle, copy_name) orelse return false));
+    tis.GetInputSourceProperty = @ptrCast(@alignCast(CFBundleGetFunctionPointerForName(bundle, get_property_name) orelse return false));
+    tis.GetKbdType = @ptrCast(@alignCast(CFBundleGetFunctionPointerForName(bundle, get_kbd_type_name) orelse return false));
+
+    return updateUnicodeData();
+}
+
+fn cfString(value: [*:0]const u8) ?CFStringRef {
+    return CFStringCreateWithCString(null, value, kCFStringEncodingUTF8);
+}

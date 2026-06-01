@@ -21,6 +21,7 @@ pub const Config = extern struct {
     scale_framebuffer: bool,
     transparent_framebuffer: bool,
     mouse_passthrough: bool,
+    monitor: ?*anyopaque,
 };
 
 pub const ContentScale = extern struct {
@@ -63,7 +64,10 @@ const NSMainMenuWindowLevel: isize = 24;
 const NSWindowCollectionBehaviorManaged: usize = 1 << 2;
 const NSWindowCollectionBehaviorFullScreenPrimary: usize = 1 << 7;
 const NSWindowCollectionBehaviorFullScreenNone: usize = 1 << 9;
+const NSWindowTabbingModeDisallowed: isize = 2;
+const NSEventMaskKeyUp: usize = 1 << 11;
 const NSApplicationActivationPolicyRegular: isize = 0;
+const NSWindowOcclusionStateVisible: usize = 1 << 1;
 const NSEventModifierFlagCapsLock: usize = 1 << 16;
 const NSEventModifierFlagShift: usize = 1 << 17;
 const NSEventModifierFlagControl: usize = 1 << 18;
@@ -76,19 +80,31 @@ const NSTrackingActiveInKeyWindow: usize = 0x20;
 const NSTrackingAssumeInside: usize = 0x100;
 const NSTrackingInVisibleRect: usize = 0x200;
 const NSTrackingEnabledDuringMouseDrag: usize = 0x400;
+const NSDragOperationGeneric: c_ulong = 4;
 const NSUTF32StringEncoding: c_ulong = 0x8c000100;
+const kCGEventSourceStateHIDSystemState: c_int = 1;
 const empty_range = NSRange{ .location = std.math.maxInt(c_ulong), .length = 0 };
 
 var app_initialized = false;
 var classes_registered = false;
 var window_class: ?objc.Class = null;
+var app_delegate_class: ?objc.Class = null;
+var helper_class: ?objc.Class = null;
 var delegate_class: ?objc.Class = null;
 var view_class: ?objc.Class = null;
+var app_delegate: objc.c.id = null;
+var helper: objc.c.id = null;
+var nib_objects: objc.c.id = null;
+var window_list: [128]?*types.Window = @splat(null);
 var cursor_hidden = false;
 var disabled_cursor_window: ?*types.Window = null;
 var restore_cursor_pos_x: f64 = 0.0;
 var restore_cursor_pos_y: f64 = 0.0;
 var clipboard_string: ?[:0]u8 = null;
+var key_up_monitor: objc.c.id = null;
+var event_source: ?CGEventSourceRef = null;
+
+const KeyUpMonitorBlock = objc.Block(struct {}, .{objc.c.id}, objc.c.id);
 
 pub const EventCallbacks = struct {
     close: *const fn (usize) void,
@@ -100,6 +116,7 @@ pub const EventCallbacks = struct {
     framebuffer_size: *const fn (usize, u32, u32) void,
     content_scale: *const fn (usize, f32, f32) void,
     key: *const fn (usize, i32, i32, i32, u8) void,
+    key_state: *const fn (usize, i32) i32,
     char: *const fn (usize, u32) void,
     char_mods: *const fn (usize, u32, u8) void,
     mouse_button: *const fn (usize, i32, i32, u8) void,
@@ -108,6 +125,7 @@ pub const EventCallbacks = struct {
     scroll: *const fn (usize, f64, f64) void,
     refresh: *const fn (usize) void,
     drop: *const fn (usize, usize, [*][*:0]const u8) void,
+    monitor_changed: *const fn () void,
 };
 
 var event_callbacks: ?EventCallbacks = null;
@@ -119,18 +137,85 @@ pub fn setEventCallbacks(new_callbacks: EventCallbacks) void {
 pub fn init() bool {
     if (app_initialized) return true;
     registerClasses();
+    if (helper == null) {
+        const object = helper_class.?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{});
+        if (object.value == null) return false;
+        helper = object.value;
+        objc.getClass("NSThread").?.msgSend(void, "detachNewThreadSelector:toTarget:withObject:", .{
+            objc.sel("doNothing:").value,
+            helper,
+            @as(objc.c.id, null),
+        });
+    }
     const app = sharedApplication();
+    if (app_delegate == null) {
+        const delegate = app_delegate_class.?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{});
+        if (delegate.value == null) return false;
+        app_delegate = delegate.value;
+        app.msgSend(void, "setDelegate:", .{app_delegate});
+    }
+    if (key_up_monitor == null) {
+        var block = KeyUpMonitorBlock.init(.{}, keyUpMonitorCallback);
+        key_up_monitor = objc.getClass("NSEvent").?.msgSend(objc.Object, "addLocalMonitorForEventsMatchingMask:handler:", .{
+            @as(usize, NSEventMaskKeyUp),
+            &block,
+        }).value;
+    }
+    changeToResourcesDirectory();
+    const defaults = objc.getClass("NSDictionary").?.msgSend(objc.Object, "dictionaryWithObject:forKey:", .{
+        objc.getClass("NSNumber").?.msgSend(objc.Object, "numberWithBool:", .{false}).value,
+        nsString("ApplePressAndHoldEnabled").value,
+    });
+    objc.getClass("NSUserDefaults").?.msgSend(objc.Object, "standardUserDefaults", .{}).msgSend(void, "registerDefaults:", .{defaults.value});
+    objc.getClass("NSNotificationCenter").?.msgSend(objc.Object, "defaultCenter", .{}).msgSend(void, "addObserver:selector:name:object:", .{
+        helper,
+        objc.sel("selectedKeyboardInputSourceChanged:").value,
+        nsString("NSTextInputContextKeyboardSelectionDidChangeNotification").value,
+        @as(objc.c.id, null),
+    });
+    event_source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState) orelse return false;
+    CGEventSourceSetLocalEventsSuppressionInterval(event_source.?, 0.0);
+    if (!input.init()) return false;
+    _ = monitor_module.count();
+    if (!objc.getClass("NSRunningApplication").?.msgSend(objc.Object, "currentApplication", .{}).msgSend(bool, "isFinishedLaunching", .{})) {
+        app.msgSend(void, "run", .{});
+    }
     _ = app.msgSend(bool, "setActivationPolicy:", .{@as(isize, NSApplicationActivationPolicyRegular)});
-    app.msgSend(void, "finishLaunching", .{});
     app_initialized = true;
     return true;
 }
 
 pub fn deinit() void {
+    input.deinit();
+    if (event_source) |source| {
+        CFRelease(@ptrCast(source));
+        event_source = null;
+    }
+    if (app_delegate) |delegate| {
+        sharedApplication().msgSend(void, "setDelegate:", .{@as(objc.c.id, null)});
+        objc.Object.fromId(delegate).msgSend(void, "release", .{});
+        app_delegate = null;
+    }
+    if (helper) |object| {
+        const center = objc.getClass("NSNotificationCenter").?.msgSend(objc.Object, "defaultCenter", .{});
+        center.msgSend(void, "removeObserver:name:object:", .{
+            object,
+            nsString("NSTextInputContextKeyboardSelectionDidChangeNotification").value,
+            @as(objc.c.id, null),
+        });
+        center.msgSend(void, "removeObserver:", .{object});
+        objc.Object.fromId(object).msgSend(void, "release", .{});
+        helper = null;
+    }
+    if (key_up_monitor) |monitor| {
+        objc.getClass("NSEvent").?.msgSend(void, "removeMonitor:", .{monitor});
+        key_up_monitor = null;
+    }
     if (clipboard_string) |value| {
         std.heap.c_allocator.free(value);
         clipboard_string = null;
     }
+    window_list = @splat(null);
     app_initialized = false;
 }
 
@@ -138,17 +223,25 @@ pub fn create(config: *const Config) ?*anyopaque {
     registerClasses();
 
     var style: usize = NSWindowStyleMaskMiniaturizable;
-    if (!config.decorated) {
+    if (config.monitor != null or !config.decorated) {
         style |= NSWindowStyleMaskBorderless;
     } else {
         style |= NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
         if (config.resizable) style |= NSWindowStyleMaskResizable;
     }
 
-    const rect = CGRect{
+    const rect = if (config.monitor) |monitor| blk: {
+        const mode = monitor_module.getVideoMode(monitor);
+        const pos = monitor_module.getPos(monitor);
+        break :blk CGRect{
+            .origin = .{ .x = @floatFromInt(pos.x), .y = @floatFromInt(pos.y) },
+            .size = .{ .width = @floatFromInt(mode.width), .height = @floatFromInt(mode.height) },
+        };
+    } else CGRect{
         .origin = .{ .x = 0.0, .y = 0.0 },
         .size = .{ .width = @floatFromInt(config.width), .height = @floatFromInt(config.height) },
     };
+
     const ns_window = window_class.?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "initWithContentRect:styleMask:backing:defer:", .{
         rect,
         style,
@@ -165,9 +258,11 @@ pub fn create(config: *const Config) ?*anyopaque {
         .delegate = null,
         .cursor = null,
         .marked_text = null,
-        .monitor = null,
+        .layer = null,
+        .monitor = config.monitor,
         .should_close = false,
         .maximized = false,
+        .occluded = false,
         .resizable = config.resizable,
         .decorated = config.decorated,
         .floating = config.floating,
@@ -176,12 +271,22 @@ pub fn create(config: *const Config) ?*anyopaque {
         .user_pointer = null,
         .callback_id = 0,
         .cursor_mode = 0,
-        .modifier_flags = 0,
-        .modifier_key_states = @splat(false),
         .cursor_warp_delta_x = 0.0,
         .cursor_warp_delta_y = 0.0,
         .virtual_cursor_x = 0.0,
         .virtual_cursor_y = 0.0,
+        .video_width = config.width,
+        .video_height = config.height,
+        .video_red_bits = 8,
+        .video_green_bits = 8,
+        .video_blue_bits = 8,
+        .video_refresh_rate = 0,
+        .min_width = 0,
+        .min_height = 0,
+        .max_width = 0,
+        .max_height = 0,
+        .aspect_numerator = 0,
+        .aspect_denominator = 0,
         .windowed_x = 0.0,
         .windowed_y = 0.0,
         .windowed_width = 0.0,
@@ -214,11 +319,18 @@ pub fn create(config: *const Config) ?*anyopaque {
     setTitle(@ptrCast(result), config.title);
     ns_window.msgSend(void, "setAcceptsMouseMovedEvents:", .{true});
     ns_window.msgSend(void, "setRestorable:", .{false});
-    ns_window.msgSend(void, "setCollectionBehavior:", .{if (config.resizable)
-        @as(usize, NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorManaged)
-    else
-        @as(usize, NSWindowCollectionBehaviorFullScreenNone)});
-    ns_window.msgSend(void, "center", .{});
+    if (ns_window.msgSend(bool, "respondsToSelector:", .{objc.sel("setTabbingMode:").value})) {
+        ns_window.msgSend(void, "setTabbingMode:", .{@as(isize, NSWindowTabbingModeDisallowed)});
+    }
+    if (config.monitor == null) {
+        ns_window.msgSend(void, "setCollectionBehavior:", .{if (config.resizable)
+            @as(usize, NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorManaged)
+        else
+            @as(usize, NSWindowCollectionBehaviorFullScreenNone)});
+        ns_window.msgSend(void, "center", .{});
+    } else {
+        ns_window.msgSend(void, "setLevel:", .{@as(isize, NSMainMenuWindowLevel + 1)});
+    }
 
     if (config.transparent_framebuffer) {
         ns_window.msgSend(void, "setOpaque:", .{false});
@@ -226,31 +338,46 @@ pub fn create(config: *const Config) ?*anyopaque {
         ns_window.msgSend(void, "setBackgroundColor:", .{objc.getClass("NSColor").?.msgSend(objc.Object, "clearColor", .{}).value});
     }
     if (config.mouse_passthrough) ns_window.msgSend(void, "setIgnoresMouseEvents:", .{true});
-    if (config.floating) ns_window.msgSend(void, "setLevel:", .{@as(isize, NSFloatingWindowLevel)});
-    if (config.maximized) ns_window.msgSend(void, "zoom:", .{@as(objc.c.id, null)});
+    if (config.monitor == null and config.floating) ns_window.msgSend(void, "setLevel:", .{@as(isize, NSFloatingWindowLevel)});
+    if (config.monitor == null and config.maximized) ns_window.msgSend(void, "zoom:", .{@as(objc.c.id, null)});
     result.maximized = ns_window.msgSend(bool, "isZoomed", .{});
-    if (config.visible) ns_window.msgSend(void, "orderFront:", .{@as(objc.c.id, null)});
-    if (config.focused) {
+    if (config.monitor) |monitor| {
+        ns_window.msgSend(void, "orderFront:", .{@as(objc.c.id, null)});
         sharedApplication().msgSend(void, "activateIgnoringOtherApps:", .{true});
         ns_window.msgSend(void, "makeKeyAndOrderFront:", .{@as(objc.c.id, null)});
+        acquireMonitor(result, monitor);
+        if (config.center_cursor) centerCursorInContentArea(result);
+    } else if (config.visible) {
+        ns_window.msgSend(void, "orderFront:", .{@as(objc.c.id, null)});
+        if (config.focused) {
+            sharedApplication().msgSend(void, "activateIgnoringOtherApps:", .{true});
+            ns_window.msgSend(void, "makeKeyAndOrderFront:", .{@as(objc.c.id, null)});
+        }
     }
     updateCachedWindowMetrics(result);
+    trackWindow(result);
 
     return @ptrCast(result);
 }
 
 pub fn destroy(handle: *anyopaque) void {
     const window = native(handle);
+    untrackWindow(window);
     if (disabled_cursor_window == window) disabled_cursor_window = null;
-    if (window.monitor) |monitor| monitor_module.restoreVideoMode(monitor);
     const ns_window = objc.Object.fromId(window.window);
     ns_window.msgSend(void, "orderOut:", .{@as(objc.c.id, null)});
+    if (window.monitor != null) releaseMonitor(window);
     ns_window.msgSend(void, "setDelegate:", .{@as(objc.c.id, null)});
-    ns_window.msgSend(void, "setContentView:", .{@as(objc.c.id, null)});
-    if (window.marked_text) |marked_text| objc.Object.fromId(marked_text).msgSend(void, "release", .{});
-    if (window.delegate) |delegate| objc.Object.fromId(delegate).msgSend(void, "release", .{});
-    if (window.view) |view| objc.Object.fromId(view).msgSend(void, "release", .{});
+    if (window.delegate) |delegate| {
+        objc.Object.fromId(delegate).msgSend(void, "release", .{});
+        window.delegate = null;
+    }
+    if (window.view) |view| {
+        objc.Object.fromId(view).msgSend(void, "release", .{});
+        window.view = null;
+    }
     ns_window.msgSend(void, "close", .{});
+    window.window = null;
     std.heap.c_allocator.destroy(window);
     @import("events.zig").poll();
 }
@@ -304,16 +431,9 @@ pub fn getSize(handle: *anyopaque) Size {
 pub fn setSize(handle: *anyopaque, size: Size) void {
     const window = native(handle);
     if (window.monitor) |monitor| {
-        const current = monitor_module.getVideoMode(monitor);
-        _ = monitor_module.setVideoMode(monitor, .{
-            .width = size.width,
-            .height = size.height,
-            .red_bits = current.red_bits,
-            .green_bits = current.green_bits,
-            .blue_bits = current.blue_bits,
-            .refresh_rate = current.refresh_rate,
-        });
-        setFullscreenFrame(window, monitor);
+        window.video_width = size.width;
+        window.video_height = size.height;
+        if (monitor_module.getWindow(monitor) == handle) acquireMonitor(window, monitor);
         return;
     }
 
@@ -334,15 +454,8 @@ pub fn setMonitor(handle: *anyopaque, monitor: ?*anyopaque, pos: Pos, size: Size
 
     if (window.monitor == monitor) {
         if (monitor) |native_monitor| {
-            _ = monitor_module.setVideoMode(native_monitor, .{
-                .width = size.width,
-                .height = size.height,
-                .red_bits = 8,
-                .green_bits = 8,
-                .blue_bits = 8,
-                .refresh_rate = refresh_rate,
-            });
-            setFullscreenFrame(window, native_monitor);
+            updateVideoMode(window, monitor, size, refresh_rate);
+            if (monitor_module.getWindow(native_monitor) == handle) acquireMonitor(window, native_monitor);
         } else {
             const content = CGRect{
                 .origin = .{
@@ -357,7 +470,8 @@ pub fn setMonitor(handle: *anyopaque, monitor: ?*anyopaque, pos: Pos, size: Size
         return;
     }
 
-    if (window.monitor) |old_monitor| monitor_module.restoreVideoMode(old_monitor);
+    if (window.monitor != null) releaseMonitor(window);
+    updateVideoMode(window, monitor, size, refresh_rate);
 
     if (monitor) |native_monitor| {
         if (window.monitor == null) {
@@ -382,15 +496,7 @@ pub fn setMonitor(handle: *anyopaque, monitor: ?*anyopaque, pos: Pos, size: Size
         ns_window.msgSend(void, "setLevel:", .{@as(isize, NSMainMenuWindowLevel + 1)});
         ns_window.msgSend(void, "setHasShadow:", .{false});
 
-        _ = monitor_module.setVideoMode(native_monitor, .{
-            .width = size.width,
-            .height = size.height,
-            .red_bits = 8,
-            .green_bits = 8,
-            .blue_bits = 8,
-            .refresh_rate = refresh_rate,
-        });
-        setFullscreenFrame(window, native_monitor);
+        acquireMonitor(window, native_monitor);
     } else {
         window.monitor = null;
         @import("events.zig").poll();
@@ -405,10 +511,8 @@ pub fn setMonitor(handle: *anyopaque, monitor: ?*anyopaque, pos: Pos, size: Size
         }
         if (window.resizable) {
             style |= NSWindowStyleMaskResizable;
-            ns_window.msgSend(void, "setCollectionBehavior:", .{@as(usize, NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorManaged)});
         } else {
             style &= ~NSWindowStyleMaskResizable;
-            ns_window.msgSend(void, "setCollectionBehavior:", .{@as(usize, NSWindowCollectionBehaviorFullScreenNone)});
         }
         ns_window.msgSend(void, "setStyleMask:", .{style});
         ns_window.msgSend(void, "makeFirstResponder:", .{window.view});
@@ -421,8 +525,15 @@ pub fn setMonitor(handle: *anyopaque, monitor: ?*anyopaque, pos: Pos, size: Size
             .size = .{ .width = @floatFromInt(size.width), .height = @floatFromInt(size.height) },
         };
         ns_window.msgSend(void, "setFrame:display:", .{ ns_window.msgSend(CGRect, "frameRectForContentRect:", .{content}), true });
+        applyWindowConstraints(window);
         ns_window.msgSend(void, "setLevel:", .{if (window.floating) @as(isize, NSFloatingWindowLevel) else @as(isize, NSNormalWindowLevel)});
+        ns_window.msgSend(void, "setCollectionBehavior:", .{if (window.resizable)
+            @as(usize, NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorManaged)
+        else
+            @as(usize, NSWindowCollectionBehaviorFullScreenNone)});
         ns_window.msgSend(void, "setHasShadow:", .{true});
+        const mini_title = ns_window.msgSend(objc.Object, "miniwindowTitle", .{});
+        if (mini_title.value != null) ns_window.msgSend(void, "setTitle:", .{mini_title.value});
     }
     updateCachedWindowMetrics(window);
 }
@@ -432,26 +543,26 @@ pub fn setIcon(_: *anyopaque, _: [*]const IconImage, _: usize) bool {
 }
 
 pub fn setSizeLimits(handle: *anyopaque, min_size: Size, max_size: Size) void {
-    const ns_window = windowObject(handle);
-    ns_window.msgSend(void, "setContentMinSize:", .{if (min_size.width == 0 or min_size.height == 0)
-        CGSize{ .width = 0.0, .height = 0.0 }
-    else
-        CGSize{ .width = @floatFromInt(min_size.width), .height = @floatFromInt(min_size.height) }});
-    ns_window.msgSend(void, "setContentMaxSize:", .{if (max_size.width == 0 or max_size.height == 0)
-        CGSize{ .width = std.math.floatMax(f64), .height = std.math.floatMax(f64) }
-    else
-        CGSize{ .width = @floatFromInt(max_size.width), .height = @floatFromInt(max_size.height) }});
+    const window = native(handle);
+    window.min_width = min_size.width;
+    window.min_height = min_size.height;
+    window.max_width = max_size.width;
+    window.max_height = max_size.height;
+    applySizeLimits(window);
 }
 
 pub fn setAspectRatio(handle: *anyopaque, numerator: u32, denominator: u32) void {
-    windowObject(handle).msgSend(void, "setContentAspectRatio:", .{CGSize{
-        .width = @floatFromInt(numerator),
-        .height = @floatFromInt(denominator),
-    }});
+    const window = native(handle);
+    window.aspect_numerator = numerator;
+    window.aspect_denominator = denominator;
+    applyAspectRatio(window);
 }
 
 pub fn clearAspectRatio(handle: *anyopaque) void {
-    windowObject(handle).msgSend(void, "setResizeIncrements:", .{CGSize{ .width = 1.0, .height = 1.0 }});
+    const window = native(handle);
+    window.aspect_numerator = 0;
+    window.aspect_denominator = 0;
+    applyAspectRatio(window);
 }
 
 pub fn getFramebufferSize(handle: *anyopaque) Size {
@@ -535,7 +646,7 @@ pub fn getAttribute(handle: *anyopaque, attr: c_int) bool {
     return switch (attr) {
         0 => ns_window.msgSend(bool, "isKeyWindow", .{}),
         1 => ns_window.msgSend(bool, "isMiniaturized", .{}),
-        2 => ns_window.msgSend(bool, "isZoomed", .{}),
+        2 => native(handle).resizable and ns_window.msgSend(bool, "isZoomed", .{}),
         3 => isHovered(handle),
         4 => ns_window.msgSend(bool, "isVisible", .{}),
         5 => (ns_window.msgSend(usize, "styleMask", .{}) & NSWindowStyleMaskResizable) != 0,
@@ -573,8 +684,6 @@ pub fn setAttribute(handle: *anyopaque, attr: c_int, value: bool) void {
             }
             ns_window.msgSend(void, "setStyleMask:", .{style});
             ns_window.msgSend(void, "makeFirstResponder:", .{native(handle).view});
-            const title = ns_window.msgSend(objc.Object, "title", .{});
-            if (title.value != null) setTitle(handle, title.msgSend([*:0]const u8, "UTF8String", .{}));
         },
         8 => {
             window.floating = value;
@@ -608,12 +717,16 @@ pub fn setCursorPos(handle: *anyopaque, x: f64, y: f64) void {
     const pos = windowObject(handle).msgSend(CGPoint, "mouseLocationOutsideOfEventStream", .{});
     native(handle).cursor_warp_delta_x += x - pos.x;
     native(handle).cursor_warp_delta_y += y - content.size.height + pos.y;
-    const local = CGRect{
-        .origin = .{ .x = x, .y = content.size.height - y - 1.0 },
-        .size = .{ .width = 0.0, .height = 0.0 },
-    };
-    const global = windowObject(handle).msgSend(CGRect, "convertRectToScreen:", .{local});
-    CGWarpMouseCursorPosition(.{ .x = global.origin.x, .y = transformY(global.origin.y) });
+    if (native(handle).monitor) |monitor| {
+        CGDisplayMoveCursorToPoint(monitor_module.getDisplayId(monitor), .{ .x = x, .y = y });
+    } else {
+        const local = CGRect{
+            .origin = .{ .x = x, .y = content.size.height - y - 1.0 },
+            .size = .{ .width = 0.0, .height = 0.0 },
+        };
+        const global = windowObject(handle).msgSend(CGRect, "convertRectToScreen:", .{local});
+        CGWarpMouseCursorPosition(.{ .x = global.origin.x, .y = transformY(global.origin.y) });
+    }
     if (native(handle).cursor_mode != 2) CGAssociateMouseAndMouseCursorPosition(true);
 }
 
@@ -656,6 +769,15 @@ pub fn getClipboardString() ?[*:0]const u8 {
 
 fn callbacks() EventCallbacks {
     return event_callbacks.?;
+}
+
+fn keyUpMonitorCallback(_: *const KeyUpMonitorBlock.Context, event_id: objc.c.id) callconv(.c) objc.c.id {
+    const event = objc.Object.fromId(event_id);
+    if ((event.msgSend(usize, "modifierFlags", .{}) & NSEventModifierFlagCommand) != 0) {
+        const key_window = sharedApplication().msgSend(objc.Object, "keyWindow", .{});
+        if (key_window.value != null) key_window.msgSend(void, "sendEvent:", .{event_id});
+    }
+    return event_id;
 }
 
 fn cursorInContentArea(window: *types.Window) bool {
@@ -709,6 +831,65 @@ fn updateCursorMode(window: *types.Window) void {
     if (cursorInContentArea(window)) updateCursorImage(window);
 }
 
+fn acquireMonitor(window: *types.Window, monitor: *anyopaque) void {
+    _ = monitor_module.setVideoMode(monitor, .{
+        .width = window.video_width,
+        .height = window.video_height,
+        .red_bits = window.video_red_bits,
+        .green_bits = window.video_green_bits,
+        .blue_bits = window.video_blue_bits,
+        .refresh_rate = window.video_refresh_rate,
+    });
+    setFullscreenFrame(window, monitor);
+    monitor_module.setWindow(monitor, @ptrCast(window));
+}
+
+fn releaseMonitor(window: *types.Window) void {
+    const monitor = window.monitor orelse return;
+    if (monitor_module.getWindow(monitor) != @as(*anyopaque, @ptrCast(window))) return;
+    monitor_module.setWindow(monitor, null);
+    monitor_module.restoreVideoMode(monitor);
+}
+
+fn updateVideoMode(window: *types.Window, monitor: ?*anyopaque, size: Size, refresh_rate: u32) void {
+    const current = if (monitor) |native_monitor| monitor_module.getVideoMode(native_monitor) else null;
+    window.video_width = size.width;
+    window.video_height = size.height;
+    window.video_red_bits = if (current) |mode| mode.red_bits else 8;
+    window.video_green_bits = if (current) |mode| mode.green_bits else 8;
+    window.video_blue_bits = if (current) |mode| mode.blue_bits else 8;
+    window.video_refresh_rate = refresh_rate;
+}
+
+fn applyWindowConstraints(window: *types.Window) void {
+    applyAspectRatio(window);
+    applySizeLimits(window);
+}
+
+fn applyAspectRatio(window: *types.Window) void {
+    const ns_window = objc.Object.fromId(window.window);
+    if (window.aspect_numerator == 0 or window.aspect_denominator == 0) {
+        ns_window.msgSend(void, "setResizeIncrements:", .{CGSize{ .width = 1.0, .height = 1.0 }});
+    } else {
+        ns_window.msgSend(void, "setContentAspectRatio:", .{CGSize{
+            .width = @floatFromInt(window.aspect_numerator),
+            .height = @floatFromInt(window.aspect_denominator),
+        }});
+    }
+}
+
+fn applySizeLimits(window: *types.Window) void {
+    const ns_window = objc.Object.fromId(window.window);
+    ns_window.msgSend(void, "setContentMinSize:", .{if (window.min_width == 0 or window.min_height == 0)
+        CGSize{ .width = 0.0, .height = 0.0 }
+    else
+        CGSize{ .width = @floatFromInt(window.min_width), .height = @floatFromInt(window.min_height) }});
+    ns_window.msgSend(void, "setContentMaxSize:", .{if (window.max_width == 0 or window.max_height == 0)
+        CGSize{ .width = std.math.floatMax(f64), .height = std.math.floatMax(f64) }
+    else
+        CGSize{ .width = @floatFromInt(window.max_width), .height = @floatFromInt(window.max_height) }});
+}
+
 fn setFullscreenFrame(window: *types.Window, monitor: *anyopaque) void {
     const bounds = monitor_module.getDisplayBounds(monitor);
     objc.Object.fromId(window.window).msgSend(void, "setFrame:display:", .{ CGRect{
@@ -743,6 +924,19 @@ fn centerCursorInContentArea(window: *types.Window) void {
 fn registerClasses() void {
     if (classes_registered) return;
 
+    helper_class = objc.allocateClassPair(objc.getClass("NSObject"), "ZingZigHelper").?;
+    _ = helper_class.?.addMethod("selectedKeyboardInputSourceChanged:", helperSelectedKeyboardInputSourceChanged);
+    _ = helper_class.?.addMethod("doNothing:", helperDoNothing);
+    objc.registerClassPair(helper_class.?);
+
+    app_delegate_class = objc.allocateClassPair(objc.getClass("NSObject"), "ZingZigApplicationDelegate").?;
+    _ = app_delegate_class.?.addMethod("applicationShouldTerminate:", applicationShouldTerminate);
+    _ = app_delegate_class.?.addMethod("applicationDidChangeScreenParameters:", applicationDidChangeScreenParameters);
+    _ = app_delegate_class.?.addMethod("applicationWillFinishLaunching:", applicationWillFinishLaunching);
+    _ = app_delegate_class.?.addMethod("applicationDidFinishLaunching:", applicationDidFinishLaunching);
+    _ = app_delegate_class.?.addMethod("applicationDidHide:", applicationDidHide);
+    objc.registerClassPair(app_delegate_class.?);
+
     window_class = objc.allocateClassPair(objc.getClass("NSWindow"), "ZingZigWindowObject").?;
     _ = window_class.?.addMethod("canBecomeKeyWindow", windowCanBecomeKeyWindow);
     _ = window_class.?.addMethod("canBecomeMainWindow", windowCanBecomeMainWindow);
@@ -758,6 +952,7 @@ fn registerClasses() void {
     _ = delegate_class.?.addMethod("windowDidResignKey:", delegateWindowDidResignKey);
     _ = delegate_class.?.addMethod("windowDidMiniaturize:", delegateWindowDidMiniaturize);
     _ = delegate_class.?.addMethod("windowDidDeminiaturize:", delegateWindowDidDeminiaturize);
+    _ = delegate_class.?.addMethod("windowDidChangeOcclusionState:", delegateWindowDidChangeOcclusionState);
     objc.registerClassPair(delegate_class.?);
 
     view_class = objc.allocateClassPair(objc.getClass("NSView"), "ZingZigContentView").?;
@@ -771,6 +966,7 @@ fn registerClasses() void {
     _ = view_class.?.addMethod("acceptsFirstResponder", viewAcceptsFirstResponder);
     _ = view_class.?.addMethod("canBecomeKeyView", viewCanBecomeKeyView);
     _ = view_class.?.addMethod("acceptsFirstMouse:", viewAcceptsFirstMouse);
+    _ = view_class.?.addMethod("isOpaque", viewIsOpaque);
     _ = view_class.?.addMethod("wantsUpdateLayer", viewWantsUpdateLayer);
     _ = view_class.?.addMethod("updateLayer", viewUpdateLayer);
     _ = view_class.?.addMethod("cursorUpdate:", viewCursorUpdate);
@@ -809,6 +1005,182 @@ fn registerClasses() void {
     objc.registerClassPair(view_class.?);
 
     classes_registered = true;
+}
+
+fn helperSelectedKeyboardInputSourceChanged(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
+    _ = input.updateUnicodeData();
+}
+
+fn helperDoNothing(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {}
+
+fn changeToResourcesDirectory() void {
+    const bundle = objc.getClass("NSBundle").?.msgSend(objc.Object, "mainBundle", .{});
+    if (bundle.value == null) return;
+
+    const resource_path = bundle.msgSend(objc.Object, "resourcePath", .{});
+    if (resource_path.value == null) return;
+
+    const last_component = resource_path.msgSend(objc.Object, "lastPathComponent", .{});
+    if (last_component.value == null) return;
+    if (!last_component.msgSend(bool, "isEqualToString:", .{nsString("Resources").value})) return;
+
+    const path = resource_path.msgSend([*:0]const u8, "fileSystemRepresentation", .{});
+    _ = chdir(path);
+}
+
+fn createMenuBar() void {
+    var app_name_buffer: [256:0]u8 = @splat(0);
+    const app_name = getApplicationName(&app_name_buffer);
+
+    const menu_class = objc.getClass("NSMenu").?;
+    const item_class = objc.getClass("NSMenuItem").?;
+    const app = sharedApplication();
+
+    const bar = menu_class.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{});
+    if (bar.value == null) return;
+    app.msgSend(void, "setMainMenu:", .{bar.value});
+
+    const app_menu_item = addMenuItem(bar, "", null, "");
+    const app_menu = menu_class.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{});
+    app_menu_item.msgSend(void, "setSubmenu:", .{app_menu.value});
+
+    var title_buffer: [320:0]u8 = @splat(0);
+    const about_title = std.fmt.bufPrintSentinel(&title_buffer, "About {s}", .{app_name}, 0) catch "About GLFW Application";
+    _ = addMenuItem(app_menu, about_title, objc.sel("orderFrontStandardAboutPanel:").value, "");
+    app_menu.msgSend(void, "addItem:", .{item_class.msgSend(objc.Object, "separatorItem", .{}).value});
+
+    const services_menu = menu_class.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{});
+    app.msgSend(void, "setServicesMenu:", .{services_menu.value});
+    addMenuItem(app_menu, "Services", null, "").msgSend(void, "setSubmenu:", .{services_menu.value});
+    services_menu.msgSend(void, "release", .{});
+
+    app_menu.msgSend(void, "addItem:", .{item_class.msgSend(objc.Object, "separatorItem", .{}).value});
+    const hide_title = std.fmt.bufPrintSentinel(&title_buffer, "Hide {s}", .{app_name}, 0) catch "Hide GLFW Application";
+    _ = addMenuItem(app_menu, hide_title, objc.sel("hide:").value, "h");
+    const hide_others = addMenuItem(app_menu, "Hide Others", objc.sel("hideOtherApplications:").value, "h");
+    hide_others.msgSend(void, "setKeyEquivalentModifierMask:", .{@as(usize, NSEventModifierFlagOption | NSEventModifierFlagCommand)});
+    _ = addMenuItem(app_menu, "Show All", objc.sel("unhideAllApplications:").value, "");
+    app_menu.msgSend(void, "addItem:", .{item_class.msgSend(objc.Object, "separatorItem", .{}).value});
+    const quit_title = std.fmt.bufPrintSentinel(&title_buffer, "Quit {s}", .{app_name}, 0) catch "Quit GLFW Application";
+    _ = addMenuItem(app_menu, quit_title, objc.sel("terminate:").value, "q");
+
+    const window_menu_item = addMenuItem(bar, "", null, "");
+    bar.msgSend(void, "release", .{});
+    const window_menu = menu_class.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "initWithTitle:", .{nsString("Window").value});
+    app.msgSend(void, "setWindowsMenu:", .{window_menu.value});
+    window_menu_item.msgSend(void, "setSubmenu:", .{window_menu.value});
+    _ = addMenuItem(window_menu, "Minimize", objc.sel("performMiniaturize:").value, "m");
+    _ = addMenuItem(window_menu, "Zoom", objc.sel("performZoom:").value, "");
+    window_menu.msgSend(void, "addItem:", .{item_class.msgSend(objc.Object, "separatorItem", .{}).value});
+    _ = addMenuItem(window_menu, "Bring All to Front", objc.sel("arrangeInFront:").value, "");
+    window_menu.msgSend(void, "addItem:", .{item_class.msgSend(objc.Object, "separatorItem", .{}).value});
+    const fullscreen = addMenuItem(window_menu, "Enter Full Screen", objc.sel("toggleFullScreen:").value, "f");
+    fullscreen.msgSend(void, "setKeyEquivalentModifierMask:", .{@as(usize, NSEventModifierFlagControl | NSEventModifierFlagCommand)});
+
+    app.msgSend(void, "performSelector:withObject:", .{ objc.sel("setAppleMenu:").value, app_menu.value });
+}
+
+fn addMenuItem(menu: objc.Object, title: [:0]const u8, action: objc.c.SEL, key: [:0]const u8) objc.Object {
+    return menu.msgSend(objc.Object, "addItemWithTitle:action:keyEquivalent:", .{
+        nsString(title).value,
+        action,
+        nsString(key).value,
+    });
+}
+
+fn getApplicationName(buffer: *[256:0]u8) [:0]const u8 {
+    const bundle = objc.getClass("NSBundle").?.msgSend(objc.Object, "mainBundle", .{});
+    const info = bundle.msgSend(objc.Object, "infoDictionary", .{});
+    const keys = [_][:0]const u8{
+        "CFBundleDisplayName",
+        "CFBundleName",
+        "CFBundleExecutable",
+    };
+
+    for (keys) |key| {
+        const name = info.msgSend(objc.Object, "objectForKey:", .{nsString(key).value});
+        if (name.value != null and
+            name.msgSend(bool, "isKindOfClass:", .{objc.getClass("NSString").?.value}) and
+            name.msgSend(usize, "length", .{}) > 0)
+        {
+            return copyApplicationName(buffer, std.mem.span(name.msgSend([*:0]const u8, "UTF8String", .{})));
+        }
+    }
+
+    if (_NSGetProgname()) |progname_ptr| {
+        if (progname_ptr.*) |progname| return copyApplicationName(buffer, std.mem.span(progname));
+    }
+
+    return "GLFW Application";
+}
+
+fn copyApplicationName(buffer: *[256:0]u8, value: []const u8) [:0]const u8 {
+    const len = @min(value.len, buffer.len - 1);
+    @memcpy(buffer[0..len], value[0..len]);
+    buffer[len] = 0;
+    return buffer[0..len :0];
+}
+
+fn trackWindow(window: *types.Window) void {
+    for (&window_list) |*slot| {
+        if (slot.* == null) {
+            slot.* = window;
+            return;
+        }
+    }
+}
+
+fn untrackWindow(window: *types.Window) void {
+    for (&window_list) |*slot| {
+        if (slot.* == window) {
+            slot.* = null;
+            return;
+        }
+    }
+}
+
+fn applicationShouldTerminate(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) c_long {
+    for (window_list) |maybe_window| {
+        if (maybe_window) |window| {
+            window.should_close = true;
+            callbacks().close(window.callback_id);
+        }
+    }
+    return 0;
+}
+
+fn applicationDidChangeScreenParameters(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
+    callbacks().monitor_changed();
+}
+
+fn applicationWillFinishLaunching(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
+    const bundle = objc.getClass("NSBundle").?.msgSend(objc.Object, "mainBundle", .{});
+    const main_menu = bundle.msgSend(objc.Object, "pathForResource:ofType:", .{
+        nsString("MainMenu").value,
+        nsString("nib").value,
+    });
+    if (main_menu.value != null) {
+        _ = bundle.msgSend(bool, "loadNibNamed:owner:topLevelObjects:", .{
+            nsString("MainMenu").value,
+            sharedApplication().value,
+            &nib_objects,
+        });
+    } else {
+        createMenuBar();
+    }
+}
+
+fn applicationDidFinishLaunching(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
+    @import("events.zig").postEmpty();
+    sharedApplication().msgSend(void, "stop:", .{@as(objc.c.id, null)});
+}
+
+fn applicationDidHide(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
+    const count = monitor_module.count();
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        if (monitor_module.get(i)) |monitor| monitor_module.restoreVideoMode(monitor);
+    }
 }
 
 fn windowCanBecomeKeyWindow(_: objc.c.id, _: objc.c.SEL) callconv(.c) bool {
@@ -872,24 +1244,27 @@ fn delegateWindowDidBecomeKey(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) call
 fn delegateWindowDidResignKey(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
     const window = windowFromObject(objc.Object.fromId(self));
     if (window.monitor != null and window.auto_iconify) iconify(@ptrCast(window));
-    window.modifier_key_states = @splat(false);
     callbacks().focus(window.callback_id, false);
 }
 
 fn delegateWindowDidMiniaturize(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
     const window = windowFromObject(objc.Object.fromId(self));
-    if (window.monitor) |monitor| monitor_module.restoreVideoMode(monitor);
+    releaseMonitor(window);
     callbacks().iconify(window.callback_id, true);
 }
 
 fn delegateWindowDidDeminiaturize(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
     const window = windowFromObject(objc.Object.fromId(self));
-    if (window.monitor) |monitor| {
-        const mode = monitor_module.getVideoMode(monitor);
-        _ = monitor_module.setVideoMode(monitor, mode);
-        setFullscreenFrame(window, monitor);
-    }
+    if (window.monitor) |monitor| acquireMonitor(window, monitor);
     callbacks().iconify(window.callback_id, false);
+}
+
+fn delegateWindowDidChangeOcclusionState(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
+    const window = windowFromObject(objc.Object.fromId(self));
+    const ns_window = objc.Object.fromId(window.window);
+    if (ns_window.msgSend(bool, "respondsToSelector:", .{objc.sel("occlusionState").value})) {
+        window.occluded = (ns_window.msgSend(usize, "occlusionState", .{}) & NSWindowOcclusionStateVisible) == 0;
+    }
 }
 
 fn viewInitWithFrame(self: objc.c.id, _: objc.c.SEL, frame: CGRect, window: objc.c.id) callconv(.c) objc.c.id {
@@ -899,15 +1274,19 @@ fn viewInitWithFrame(self: objc.c.id, _: objc.c.SEL, frame: CGRect, window: objc
     setWindowIvar(object, window);
     setTrackingAreaIvar(object, null);
     windowFromObject(object).marked_text = objc.getClass("NSMutableAttributedString").?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{}).value;
-    object.msgSend(void, "setWantsLayer:", .{true});
     viewUpdateTrackingAreas(object.value, undefined);
-    object.msgSend(void, "registerForDraggedTypes:", .{objc.getClass("NSArray").?.msgSend(objc.Object, "arrayWithObject:", .{nsString("public.file-url").value}).value});
+    object.msgSend(void, "registerForDraggedTypes:", .{objc.getClass("NSArray").?.msgSend(objc.Object, "arrayWithObject:", .{nsString("public.url").value}).value});
     return object.value;
 }
 
 fn viewDealloc(self: objc.c.id, _: objc.c.SEL) callconv(.c) void {
     const object = objc.Object.fromId(self);
+    const window = windowFromObject(object);
     if (getTrackingAreaIvar(object)) |tracking_area| objc.Object.fromId(tracking_area).msgSend(void, "release", .{});
+    if (window.marked_text) |marked_text| {
+        objc.Object.fromId(marked_text).msgSend(void, "release", .{});
+        window.marked_text = null;
+    }
     object.msgSendSuper(objc.getClass("NSView").?, void, "dealloc", .{});
 }
 
@@ -921,6 +1300,11 @@ fn viewCanBecomeKeyView(_: objc.c.id, _: objc.c.SEL) callconv(.c) bool {
 
 fn viewAcceptsFirstMouse(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) bool {
     return true;
+}
+
+fn viewIsOpaque(self: objc.c.id, _: objc.c.SEL) callconv(.c) bool {
+    const window = windowFromObject(objc.Object.fromId(self));
+    return objc.Object.fromId(window.window).msgSend(bool, "isOpaque", .{});
 }
 
 fn viewWantsUpdateLayer(_: objc.c.id, _: objc.c.SEL) callconv(.c) bool {
@@ -941,7 +1325,6 @@ fn viewDrawRect(self: objc.c.id, _: objc.c.SEL, _: CGRect) callconv(.c) void {
 
 fn viewDidChangeBackingProperties(self: objc.c.id, _: objc.c.SEL) callconv(.c) void {
     const object = objc.Object.fromId(self);
-    object.msgSendSuper(objc.getClass("NSView").?, void, "viewDidChangeBackingProperties", .{});
     const window = windowFromObject(object);
     const handle: *anyopaque = @ptrCast(window);
     const content = viewObject(handle).msgSend(CGRect, "frame", .{});
@@ -949,9 +1332,8 @@ fn viewDidChangeBackingProperties(self: objc.c.id, _: objc.c.SEL) callconv(.c) v
     const xscale = framebuffer.size.width / content.size.width;
     const yscale = framebuffer.size.height / content.size.height;
     if (xscale != window.xscale or yscale != window.yscale) {
-        if (window.scale_framebuffer) {
-            const layer = viewObject(handle).msgSend(objc.Object, "layer", .{});
-            if (layer.value != null) layer.msgSend(void, "setContentsScale:", .{windowObject(handle).msgSend(f64, "backingScaleFactor", .{})});
+        if (window.scale_framebuffer and window.layer != null) {
+            objc.Object.fromId(window.layer).msgSend(void, "setContentsScale:", .{windowObject(handle).msgSend(f64, "backingScaleFactor", .{})});
         }
         window.xscale = xscale;
         window.yscale = yscale;
@@ -988,12 +1370,11 @@ fn viewFlagsChanged(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callcon
     const key_code: u16 = @intCast(event.msgSend(c_ushort, "keyCode", .{}));
     const key = input.translateKey(key_code);
     const key_flag = translateKeyToModifierFlag(key);
+    const previous_state = callbacks().key_state(window.callback_id, key);
     const action: i32 = if (key_flag != 0 and (flags & key_flag) != 0)
-        if (key >= 0 and key < window.modifier_key_states.len and window.modifier_key_states[@intCast(key)]) 0 else 1
+        if (previous_state == 1) 0 else 1
     else
         0;
-    window.modifier_flags = flags;
-    if (key >= 0 and key < window.modifier_key_states.len) window.modifier_key_states[@intCast(key)] = action == 1;
     callbacks().key(window.callback_id, key, key_code, action, translateMods(flags));
 }
 
@@ -1029,11 +1410,9 @@ fn viewMouseMoved(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callconv(
     if (window.cursor_mode == 2) {
         const dx = event.msgSend(f64, "deltaX", .{}) - window.cursor_warp_delta_x;
         const dy = event.msgSend(f64, "deltaY", .{}) - window.cursor_warp_delta_y;
-        if (dx != 0.0 or dy != 0.0) {
-            window.virtual_cursor_x += dx;
-            window.virtual_cursor_y += dy;
-            callbacks().cursor_pos(window.callback_id, window.virtual_cursor_x, window.virtual_cursor_y);
-        }
+        window.virtual_cursor_x += dx;
+        window.virtual_cursor_y += dy;
+        callbacks().cursor_pos(window.callback_id, window.virtual_cursor_x, window.virtual_cursor_y);
     } else {
         const pos = cursorPosFromEvent(window, event);
         callbacks().cursor_pos(window.callback_id, @floatFromInt(pos.x), @floatFromInt(pos.y));
@@ -1093,7 +1472,7 @@ fn viewMouseExited(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) vo
 }
 
 fn viewDraggingEntered(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) c_ulong {
-    return 4;
+    return NSDragOperationGeneric;
 }
 
 fn viewPerformDragOperation(self: objc.c.id, _: objc.c.SEL, sender_id: objc.c.id) callconv(.c) bool {
@@ -1324,9 +1703,16 @@ const NSRange = extern struct {
 };
 
 const CGDirectDisplayID = u32;
+const CGEventSourceRef = *anyopaque;
 
+extern "c" fn _NSGetProgname() ?*?[*:0]u8;
+extern "c" fn chdir(path: [*:0]const u8) c_int;
+extern "c" fn CFRelease(object: *anyopaque) void;
+extern "c" fn CGEventSourceCreate(state_id: c_int) ?CGEventSourceRef;
+extern "c" fn CGEventSourceSetLocalEventsSuppressionInterval(source: CGEventSourceRef, seconds: f64) void;
 extern "c" fn CGMainDisplayID() CGDirectDisplayID;
 extern "c" fn CGDisplayBounds(display: CGDirectDisplayID) CGRect;
+extern "c" fn CGDisplayMoveCursorToPoint(display: CGDirectDisplayID, point: CGPoint) void;
 extern "c" fn CGWarpMouseCursorPosition(point: CGPoint) void;
 extern "c" fn CGAssociateMouseAndMouseCursorPosition(connected: bool) void;
 extern "c" fn NSMouseInRect(point: CGPoint, rect: CGRect, flipped: bool) bool;

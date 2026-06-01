@@ -4,9 +4,6 @@ const poll_axes: u8 = 1;
 const poll_buttons: u8 = 2;
 
 const max_joysticks = 16;
-const max_axes = 64;
-const max_buttons = 128;
-const max_hats = 16;
 
 const ConnectFn = *const fn (usize, []const u8, []const u8, usize, usize, usize) void;
 const DisconnectFn = *const fn (usize) void;
@@ -32,12 +29,9 @@ const Element = struct {
 
 const Slot = struct {
     device: ?IOHIDDeviceRef = null,
-    axes: [max_axes]Element = undefined,
-    axis_count: usize = 0,
-    buttons: [max_buttons]Element = undefined,
-    button_count: usize = 0,
-    hats: [max_hats]Element = undefined,
-    hat_count: usize = 0,
+    axes: std.ArrayList(Element) = .empty,
+    buttons: std.ArrayList(Element) = .empty,
+    hats: std.ArrayList(Element) = .empty,
 };
 
 var callbacks: ?Callbacks = null;
@@ -93,7 +87,7 @@ pub fn poll(index: usize, mode: u8) !bool {
 
     const slot = &slots[index];
     if ((mode & poll_axes) != 0) {
-        for (slot.axes[0..slot.axis_count], 0..) |*axis, axis_index| {
+        for (slot.axes.items, 0..) |*axis, axis_index| {
             const raw = getElementValue(slot, axis);
             if (raw < axis.minimum) axis.minimum = raw;
             if (raw > axis.maximum) axis.maximum = raw;
@@ -108,7 +102,7 @@ pub fn poll(index: usize, mode: u8) !bool {
     }
 
     if ((mode & poll_buttons) != 0) {
-        for (slot.buttons[0..slot.button_count], 0..) |*button, button_index| {
+        for (slot.buttons.items, 0..) |*button, button_index| {
             callbacks.?.button(index, button_index, getElementValue(slot, button) - button.minimum > 0);
         }
 
@@ -123,7 +117,7 @@ pub fn poll(index: usize, mode: u8) !bool {
             0x09,
             0x00,
         };
-        for (slot.hats[0..slot.hat_count], 0..) |*hat, hat_index| {
+        for (slot.hats.items, 0..) |*hat, hat_index| {
             var state = getElementValue(slot, hat) - hat.minimum;
             if (state < 0 or state > 8) state = 8;
             callbacks.?.hat(index, hat_index, states[@intCast(state)]);
@@ -193,16 +187,16 @@ fn matchCallback(_: ?*anyopaque, _: IOReturn, _: ?*anyopaque, device: IOHIDDevic
         const usage = IOHIDElementGetUsage(element);
         const page = IOHIDElementGetUsagePage(element);
         const target = targetForUsage(slot, page, usage) orelse continue;
-        appendElement(target.slice, target.count, element, usage);
+        appendElement(target.list, element, usage);
     }
 
-    sortElements(slot.axes[0..slot.axis_count]);
-    sortElements(slot.buttons[0..slot.button_count]);
-    sortElements(slot.hats[0..slot.hat_count]);
+    sortElements(slot.axes.items);
+    sortElements(slot.buttons.items);
+    sortElements(slot.hats.items);
 
-    CFRetain(device);
+    _ = CFRetain(device);
     slot.device = device;
-    callbacks.?.connect(slot_index, std.mem.sliceTo(&name, 0), guid[0..32], slot.axis_count, slot.button_count, slot.hat_count);
+    callbacks.?.connect(slot_index, std.mem.sliceTo(&name, 0), guid[0..32], slot.axes.items.len, slot.buttons.items.len, slot.hats.items.len);
 }
 
 fn removeCallback(_: ?*anyopaque, _: IOReturn, _: ?*anyopaque, device: IOHIDDeviceRef) callconv(.c) void {
@@ -218,6 +212,9 @@ fn closeSlot(index: usize) void {
     if (slots[index].device) |device| {
         callbacks.?.disconnect(index);
         CFRelease(device);
+        slots[index].axes.deinit(std.heap.c_allocator);
+        slots[index].buttons.deinit(std.heap.c_allocator);
+        slots[index].hats.deinit(std.heap.c_allocator);
         slots[index] = .{};
     }
 }
@@ -232,8 +229,7 @@ fn getElementValue(slot: *const Slot, element: *const Element) c_long {
 }
 
 const Target = struct {
-    slice: []Element,
-    count: *usize,
+    list: *std.ArrayList(Element),
 };
 
 fn targetForUsage(slot: *Slot, page: u32, usage: u32) ?Target {
@@ -248,8 +244,8 @@ fn targetForUsage(slot: *Slot, page: u32, usage: u32) ?Target {
             kHIDUsage_GD_Slider,
             kHIDUsage_GD_Dial,
             kHIDUsage_GD_Wheel,
-            => return .{ .slice = &slot.axes, .count = &slot.axis_count },
-            kHIDUsage_GD_Hatswitch => return .{ .slice = &slot.hats, .count = &slot.hat_count },
+            => return .{ .list = &slot.axes },
+            kHIDUsage_GD_Hatswitch => return .{ .list = &slot.hats },
             kHIDUsage_GD_DPadUp,
             kHIDUsage_GD_DPadRight,
             kHIDUsage_GD_DPadDown,
@@ -257,7 +253,7 @@ fn targetForUsage(slot: *Slot, page: u32, usage: u32) ?Target {
             kHIDUsage_GD_SystemMainMenu,
             kHIDUsage_GD_Select,
             kHIDUsage_GD_Start,
-            => return .{ .slice = &slot.buttons, .count = &slot.button_count },
+            => return .{ .list = &slot.buttons },
             else => {},
         }
     } else if (page == kHIDPage_Simulation) {
@@ -267,25 +263,23 @@ fn targetForUsage(slot: *Slot, page: u32, usage: u32) ?Target {
             kHIDUsage_Sim_Throttle,
             kHIDUsage_Sim_Rudder,
             kHIDUsage_Sim_Steering,
-            => return .{ .slice = &slot.axes, .count = &slot.axis_count },
+            => return .{ .list = &slot.axes },
             else => {},
         }
     } else if (page == kHIDPage_Button or page == kHIDPage_Consumer) {
-        return .{ .slice = &slot.buttons, .count = &slot.button_count };
+        return .{ .list = &slot.buttons };
     }
     return null;
 }
 
-fn appendElement(slice: []Element, count: *usize, native: IOHIDElementRef, usage: u32) void {
-    if (count.* >= slice.len) return;
-    slice[count.*] = .{
+fn appendElement(list: *std.ArrayList(Element), native: IOHIDElementRef, usage: u32) void {
+    list.append(std.heap.c_allocator, .{
         .native = native,
         .usage = usage,
-        .index = count.*,
+        .index = list.items.len,
         .minimum = IOHIDElementGetLogicalMin(native),
         .maximum = IOHIDElementGetLogicalMax(native),
-    };
-    count.* += 1;
+    }) catch {};
 }
 
 fn sortElements(elements: []Element) void {
@@ -353,7 +347,7 @@ const CFTypeID = usize;
 const IOReturn = c_int;
 const IOHIDManagerRef = *opaque {};
 const IOHIDDeviceRef = *opaque {};
-const IOHIDElementRef = *opaque {};
+const IOHIDElementRef = *const opaque {};
 const IOHIDValueRef = *opaque {};
 const IOOptionBits = u32;
 

@@ -7,6 +7,7 @@ const platform = @import("platform.zig");
 
 pub const CocoaWindow = opaque {};
 pub const CocoaView = opaque {};
+pub const CocoaMonitor = u32;
 pub const Win32Window = opaque {};
 pub const X11Display = opaque {};
 pub const X11Window = usize;
@@ -21,6 +22,11 @@ pub fn getCocoaWindow(window: Window) !*CocoaWindow {
 pub fn getCocoaView(window: Window) !*CocoaView {
     if (platform.os_tag != .macos) return error.PlatformUnavailable;
     return @ptrCast(platform.Native.getCocoaView(try window.nativeHandle()) orelse return error.PlatformError);
+}
+
+pub fn getCocoaMonitor(monitor: Monitor) !CocoaMonitor {
+    if (platform.os_tag != .macos) return error.PlatformUnavailable;
+    return platform.Native.getCocoaMonitor(try MonitorModule.nativeHandle(monitor));
 }
 
 pub fn getWin32Window(window: Window) !*Win32Window {

@@ -107,6 +107,7 @@ pub const Config = extern struct {
     scale_framebuffer: bool,
     transparent_framebuffer: bool,
     mouse_passthrough: bool,
+    monitor: ?*anyopaque,
 };
 
 pub const ContentScale = extern struct {
@@ -147,6 +148,7 @@ pub const EventCallbacks = struct {
     framebuffer_size: *const fn (usize, u32, u32) void,
     content_scale: *const fn (usize, f32, f32) void,
     key: *const fn (usize, i32, i32, i32, u8) void,
+    key_state: *const fn (usize, i32) i32,
     char: *const fn (usize, u32) void,
     char_mods: *const fn (usize, u32, u8) void,
     mouse_button: *const fn (usize, i32, i32, u8) void,
@@ -155,6 +157,7 @@ pub const EventCallbacks = struct {
     scroll: *const fn (usize, f64, f64) void,
     refresh: *const fn (usize) void,
     drop: *const fn (usize, usize, [*][*:0]const u8) void,
+    monitor_changed: *const fn () void,
 };
 
 const max_windows = 128;

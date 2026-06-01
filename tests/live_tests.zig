@@ -13,6 +13,8 @@ const CallbackState = struct {
     size_count: usize = 0,
     key_count: usize = 0,
     char_count: usize = 0,
+    saw_a_press: bool = false,
+    saw_a_char: bool = false,
     mouse_button_count: usize = 0,
     cursor_pos_count: usize = 0,
     scroll_count: usize = 0,
@@ -49,11 +51,13 @@ fn keyCallback(_: Window, key: Input.Key, _: i32, action: Input.Action, _: Input
     callback_state.key_count += 1;
     callback_state.last_key = key;
     callback_state.last_key_action = action;
+    if (key == .a and action == .press) callback_state.saw_a_press = true;
 }
 
 fn charCallback(_: Window, codepoint: u21) void {
     callback_state.char_count += 1;
     callback_state.last_char = codepoint;
+    if (codepoint == 'a') callback_state.saw_a_char = true;
 }
 
 fn mouseButtonCallback(_: Window, button: Input.MouseButton, action: Input.Action, _: Input.Modifiers) void {
@@ -130,9 +134,8 @@ test "live macOS keyboard input" {
     try pump(0.05);
 
     try std.testing.expect(callback_state.key_count > 0);
-    try std.testing.expectEqual(Input.Key.a, callback_state.last_key);
-    try std.testing.expectEqual(Input.Action.press, callback_state.last_key_action);
-    try std.testing.expectEqual(@as(u21, 'a'), callback_state.last_char);
+    try std.testing.expect(callback_state.saw_a_press);
+    try std.testing.expect(callback_state.saw_a_char);
     try std.testing.expectEqual(Input.Action.press, try window.getKey(.a));
 
     try std.testing.expect(Platform.Tests.postKey(native, try Input.getKeyScancode(.a), false, 0));

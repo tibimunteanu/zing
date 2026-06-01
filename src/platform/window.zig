@@ -226,6 +226,7 @@ pub fn initSystem() !void {
         .framebuffer_size = platformWindowFramebufferSize,
         .content_scale = platformWindowContentScale,
         .key = platformWindowKey,
+        .key_state = platformWindowKeyState,
         .char = platformWindowChar,
         .char_mods = platformWindowCharMods,
         .mouse_button = platformWindowMouseButton,
@@ -234,6 +235,7 @@ pub fn initSystem() !void {
         .scroll = platformWindowScroll,
         .refresh = platformWindowRefresh,
         .drop = platformWindowDrop,
+        .monitor_changed = platformMonitorChanged,
     });
 
     if (!platform.Window.init()) {
@@ -286,6 +288,7 @@ pub fn create(width: u32, height: u32, title: [:0]const u8, monitor: ?Monitor, s
             .scale_framebuffer = hints.scale_framebuffer,
             .transparent_framebuffer = hints.transparent_framebuffer,
             .mouse_passthrough = hints.mouse_passthrough,
+            .monitor = if (monitor) |value| try @import("monitor.zig").nativeHandle(value) else null,
         };
         break :blk platform.Window.create(&config) orelse {
             Errors.report(.platform_error, "failed to create platform window", .{});
@@ -309,6 +312,7 @@ pub fn create(width: u32, height: u32, title: [:0]const u8, monitor: ?Monitor, s
     const id = try insert(state);
     platform.Window.setCallbackId(native, id);
     if (monitor) |value| {
+        if (platform.os_tag == .macos) return .{ .id = id };
         const native_monitor = try @import("monitor.zig").nativeHandle(value);
         platform.Window.setMonitor(
             native,
@@ -317,6 +321,11 @@ pub fn create(width: u32, height: u32, title: [:0]const u8, monitor: ?Monitor, s
             .{ .width = width, .height = height },
             0,
         );
+        platform.Window.show(native);
+        platform.Window.focus(native);
+        if (hints.center_cursor) {
+            platform.Window.setCursorPos(native, @as(f64, @floatFromInt(width)) / 2.0, @as(f64, @floatFromInt(height)) / 2.0);
+        }
     }
     return .{ .id = id };
 }
@@ -878,22 +887,17 @@ fn filterMods(state: *const State, mods: Input.Modifiers) Input.Modifiers {
 }
 
 fn releasePressedInputs(window: Window, state: *State) void {
-    const mods = Input.Modifiers{};
-    for (&state.key_states, 0..) |*key_state, i| {
-        if (key_state.* == .press or key_state.* == .repeat) {
-            key_state.* = .release;
-            if (state.key_callback) |callback| {
-                callback(window, std.enums.fromInt(Input.Key, i) orelse .unknown, 0, .release, mods);
-            }
+    for (state.key_states, 0..) |key_state, i| {
+        if (key_state == .press or key_state == .repeat) {
+            const key = std.enums.fromInt(Input.Key, i) orelse .unknown;
+            const scancode = if (key == .unknown) 0 else Input.getKeyScancode(key) catch 0;
+            platformWindowKey(window.id, @intFromEnum(key), scancode, 0, 0);
         }
     }
 
-    for (&state.mouse_button_states, 0..) |*button_state, i| {
-        if (button_state.* == .press) {
-            button_state.* = .release;
-            if (state.mouse_button_callback) |callback| {
-                callback(window, Input.mouseButtonFromIndex(i), .release, mods);
-            }
+    for (state.mouse_button_states, 0..) |button_state, i| {
+        if (button_state == .press) {
+            platformWindowMouseButton(window.id, @intCast(i), 0, 0);
         }
     }
 }
@@ -965,21 +969,32 @@ fn platformWindowKey(id: usize, key_code: i32, scancode: i32, action_value: i32,
     };
 
     if (getStatePtr(window) catch null) |state| {
-        const key_index = @intFromEnum(key);
-        if (action == .release and state.key_states[key_index] == .release and !state.sticky_key_states[key_index]) return;
-        if (action == .press and state.key_states[key_index] == .press) action = .repeat;
+        if (key != .unknown) {
+            const key_index = @intFromEnum(key);
+            if (action == .release and state.key_states[key_index] == .release and !state.sticky_key_states[key_index]) return;
+            if (action == .press and state.key_states[key_index] == .press) action = .repeat;
 
-        if (action == .release and state.sticky_keys) {
-            state.sticky_key_states[key_index] = true;
-            state.key_states[key_index] = .release;
-        } else {
-            state.key_states[key_index] = if (action == .repeat) .press else action;
-            if (action == .press) state.sticky_key_states[key_index] = false;
+            if (action == .release and state.sticky_keys) {
+                state.sticky_key_states[key_index] = true;
+                state.key_states[key_index] = .release;
+            } else {
+                state.key_states[key_index] = if (action == .repeat) .press else action;
+                if (action == .press) state.sticky_key_states[key_index] = false;
+            }
         }
 
         const mods = filterMods(state, @bitCast(mods_value));
         if (state.key_callback) |callback| callback(window, key, scancode, action, mods);
     }
+}
+
+fn platformWindowKeyState(id: usize, key_code: i32) i32 {
+    const window = Window{ .id = id };
+    const key: Input.Key = std.enums.fromInt(Input.Key, key_code) orelse return 0;
+    if (getStatePtr(window) catch null) |state| {
+        return if (state.key_states[@intFromEnum(key)] == .press) 1 else 0;
+    }
+    return 0;
 }
 
 fn platformWindowChar(id: usize, codepoint: u32) void {
@@ -1060,6 +1075,10 @@ fn platformWindowDrop(id: usize, count: usize, paths: [*][*:0]const u8) void {
             callback(window, buffer);
         }
     }
+}
+
+fn platformMonitorChanged() void {
+    @import("monitor.zig").poll() catch {};
 }
 
 fn mouseButtonFromNative(button: i32) Input.MouseButton {
