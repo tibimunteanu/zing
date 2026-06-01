@@ -10,6 +10,9 @@ pub const Image = extern struct {
 };
 
 pub fn create(image: *const Image, x_hot: i32, y_hot: i32) ?*anyopaque {
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
     const rep = objc.getClass("NSBitmapImageRep").?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:", .{
         @as(?*anyopaque, null),
         @as(isize, @intCast(image.width)),
@@ -52,20 +55,44 @@ pub fn create(image: *const Image, x_hot: i32, y_hot: i32) ?*anyopaque {
 }
 
 pub fn createStandard(shape: c_int) ?*anyopaque {
-    const selector: [:0]const u8 = switch (shape) {
-        0 => "arrowCursor",
-        1 => "IBeamCursor",
-        2 => "crosshairCursor",
-        3 => "pointingHandCursor",
-        4 => "resizeLeftRightCursor",
-        5 => "resizeUpDownCursor",
-        8 => "closedHandCursor",
-        9 => "operationNotAllowedCursor",
-        else => return null,
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
+    const cursor_class = objc.getClass("NSCursor").?;
+    var cursor: objc.Object = .{ .value = null };
+
+    const private_selector: ?objc.Sel = switch (shape) {
+        4 => objc.sel("_windowResizeEastWestCursor"),
+        5 => objc.sel("_windowResizeNorthSouthCursor"),
+        6 => objc.sel("_windowResizeNorthWestSouthEastCursor"),
+        7 => objc.sel("_windowResizeNorthEastSouthWestCursor"),
+        else => null,
     };
 
-    const cursor = objc.getClass("NSCursor").?.msgSend(objc.Object, selector, .{});
-    if (cursor.value == null) return null;
+    if (private_selector) |selector| {
+        if (cursor_class.respondsToSelector(selector)) {
+            const object = cursor_class.msgSend(objc.Object, "performSelector:", .{selector.value});
+            if (object.value != null and object.msgSend(bool, "isKindOfClass:", .{cursor_class.value})) {
+                cursor = object;
+            }
+        }
+    }
+
+    if (cursor.value == null) {
+        const selector: [:0]const u8 = switch (shape) {
+            0 => "arrowCursor",
+            1 => "IBeamCursor",
+            2 => "crosshairCursor",
+            3 => "pointingHandCursor",
+            4 => "resizeLeftRightCursor",
+            5 => "resizeUpDownCursor",
+            8 => "closedHandCursor",
+            9 => "operationNotAllowedCursor",
+            else => return null,
+        };
+        cursor = cursor_class.msgSend(objc.Object, selector, .{});
+        if (cursor.value == null) return null;
+    }
 
     const result = std.heap.c_allocator.create(types.Cursor) catch return null;
     result.* = .{
@@ -75,6 +102,9 @@ pub fn createStandard(shape: c_int) ?*anyopaque {
 }
 
 pub fn destroy(handle: *anyopaque) void {
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
     const native: *types.Cursor = @ptrCast(@alignCast(handle));
     objc.Object.fromId(native.cursor).msgSend(void, "release", .{});
     std.heap.c_allocator.destroy(native);

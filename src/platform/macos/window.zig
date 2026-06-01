@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const input = @import("input.zig");
+const monitor_module = @import("monitor.zig");
 const objc = @import("objc.zig");
 const types = @import("types.zig");
 
@@ -12,8 +13,12 @@ pub const Config = extern struct {
     visible: bool,
     decorated: bool,
     focused: bool,
+    auto_iconify: bool,
     floating: bool,
     maximized: bool,
+    center_cursor: bool,
+    scale_to_monitor: bool,
+    scale_framebuffer: bool,
     transparent_framebuffer: bool,
     mouse_passthrough: bool,
 };
@@ -40,6 +45,12 @@ pub const Size = extern struct {
     height: u32,
 };
 
+pub const IconImage = extern struct {
+    width: u32,
+    height: u32,
+    pixels: [*]const u8,
+};
+
 const NSWindowStyleMaskBorderless: usize = 0;
 const NSWindowStyleMaskTitled: usize = 1 << 0;
 const NSWindowStyleMaskClosable: usize = 1 << 1;
@@ -48,6 +59,10 @@ const NSWindowStyleMaskResizable: usize = 1 << 3;
 const NSBackingStoreBuffered: usize = 2;
 const NSNormalWindowLevel: isize = 0;
 const NSFloatingWindowLevel: isize = 3;
+const NSMainMenuWindowLevel: isize = 24;
+const NSWindowCollectionBehaviorManaged: usize = 1 << 2;
+const NSWindowCollectionBehaviorFullScreenPrimary: usize = 1 << 7;
+const NSWindowCollectionBehaviorFullScreenNone: usize = 1 << 9;
 const NSApplicationActivationPolicyRegular: isize = 0;
 const NSEventModifierFlagCapsLock: usize = 1 << 16;
 const NSEventModifierFlagShift: usize = 1 << 17;
@@ -61,12 +76,19 @@ const NSTrackingActiveInKeyWindow: usize = 0x20;
 const NSTrackingAssumeInside: usize = 0x100;
 const NSTrackingInVisibleRect: usize = 0x200;
 const NSTrackingEnabledDuringMouseDrag: usize = 0x400;
+const NSUTF32StringEncoding: c_ulong = 0x8c000100;
+const empty_range = NSRange{ .location = std.math.maxInt(c_ulong), .length = 0 };
 
 var app_initialized = false;
 var classes_registered = false;
 var window_class: ?objc.Class = null;
 var delegate_class: ?objc.Class = null;
 var view_class: ?objc.Class = null;
+var cursor_hidden = false;
+var disabled_cursor_window: ?*types.Window = null;
+var restore_cursor_pos_x: f64 = 0.0;
+var restore_cursor_pos_y: f64 = 0.0;
+var clipboard_string: ?[:0]u8 = null;
 
 pub const EventCallbacks = struct {
     close: *const fn (usize) void,
@@ -105,6 +127,10 @@ pub fn init() bool {
 }
 
 pub fn deinit() void {
+    if (clipboard_string) |value| {
+        std.heap.c_allocator.free(value);
+        clipboard_string = null;
+    }
     app_initialized = false;
 }
 
@@ -137,12 +163,37 @@ pub fn create(config: *const Config) ?*anyopaque {
         .window = ns_window.value,
         .view = null,
         .delegate = null,
+        .cursor = null,
+        .marked_text = null,
+        .monitor = null,
         .should_close = false,
         .maximized = false,
+        .resizable = config.resizable,
+        .decorated = config.decorated,
+        .floating = config.floating,
+        .auto_iconify = config.auto_iconify,
+        .scale_framebuffer = config.scale_framebuffer,
         .user_pointer = null,
         .callback_id = 0,
         .cursor_mode = 0,
         .modifier_flags = 0,
+        .cursor_warp_delta_x = 0.0,
+        .cursor_warp_delta_y = 0.0,
+        .virtual_cursor_x = 0.0,
+        .virtual_cursor_y = 0.0,
+        .windowed_x = 0.0,
+        .windowed_y = 0.0,
+        .windowed_width = 0.0,
+        .windowed_height = 0.0,
+        .width = 0.0,
+        .height = 0.0,
+        .fb_width = 0.0,
+        .fb_height = 0.0,
+        .xscale = 0.0,
+        .yscale = 0.0,
+        .windowed_style = style,
+        .windowed_level = NSNormalWindowLevel,
+        .windowed_has_shadow = true,
     };
     errdefer std.heap.c_allocator.destroy(result);
 
@@ -162,6 +213,10 @@ pub fn create(config: *const Config) ?*anyopaque {
     setTitle(@ptrCast(result), config.title);
     ns_window.msgSend(void, "setAcceptsMouseMovedEvents:", .{true});
     ns_window.msgSend(void, "setRestorable:", .{false});
+    ns_window.msgSend(void, "setCollectionBehavior:", .{if (config.resizable)
+        @as(usize, NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorManaged)
+    else
+        @as(usize, NSWindowCollectionBehaviorFullScreenNone)});
     ns_window.msgSend(void, "center", .{});
 
     if (config.transparent_framebuffer) {
@@ -178,16 +233,20 @@ pub fn create(config: *const Config) ?*anyopaque {
         sharedApplication().msgSend(void, "activateIgnoringOtherApps:", .{true});
         ns_window.msgSend(void, "makeKeyAndOrderFront:", .{@as(objc.c.id, null)});
     }
+    updateCachedWindowMetrics(result);
 
     return @ptrCast(result);
 }
 
 pub fn destroy(handle: *anyopaque) void {
     const window = native(handle);
+    if (disabled_cursor_window == window) disabled_cursor_window = null;
+    if (window.monitor) |monitor| monitor_module.restoreVideoMode(monitor);
     const ns_window = objc.Object.fromId(window.window);
     ns_window.msgSend(void, "orderOut:", .{@as(objc.c.id, null)});
     ns_window.msgSend(void, "setDelegate:", .{@as(objc.c.id, null)});
     ns_window.msgSend(void, "setContentView:", .{@as(objc.c.id, null)});
+    if (window.marked_text) |marked_text| objc.Object.fromId(marked_text).msgSend(void, "release", .{});
     if (window.delegate) |delegate| objc.Object.fromId(delegate).msgSend(void, "release", .{});
     if (window.view) |view| objc.Object.fromId(view).msgSend(void, "release", .{});
     ns_window.msgSend(void, "close", .{});
@@ -242,6 +301,21 @@ pub fn getSize(handle: *anyopaque) Size {
 }
 
 pub fn setSize(handle: *anyopaque, size: Size) void {
+    const window = native(handle);
+    if (window.monitor) |monitor| {
+        const current = monitor_module.getVideoMode(monitor);
+        _ = monitor_module.setVideoMode(monitor, .{
+            .width = size.width,
+            .height = size.height,
+            .red_bits = current.red_bits,
+            .green_bits = current.green_bits,
+            .blue_bits = current.blue_bits,
+            .refresh_rate = current.refresh_rate,
+        });
+        setFullscreenFrame(window, monitor);
+        return;
+    }
+
     const ns_window = windowObject(handle);
     var content = ns_window.msgSend(CGRect, "contentRectForFrameRect:", .{ns_window.msgSend(CGRect, "frame", .{})});
     content.origin.y += content.size.height - @as(f64, @floatFromInt(size.height));
@@ -250,6 +324,110 @@ pub fn setSize(handle: *anyopaque, size: Size) void {
         .height = @floatFromInt(size.height),
     };
     ns_window.msgSend(void, "setFrame:display:", .{ ns_window.msgSend(CGRect, "frameRectForContentRect:", .{content}), true });
+    updateCachedWindowMetrics(window);
+}
+
+pub fn setMonitor(handle: *anyopaque, monitor: ?*anyopaque, pos: Pos, size: Size, refresh_rate: u32) void {
+    const window = native(handle);
+    const ns_window = windowObject(handle);
+
+    if (window.monitor == monitor) {
+        if (monitor) |native_monitor| {
+            _ = monitor_module.setVideoMode(native_monitor, .{
+                .width = size.width,
+                .height = size.height,
+                .red_bits = 8,
+                .green_bits = 8,
+                .blue_bits = 8,
+                .refresh_rate = refresh_rate,
+            });
+            setFullscreenFrame(window, native_monitor);
+        } else {
+            const content = CGRect{
+                .origin = .{
+                    .x = @floatFromInt(pos.x),
+                    .y = transformY(@as(f64, @floatFromInt(pos.y)) + @as(f64, @floatFromInt(size.height)) - 1.0),
+                },
+                .size = .{ .width = @floatFromInt(size.width), .height = @floatFromInt(size.height) },
+            };
+            ns_window.msgSend(void, "setFrame:display:", .{ ns_window.msgSend(CGRect, "frameRectForContentRect:", .{content}), true });
+            updateCachedWindowMetrics(window);
+        }
+        return;
+    }
+
+    if (window.monitor) |old_monitor| monitor_module.restoreVideoMode(old_monitor);
+
+    if (monitor) |native_monitor| {
+        if (window.monitor == null) {
+            const frame = ns_window.msgSend(CGRect, "frame", .{});
+            window.windowed_x = frame.origin.x;
+            window.windowed_y = frame.origin.y;
+            window.windowed_width = frame.size.width;
+            window.windowed_height = frame.size.height;
+            window.windowed_style = ns_window.msgSend(usize, "styleMask", .{});
+            window.windowed_level = ns_window.msgSend(isize, "level", .{});
+            window.windowed_has_shadow = ns_window.msgSend(bool, "hasShadow", .{});
+        }
+
+        window.monitor = native_monitor;
+        @import("events.zig").poll();
+
+        var style = ns_window.msgSend(usize, "styleMask", .{});
+        style &= ~(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable);
+        style |= NSWindowStyleMaskBorderless;
+        ns_window.msgSend(void, "setStyleMask:", .{style});
+        ns_window.msgSend(void, "makeFirstResponder:", .{window.view});
+        ns_window.msgSend(void, "setLevel:", .{@as(isize, NSMainMenuWindowLevel + 1)});
+        ns_window.msgSend(void, "setHasShadow:", .{false});
+
+        _ = monitor_module.setVideoMode(native_monitor, .{
+            .width = size.width,
+            .height = size.height,
+            .red_bits = 8,
+            .green_bits = 8,
+            .blue_bits = 8,
+            .refresh_rate = refresh_rate,
+        });
+        setFullscreenFrame(window, native_monitor);
+    } else {
+        window.monitor = null;
+        @import("events.zig").poll();
+
+        var style = ns_window.msgSend(usize, "styleMask", .{});
+        if (window.decorated) {
+            style &= ~NSWindowStyleMaskBorderless;
+            style |= NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
+        } else {
+            style |= NSWindowStyleMaskBorderless;
+            style &= ~(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable);
+        }
+        if (window.resizable) {
+            style |= NSWindowStyleMaskResizable;
+            ns_window.msgSend(void, "setCollectionBehavior:", .{@as(usize, NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorManaged)});
+        } else {
+            style &= ~NSWindowStyleMaskResizable;
+            ns_window.msgSend(void, "setCollectionBehavior:", .{@as(usize, NSWindowCollectionBehaviorFullScreenNone)});
+        }
+        ns_window.msgSend(void, "setStyleMask:", .{style});
+        ns_window.msgSend(void, "makeFirstResponder:", .{window.view});
+
+        const content = CGRect{
+            .origin = .{
+                .x = @floatFromInt(pos.x),
+                .y = transformY(@as(f64, @floatFromInt(pos.y)) + @as(f64, @floatFromInt(size.height)) - 1.0),
+            },
+            .size = .{ .width = @floatFromInt(size.width), .height = @floatFromInt(size.height) },
+        };
+        ns_window.msgSend(void, "setFrame:display:", .{ ns_window.msgSend(CGRect, "frameRectForContentRect:", .{content}), true });
+        ns_window.msgSend(void, "setLevel:", .{if (window.floating) @as(isize, NSFloatingWindowLevel) else @as(isize, NSNormalWindowLevel)});
+        ns_window.msgSend(void, "setHasShadow:", .{true});
+    }
+    updateCachedWindowMetrics(window);
+}
+
+pub fn setIcon(_: *anyopaque, _: [*]const IconImage, _: usize) bool {
+    return false;
 }
 
 pub fn setSizeLimits(handle: *anyopaque, min_size: Size, max_size: Size) void {
@@ -372,10 +550,19 @@ pub fn getAttribute(handle: *anyopaque, attr: c_int) bool {
 
 pub fn setAttribute(handle: *anyopaque, attr: c_int, value: bool) void {
     const ns_window = windowObject(handle);
+    const window = native(handle);
     var style = ns_window.msgSend(usize, "styleMask", .{});
     switch (attr) {
-        5 => ns_window.msgSend(void, "setStyleMask:", .{if (value) style | NSWindowStyleMaskResizable else style & ~NSWindowStyleMaskResizable}),
+        5 => {
+            window.resizable = value;
+            ns_window.msgSend(void, "setStyleMask:", .{if (value) style | NSWindowStyleMaskResizable else style & ~NSWindowStyleMaskResizable});
+            ns_window.msgSend(void, "setCollectionBehavior:", .{if (value)
+                @as(usize, NSWindowCollectionBehaviorFullScreenPrimary | NSWindowCollectionBehaviorManaged)
+            else
+                @as(usize, NSWindowCollectionBehaviorFullScreenNone)});
+        },
         6 => {
+            window.decorated = value;
             if (value) {
                 style |= NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
                 style &= ~NSWindowStyleMaskBorderless;
@@ -385,8 +572,13 @@ pub fn setAttribute(handle: *anyopaque, attr: c_int, value: bool) void {
             }
             ns_window.msgSend(void, "setStyleMask:", .{style});
             ns_window.msgSend(void, "makeFirstResponder:", .{native(handle).view});
+            const title = ns_window.msgSend(objc.Object, "title", .{});
+            if (title.value != null) setTitle(handle, title.msgSend([*:0]const u8, "UTF8String", .{}));
         },
-        8 => ns_window.msgSend(void, "setLevel:", .{if (value) NSFloatingWindowLevel else NSNormalWindowLevel}),
+        8 => {
+            window.floating = value;
+            ns_window.msgSend(void, "setLevel:", .{if (value) NSFloatingWindowLevel else NSNormalWindowLevel});
+        },
         11 => ns_window.msgSend(void, "setIgnoresMouseEvents:", .{value}),
         else => {},
     }
@@ -410,52 +602,141 @@ pub fn getCursorPos(handle: *anyopaque) Pos {
 }
 
 pub fn setCursorPos(handle: *anyopaque, x: f64, y: f64) void {
+    updateCursorImage(native(handle));
     const content = viewObject(handle).msgSend(CGRect, "frame", .{});
+    const pos = windowObject(handle).msgSend(CGPoint, "mouseLocationOutsideOfEventStream", .{});
+    native(handle).cursor_warp_delta_x += x - pos.x;
+    native(handle).cursor_warp_delta_y += y - content.size.height + pos.y;
     const local = CGRect{
         .origin = .{ .x = x, .y = content.size.height - y - 1.0 },
         .size = .{ .width = 0.0, .height = 0.0 },
     };
     const global = windowObject(handle).msgSend(CGRect, "convertRectToScreen:", .{local});
     CGWarpMouseCursorPosition(.{ .x = global.origin.x, .y = transformY(global.origin.y) });
-    CGAssociateMouseAndMouseCursorPosition(true);
+    if (native(handle).cursor_mode != 2) CGAssociateMouseAndMouseCursorPosition(true);
 }
 
 pub fn setCursor(handle: *anyopaque, cursor_handle: ?*anyopaque) void {
-    _ = handle;
-    const cursor = if (cursor_handle) |value|
-        objc.Object.fromId((@as(*types.Cursor, @ptrCast(@alignCast(value)))).cursor)
-    else
-        objc.getClass("NSCursor").?.msgSend(objc.Object, "arrowCursor", .{});
-    cursor.msgSend(void, "set", .{});
+    const window = native(handle);
+    window.cursor = if (cursor_handle) |value| (@as(*types.Cursor, @ptrCast(@alignCast(value)))).cursor else null;
+    if (cursorInContentArea(window)) updateCursorImage(window);
 }
 
 pub fn setInputMode(handle: *anyopaque, mode: c_int, value: c_int) void {
     if (mode != 0) return;
-    native(handle).cursor_mode = value;
-    const cursor_class = objc.getClass("NSCursor").?;
-    if (value == 1 or value == 2) {
-        cursor_class.msgSend(void, "hide", .{});
-    } else {
-        cursor_class.msgSend(void, "unhide", .{});
-    }
+    const window = native(handle);
+    window.cursor_mode = value;
+    const pos = getCursorPos(handle);
+    window.virtual_cursor_x = @floatFromInt(pos.x);
+    window.virtual_cursor_y = @floatFromInt(pos.y);
+    if (windowObject(handle).msgSend(bool, "isKeyWindow", .{})) updateCursorMode(window);
 }
 
 pub fn setClipboardString(value: [*:0]const u8) void {
     const ns_string = objc.getClass("NSString").?.msgSend(objc.Object, "stringWithUTF8String:", .{value});
     const pasteboard = objc.getClass("NSPasteboard").?.msgSend(objc.Object, "generalPasteboard", .{});
-    _ = pasteboard.msgSend(usize, "clearContents", .{});
-    _ = pasteboard.msgSend(bool, "setString:forType:", .{ ns_string.value, nsString("public.utf8-plain-text").value });
+    const string_type = nsString("public.utf8-plain-text");
+    const types_array = objc.getClass("NSArray").?.msgSend(objc.Object, "arrayWithObject:", .{string_type.value});
+    _ = pasteboard.msgSend(isize, "declareTypes:owner:", .{ types_array.value, @as(objc.c.id, null) });
+    _ = pasteboard.msgSend(bool, "setString:forType:", .{ ns_string.value, string_type.value });
 }
 
 pub fn getClipboardString() ?[*:0]const u8 {
     const pasteboard = objc.getClass("NSPasteboard").?.msgSend(objc.Object, "generalPasteboard", .{});
-    const value = pasteboard.msgSend(objc.Object, "stringForType:", .{nsString("public.utf8-plain-text").value});
+    const string_type = nsString("public.utf8-plain-text");
+    const types_array = pasteboard.msgSend(objc.Object, "types", .{});
+    if (!types_array.msgSend(bool, "containsObject:", .{string_type.value})) return null;
+    const value = pasteboard.msgSend(objc.Object, "stringForType:", .{string_type.value});
     if (value.value == null) return null;
-    return value.msgSend([*:0]const u8, "UTF8String", .{});
+    if (clipboard_string) |old| std.heap.c_allocator.free(old);
+    clipboard_string = std.heap.c_allocator.dupeZ(u8, std.mem.span(value.msgSend([*:0]const u8, "UTF8String", .{}))) catch null;
+    return if (clipboard_string) |new_value| new_value.ptr else null;
 }
 
 fn callbacks() EventCallbacks {
     return event_callbacks.?;
+}
+
+fn cursorInContentArea(window: *types.Window) bool {
+    const pos = objc.Object.fromId(window.window).msgSend(CGPoint, "mouseLocationOutsideOfEventStream", .{});
+    return objc.Object.fromId(window.view).msgSend(bool, "mouse:inRect:", .{
+        pos,
+        objc.Object.fromId(window.view).msgSend(CGRect, "frame", .{}),
+    });
+}
+
+fn hideCursor() void {
+    if (!cursor_hidden) {
+        objc.getClass("NSCursor").?.msgSend(void, "hide", .{});
+        cursor_hidden = true;
+    }
+}
+
+fn showCursor() void {
+    if (cursor_hidden) {
+        objc.getClass("NSCursor").?.msgSend(void, "unhide", .{});
+        cursor_hidden = false;
+    }
+}
+
+fn updateCursorImage(window: *types.Window) void {
+    if (window.cursor_mode == 0) {
+        showCursor();
+        const cursor = if (window.cursor) |cursor|
+            objc.Object.fromId(cursor)
+        else
+            objc.getClass("NSCursor").?.msgSend(objc.Object, "arrowCursor", .{});
+        cursor.msgSend(void, "set", .{});
+    } else {
+        hideCursor();
+    }
+}
+
+fn updateCursorMode(window: *types.Window) void {
+    if (window.cursor_mode == 2) {
+        disabled_cursor_window = window;
+        const pos = getCursorPos(@ptrCast(window));
+        restore_cursor_pos_x = @floatFromInt(pos.x);
+        restore_cursor_pos_y = @floatFromInt(pos.y);
+        centerCursorInContentArea(window);
+        CGAssociateMouseAndMouseCursorPosition(false);
+    } else if (disabled_cursor_window == window) {
+        disabled_cursor_window = null;
+        setCursorPos(@ptrCast(window), restore_cursor_pos_x, restore_cursor_pos_y);
+    }
+
+    if (cursorInContentArea(window)) updateCursorImage(window);
+}
+
+fn setFullscreenFrame(window: *types.Window, monitor: *anyopaque) void {
+    const bounds = monitor_module.getDisplayBounds(monitor);
+    objc.Object.fromId(window.window).msgSend(void, "setFrame:display:", .{ CGRect{
+        .origin = .{
+            .x = bounds.origin.x,
+            .y = transformY(bounds.origin.y + bounds.size.height - 1.0),
+        },
+        .size = .{ .width = bounds.size.width, .height = bounds.size.height },
+    }, true });
+    updateCachedWindowMetrics(window);
+}
+
+fn updateCachedWindowMetrics(window: *types.Window) void {
+    const view = objc.Object.fromId(window.view);
+    const content = view.msgSend(CGRect, "frame", .{});
+    const framebuffer = view.msgSend(CGRect, "convertRectToBacking:", .{content});
+    window.width = content.size.width;
+    window.height = content.size.height;
+    window.fb_width = framebuffer.size.width;
+    window.fb_height = framebuffer.size.height;
+    if (content.size.width != 0.0 and content.size.height != 0.0) {
+        window.xscale = framebuffer.size.width / content.size.width;
+        window.yscale = framebuffer.size.height / content.size.height;
+    }
+}
+
+fn centerCursorInContentArea(window: *types.Window) void {
+    const content = objc.Object.fromId(window.view).msgSend(CGRect, "frame", .{});
+    setCursorPos(@ptrCast(window), content.size.width / 2.0, content.size.height / 2.0);
 }
 
 fn registerClasses() void {
@@ -479,6 +760,9 @@ fn registerClasses() void {
     objc.registerClassPair(delegate_class.?);
 
     view_class = objc.allocateClassPair(objc.getClass("NSView"), "ZingZigContentView").?;
+    if (objc.getProtocol("NSTextInputClient")) |protocol| {
+        _ = view_class.?.addProtocol(protocol);
+    }
     _ = view_class.?.addIvar("zingWindow");
     _ = view_class.?.addIvar("trackingArea");
     _ = view_class.?.addMethod("initWithFrame:zingWindow:", viewInitWithFrame);
@@ -488,6 +772,7 @@ fn registerClasses() void {
     _ = view_class.?.addMethod("acceptsFirstMouse:", viewAcceptsFirstMouse);
     _ = view_class.?.addMethod("wantsUpdateLayer", viewWantsUpdateLayer);
     _ = view_class.?.addMethod("updateLayer", viewUpdateLayer);
+    _ = view_class.?.addMethod("cursorUpdate:", viewCursorUpdate);
     _ = view_class.?.addMethod("drawRect:", viewDrawRect);
     _ = view_class.?.addMethod("viewDidChangeBackingProperties", viewDidChangeBackingProperties);
     _ = view_class.?.addMethod("keyDown:", viewKeyDown);
@@ -509,6 +794,17 @@ fn registerClasses() void {
     _ = view_class.?.addMethod("mouseExited:", viewMouseExited);
     _ = view_class.?.addMethod("draggingEntered:", viewDraggingEntered);
     _ = view_class.?.addMethod("performDragOperation:", viewPerformDragOperation);
+    _ = view_class.?.addMethod("hasMarkedText", viewHasMarkedText);
+    _ = view_class.?.addMethod("markedRange", viewMarkedRange);
+    _ = view_class.?.addMethod("selectedRange", viewSelectedRange);
+    _ = view_class.?.addMethod("setMarkedText:selectedRange:replacementRange:", viewSetMarkedText);
+    _ = view_class.?.addMethod("unmarkText", viewUnmarkText);
+    _ = view_class.?.addMethod("validAttributesForMarkedText", viewValidAttributesForMarkedText);
+    _ = view_class.?.addMethod("attributedSubstringForProposedRange:actualRange:", viewAttributedSubstringForProposedRange);
+    _ = view_class.?.addMethod("characterIndexForPoint:", viewCharacterIndexForPoint);
+    _ = view_class.?.addMethod("firstRectForCharacterRange:actualRange:", viewFirstRectForCharacterRange);
+    _ = view_class.?.addMethod("insertText:replacementRange:", viewInsertText);
+    _ = view_class.?.addMethod("doCommandBySelector:", viewDoCommandBySelector);
     objc.registerClassPair(view_class.?);
 
     classes_registered = true;
@@ -537,40 +833,61 @@ fn delegateWindowShouldClose(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callc
 
 fn delegateWindowDidMove(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
     const window = windowFromObject(objc.Object.fromId(self));
+    if (disabled_cursor_window == window) centerCursorInContentArea(window);
     const pos = getPos(@ptrCast(window));
     callbacks().pos(window.callback_id, pos.x, pos.y);
 }
 
 fn delegateWindowDidResize(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
     const window = windowFromObject(objc.Object.fromId(self));
+    if (disabled_cursor_window == window) centerCursorInContentArea(window);
     const handle: *anyopaque = @ptrCast(window);
     const maximized = objc.Object.fromId(window.window).msgSend(bool, "isZoomed", .{});
     if (window.maximized != maximized) {
         window.maximized = maximized;
         callbacks().maximize(window.callback_id, maximized);
     }
-    const size = getSize(handle);
-    const framebuffer = getFramebufferSize(handle);
-    const scale = getContentScale(handle);
-    callbacks().size(window.callback_id, size.width, size.height);
-    callbacks().framebuffer_size(window.callback_id, framebuffer.width, framebuffer.height);
-    callbacks().content_scale(window.callback_id, scale.x_scale, scale.y_scale);
+    const content = viewObject(handle).msgSend(CGRect, "frame", .{});
+    const framebuffer = viewObject(handle).msgSend(CGRect, "convertRectToBacking:", .{content});
+    if (framebuffer.size.width != window.fb_width or framebuffer.size.height != window.fb_height) {
+        window.fb_width = framebuffer.size.width;
+        window.fb_height = framebuffer.size.height;
+        callbacks().framebuffer_size(window.callback_id, @intFromFloat(framebuffer.size.width), @intFromFloat(framebuffer.size.height));
+    }
+    if (content.size.width != window.width or content.size.height != window.height) {
+        window.width = content.size.width;
+        window.height = content.size.height;
+        callbacks().size(window.callback_id, @intFromFloat(content.size.width), @intFromFloat(content.size.height));
+    }
 }
 
 fn delegateWindowDidBecomeKey(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
-    callbacks().focus(windowFromObject(objc.Object.fromId(self)).callback_id, true);
+    const window = windowFromObject(objc.Object.fromId(self));
+    if (disabled_cursor_window == window) centerCursorInContentArea(window);
+    callbacks().focus(window.callback_id, true);
+    updateCursorMode(window);
 }
 
 fn delegateWindowDidResignKey(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
-    callbacks().focus(windowFromObject(objc.Object.fromId(self)).callback_id, false);
+    const window = windowFromObject(objc.Object.fromId(self));
+    if (window.monitor != null and window.auto_iconify) iconify(@ptrCast(window));
+    callbacks().focus(window.callback_id, false);
 }
 
 fn delegateWindowDidMiniaturize(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
-    callbacks().iconify(windowFromObject(objc.Object.fromId(self)).callback_id, true);
+    const window = windowFromObject(objc.Object.fromId(self));
+    if (window.monitor) |monitor| monitor_module.restoreVideoMode(monitor);
+    callbacks().iconify(window.callback_id, true);
 }
 
 fn delegateWindowDidDeminiaturize(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
-    callbacks().iconify(windowFromObject(objc.Object.fromId(self)).callback_id, false);
+    const window = windowFromObject(objc.Object.fromId(self));
+    if (window.monitor) |monitor| {
+        const mode = monitor_module.getVideoMode(monitor);
+        _ = monitor_module.setVideoMode(monitor, mode);
+        setFullscreenFrame(window, monitor);
+    }
+    callbacks().iconify(window.callback_id, false);
 }
 
 fn viewInitWithFrame(self: objc.c.id, _: objc.c.SEL, frame: CGRect, window: objc.c.id) callconv(.c) objc.c.id {
@@ -579,6 +896,7 @@ fn viewInitWithFrame(self: objc.c.id, _: objc.c.SEL, frame: CGRect, window: objc
 
     setWindowIvar(object, window);
     setTrackingAreaIvar(object, null);
+    windowFromObject(object).marked_text = objc.getClass("NSMutableAttributedString").?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "init", .{}).value;
     object.msgSend(void, "setWantsLayer:", .{true});
     viewUpdateTrackingAreas(object.value, undefined);
     object.msgSend(void, "registerForDraggedTypes:", .{objc.getClass("NSArray").?.msgSend(objc.Object, "arrayWithObject:", .{nsString("public.file-url").value}).value});
@@ -611,6 +929,10 @@ fn viewUpdateLayer(self: objc.c.id, _: objc.c.SEL) callconv(.c) void {
     callbacks().refresh(windowFromObject(objc.Object.fromId(self)).callback_id);
 }
 
+fn viewCursorUpdate(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
+    updateCursorImage(windowFromObject(objc.Object.fromId(self)));
+}
+
 fn viewDrawRect(self: objc.c.id, _: objc.c.SEL, _: CGRect) callconv(.c) void {
     callbacks().refresh(windowFromObject(objc.Object.fromId(self)).callback_id);
 }
@@ -620,10 +942,24 @@ fn viewDidChangeBackingProperties(self: objc.c.id, _: objc.c.SEL) callconv(.c) v
     object.msgSendSuper(objc.getClass("NSView").?, void, "viewDidChangeBackingProperties", .{});
     const window = windowFromObject(object);
     const handle: *anyopaque = @ptrCast(window);
-    const framebuffer = getFramebufferSize(handle);
-    const scale = getContentScale(handle);
-    callbacks().framebuffer_size(window.callback_id, framebuffer.width, framebuffer.height);
-    callbacks().content_scale(window.callback_id, scale.x_scale, scale.y_scale);
+    const content = viewObject(handle).msgSend(CGRect, "frame", .{});
+    const framebuffer = viewObject(handle).msgSend(CGRect, "convertRectToBacking:", .{content});
+    const xscale = framebuffer.size.width / content.size.width;
+    const yscale = framebuffer.size.height / content.size.height;
+    if (xscale != window.xscale or yscale != window.yscale) {
+        if (window.scale_framebuffer) {
+            const layer = viewObject(handle).msgSend(objc.Object, "layer", .{});
+            if (layer.value != null) layer.msgSend(void, "setContentsScale:", .{windowObject(handle).msgSend(f64, "backingScaleFactor", .{})});
+        }
+        window.xscale = xscale;
+        window.yscale = yscale;
+        callbacks().content_scale(window.callback_id, @floatCast(xscale), @floatCast(yscale));
+    }
+    if (framebuffer.size.width != window.fb_width or framebuffer.size.height != window.fb_height) {
+        window.fb_width = framebuffer.size.width;
+        window.fb_height = framebuffer.size.height;
+        callbacks().framebuffer_size(window.callback_id, @intFromFloat(framebuffer.size.width), @intFromFloat(framebuffer.size.height));
+    }
 }
 
 fn viewKeyDown(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callconv(.c) void {
@@ -632,15 +968,8 @@ fn viewKeyDown(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callconv(.c)
     const key_code: u16 = @intCast(event.msgSend(c_ushort, "keyCode", .{}));
     const mods = translateMods(event.msgSend(usize, "modifierFlags", .{}));
     callbacks().key(window.callback_id, input.translateKey(key_code), key_code, 1, mods);
-
-    const chars = event.msgSend(objc.Object, "characters", .{});
-    const len = chars.msgSend(usize, "length", .{});
-    var i: usize = 0;
-    while (i < len) : (i += 1) {
-        const codepoint: u32 = @intCast(chars.msgSend(c_ushort, "characterAtIndex:", .{i}));
-        callbacks().char_mods(window.callback_id, codepoint, mods);
-        callbacks().char(window.callback_id, codepoint);
-    }
+    const events = objc.getClass("NSArray").?.msgSend(objc.Object, "arrayWithObject:", .{event_id});
+    objc.Object.fromId(self).msgSend(void, "interpretKeyEvents:", .{events.value});
 }
 
 fn viewKeyUp(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callconv(.c) void {
@@ -690,8 +1019,21 @@ fn viewOtherMouseUp(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callcon
 
 fn viewMouseMoved(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callconv(.c) void {
     const window = windowFromObject(objc.Object.fromId(self));
-    const pos = cursorPosFromEvent(window, objc.Object.fromId(event_id));
-    callbacks().cursor_pos(window.callback_id, @floatFromInt(pos.x), @floatFromInt(pos.y));
+    const event = objc.Object.fromId(event_id);
+    if (window.cursor_mode == 2) {
+        const dx = event.msgSend(f64, "deltaX", .{}) - window.cursor_warp_delta_x;
+        const dy = event.msgSend(f64, "deltaY", .{}) - window.cursor_warp_delta_y;
+        if (dx != 0.0 or dy != 0.0) {
+            window.virtual_cursor_x += dx;
+            window.virtual_cursor_y += dy;
+            callbacks().cursor_pos(window.callback_id, window.virtual_cursor_x, window.virtual_cursor_y);
+        }
+    } else {
+        const pos = cursorPosFromEvent(window, event);
+        callbacks().cursor_pos(window.callback_id, @floatFromInt(pos.x), @floatFromInt(pos.y));
+    }
+    window.cursor_warp_delta_x = 0.0;
+    window.cursor_warp_delta_y = 0.0;
 }
 
 fn viewScrollWheel(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callconv(.c) void {
@@ -733,11 +1075,15 @@ fn viewUpdateTrackingAreas(self: objc.c.id, _: objc.c.SEL) callconv(.c) void {
 }
 
 fn viewMouseEntered(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
-    callbacks().cursor_enter(windowFromObject(objc.Object.fromId(self)).callback_id, true);
+    const window = windowFromObject(objc.Object.fromId(self));
+    if (window.cursor_mode == 1) hideCursor();
+    callbacks().cursor_enter(window.callback_id, true);
 }
 
 fn viewMouseExited(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
-    callbacks().cursor_enter(windowFromObject(objc.Object.fromId(self)).callback_id, false);
+    const window = windowFromObject(objc.Object.fromId(self));
+    if (window.cursor_mode == 1) showCursor();
+    callbacks().cursor_enter(window.callback_id, false);
 }
 
 fn viewDraggingEntered(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) c_ulong {
@@ -745,6 +1091,11 @@ fn viewDraggingEntered(_: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) c
 }
 
 fn viewPerformDragOperation(self: objc.c.id, _: objc.c.SEL, sender_id: objc.c.id) callconv(.c) bool {
+    const window = windowFromObject(objc.Object.fromId(self));
+    const content = objc.Object.fromId(window.view).msgSend(CGRect, "frame", .{});
+    const pos = objc.Object.fromId(sender_id).msgSend(CGPoint, "draggingLocation", .{});
+    callbacks().cursor_pos(window.callback_id, pos.x, content.size.height - pos.y);
+
     const pasteboard = objc.Object.fromId(sender_id).msgSend(objc.Object, "draggingPasteboard", .{});
     const classes = objc.getClass("NSArray").?.msgSend(objc.Object, "arrayWithObject:", .{objc.getClass("NSURL").?.value});
     const options = objc.getClass("NSDictionary").?.msgSend(objc.Object, "dictionaryWithObject:forKey:", .{
@@ -755,16 +1106,113 @@ fn viewPerformDragOperation(self: objc.c.id, _: objc.c.SEL, sender_id: objc.c.id
     const count = urls.msgSend(usize, "count", .{});
     if (count == 0) return true;
 
-    var path_buffer: [64][*:0]const u8 = undefined;
-    const len = @min(count, path_buffer.len);
-    var i: usize = 0;
-    while (i < len) : (i += 1) {
-        path_buffer[i] = urls.msgSend(objc.Object, "objectAtIndex:", .{i}).msgSend([*:0]const u8, "fileSystemRepresentation", .{});
+    const owned_paths = std.heap.c_allocator.alloc(?[:0]u8, count) catch return false;
+    defer std.heap.c_allocator.free(owned_paths);
+    @memset(owned_paths, null);
+    const path_buffer = std.heap.c_allocator.alloc([*:0]const u8, count) catch return false;
+    defer std.heap.c_allocator.free(path_buffer);
+    defer {
+        for (owned_paths) |maybe_path| {
+            if (maybe_path) |path| std.heap.c_allocator.free(path);
+        }
     }
 
-    callbacks().drop(windowFromObject(objc.Object.fromId(self)).callback_id, len, &path_buffer);
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        const path = urls.msgSend(objc.Object, "objectAtIndex:", .{i}).msgSend([*:0]const u8, "fileSystemRepresentation", .{});
+        owned_paths[i] = std.heap.c_allocator.dupeZ(u8, std.mem.span(path)) catch return false;
+        path_buffer[i] = owned_paths[i].?.ptr;
+    }
+
+    callbacks().drop(window.callback_id, count, path_buffer.ptr);
     return true;
 }
+
+fn viewHasMarkedText(self: objc.c.id, _: objc.c.SEL) callconv(.c) bool {
+    const marked_text = objc.Object.fromId(windowFromObject(objc.Object.fromId(self)).marked_text);
+    return marked_text.msgSend(usize, "length", .{}) > 0;
+}
+
+fn viewMarkedRange(self: objc.c.id, _: objc.c.SEL) callconv(.c) NSRange {
+    const marked_text = objc.Object.fromId(windowFromObject(objc.Object.fromId(self)).marked_text);
+    const len = marked_text.msgSend(usize, "length", .{});
+    return if (len > 0) .{ .location = 0, .length = len - 1 } else empty_range;
+}
+
+fn viewSelectedRange(_: objc.c.id, _: objc.c.SEL) callconv(.c) NSRange {
+    return empty_range;
+}
+
+fn viewSetMarkedText(self: objc.c.id, _: objc.c.SEL, string_id: objc.c.id, _: NSRange, _: NSRange) callconv(.c) void {
+    const window = windowFromObject(objc.Object.fromId(self));
+    if (window.marked_text) |marked_text| objc.Object.fromId(marked_text).msgSend(void, "release", .{});
+
+    const string = objc.Object.fromId(string_id);
+    if (string.msgSend(bool, "isKindOfClass:", .{objc.getClass("NSAttributedString").?.value})) {
+        window.marked_text = objc.getClass("NSMutableAttributedString").?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "initWithAttributedString:", .{string_id}).value;
+    } else {
+        window.marked_text = objc.getClass("NSMutableAttributedString").?.msgSend(objc.Object, "alloc", .{}).msgSend(objc.Object, "initWithString:", .{string_id}).value;
+    }
+}
+
+fn viewUnmarkText(self: objc.c.id, _: objc.c.SEL) callconv(.c) void {
+    objc.Object.fromId(windowFromObject(objc.Object.fromId(self)).marked_text)
+        .msgSend(objc.Object, "mutableString", .{})
+        .msgSend(void, "setString:", .{nsString("").value});
+}
+
+fn viewValidAttributesForMarkedText(_: objc.c.id, _: objc.c.SEL) callconv(.c) objc.c.id {
+    return objc.getClass("NSArray").?.msgSend(objc.Object, "array", .{}).value;
+}
+
+fn viewAttributedSubstringForProposedRange(_: objc.c.id, _: objc.c.SEL, _: NSRange, _: ?*NSRange) callconv(.c) objc.c.id {
+    return null;
+}
+
+fn viewCharacterIndexForPoint(_: objc.c.id, _: objc.c.SEL, _: CGPoint) callconv(.c) c_ulong {
+    return 0;
+}
+
+fn viewFirstRectForCharacterRange(self: objc.c.id, _: objc.c.SEL, _: NSRange, _: ?*NSRange) callconv(.c) CGRect {
+    const frame = objc.Object.fromId(windowFromObject(objc.Object.fromId(self)).view).msgSend(CGRect, "frame", .{});
+    return .{ .origin = frame.origin, .size = .{ .width = 0.0, .height = 0.0 } };
+}
+
+fn viewInsertText(self: objc.c.id, _: objc.c.SEL, string_id: objc.c.id, _: NSRange) callconv(.c) void {
+    const window = windowFromObject(objc.Object.fromId(self));
+    const current_event = sharedApplication().msgSend(objc.Object, "currentEvent", .{});
+    const mods = if (current_event.value) |_| translateMods(current_event.msgSend(usize, "modifierFlags", .{})) else 0;
+    const plain = (mods & (1 << 3)) == 0;
+
+    var characters = objc.Object.fromId(string_id);
+    if (characters.msgSend(bool, "isKindOfClass:", .{objc.getClass("NSAttributedString").?.value})) {
+        characters = characters.msgSend(objc.Object, "string", .{});
+    }
+
+    var range = NSRange{ .location = 0, .length = characters.msgSend(c_ulong, "length", .{}) };
+    while (range.length != 0) {
+        var codepoint: u32 = 0;
+        var remaining = NSRange{ .location = 0, .length = 0 };
+        if (characters.msgSend(bool, "getBytes:maxLength:usedLength:encoding:options:range:remainingRange:", .{
+            &codepoint,
+            @as(c_ulong, @sizeOf(u32)),
+            @as(?*c_ulong, null),
+            NSUTF32StringEncoding,
+            @as(c_ulong, 0),
+            range,
+            &remaining,
+        })) {
+            range = remaining;
+            if (codepoint >= 0xf700 and codepoint <= 0xf7ff) continue;
+            callbacks().char_mods(window.callback_id, codepoint, mods);
+            if (plain) callbacks().char(window.callback_id, codepoint);
+        } else {
+            break;
+        }
+    }
+}
+
+fn viewDoCommandBySelector(_: objc.c.id, _: objc.c.SEL, _: objc.c.SEL) callconv(.c) void {}
 
 fn mouseButtonCallback(self: objc.c.id, event_id: objc.c.id, button: i32, action: i32) void {
     const window = windowFromObject(objc.Object.fromId(self));
@@ -862,6 +1310,11 @@ const CGSize = extern struct {
 const CGRect = extern struct {
     origin: CGPoint,
     size: CGSize,
+};
+
+const NSRange = extern struct {
+    location: c_ulong,
+    length: c_ulong,
 };
 
 const CGDirectDisplayID = u32;

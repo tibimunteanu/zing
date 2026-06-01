@@ -55,11 +55,12 @@ pub fn create(image: Image, x_hot: i32, y_hot: i32) !Cursor {
             .pixels = image.pixels.ptr,
         };
         break :blk platform.Cursor.create(&native_image, x_hot, y_hot) orelse {
-            Errors.report(.platform_error, "Cocoa: failed to create cursor", .{});
+            Errors.report(.platform_error, "failed to create platform cursor", .{});
             return error.PlatformError;
         };
     };
 
+    errdefer platform.Cursor.destroy(native);
     return .{ .id = try insert(native) };
 }
 
@@ -69,6 +70,7 @@ pub fn createStandard(shape: Shape) !Cursor {
         return error.CursorUnavailable;
     };
 
+    errdefer platform.Cursor.destroy(native);
     return .{ .id = try insert(native) };
 }
 

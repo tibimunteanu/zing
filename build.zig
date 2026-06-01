@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    try addGamepadMappingsImport(b, exe_mod);
     try addObjcSupport(b, exe_mod, target, optimize);
     const exe = b.addExecutable(.{
         .name = "zing",
@@ -62,6 +63,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
+    try addGamepadMappingsImport(b, unit_tests_mod);
     const unit_tests = b.addTest(.{
         .root_module = unit_tests_mod,
     });
@@ -119,8 +121,39 @@ fn addZingTestImports(
         .target = target,
         .optimize = optimize,
     });
+    try addGamepadMappingsImport(b, zing_mod);
     try addObjcSupport(b, zing_mod, target, optimize);
     module.addImport("zing", zing_mod);
+}
+
+fn addGamepadMappingsImport(b: *std.Build, module: *std.Build.Module) !void {
+    const mappings_h = try std.Io.Dir.cwd().readFileAlloc(
+        b.graph.io,
+        "vendor/glfw/src/mappings.h",
+        b.allocator,
+        .limited(1024 * 1024),
+    );
+
+    var source = try std.ArrayList(u8).initCapacity(b.allocator, mappings_h.len + 64);
+    defer source.deinit(b.allocator);
+
+    try source.appendSlice(b.allocator, "pub const text =\n");
+    var lines = std.mem.splitScalar(u8, mappings_h, '\n');
+    while (lines.next()) |line| {
+        try source.appendSlice(b.allocator, "\\\\");
+        try source.appendSlice(b.allocator, line);
+        try source.append(b.allocator, '\n');
+    }
+    try source.appendSlice(b.allocator, ";\n");
+
+    const write_files = b.addWriteFiles();
+    const mappings_zig = write_files.add("gamepad_mappings.zig", source.items);
+    const mappings_mod = b.createModule(.{
+        .root_source_file = mappings_zig,
+        .target = module.resolved_target.?,
+        .optimize = module.optimize.?,
+    });
+    module.addImport("gamepad_mappings", mappings_mod);
 }
 
 fn addObjcSupport(
@@ -148,7 +181,10 @@ fn addPlatformFrameworks(b: *std.Build, compile: *std.Build.Step.Compile, os_tag
             compile.root_module.link_libc = true;
             compile.root_module.linkFramework("Cocoa", .{});
             compile.root_module.linkFramework("ApplicationServices", .{});
+            compile.root_module.linkFramework("Carbon", .{});
             compile.root_module.linkFramework("QuartzCore", .{});
+            compile.root_module.linkFramework("IOKit", .{});
+            compile.root_module.linkFramework("CoreFoundation", .{});
         },
         .windows => {
             compile.root_module.link_libc = true;

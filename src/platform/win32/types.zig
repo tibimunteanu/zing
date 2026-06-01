@@ -25,9 +25,11 @@ pub const HMONITOR = ?*opaque {};
 pub const HDC = ?*opaque {};
 pub const HGDIOBJ = HANDLE;
 pub const HBITMAP = HANDLE;
+pub const HRGN = HANDLE;
 pub const HMENU = ?*opaque {};
 pub const HGLOBAL = HANDLE;
 pub const HDROP = HANDLE;
+pub const HDEVNOTIFY = HANDLE;
 pub const FARPROC = ?*const anyopaque;
 pub const LPARAM = isize;
 pub const WPARAM = usize;
@@ -50,6 +52,26 @@ pub const Window = extern struct {
     cursor: HCURSOR = null,
     cursor_tracked: bool = false,
     cursor_mode: c_int = 0,
+    frame_action: bool = false,
+    mouse_button_mask: u8 = 0,
+    raw_mouse_motion: bool = false,
+    virtual_cursor_x: f64 = 0,
+    virtual_cursor_y: f64 = 0,
+    monitor: ?*anyopaque = null,
+    monitor_acquired: bool = false,
+    decorated: bool = true,
+    auto_iconify: bool = true,
+    transparent_framebuffer: bool = false,
+    windowed_rect: RECT = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+    windowed_style: DWORD = 0,
+    windowed_ex_style: DWORD = 0,
+    has_windowed_state: bool = false,
+    scale_to_monitor: bool = false,
+    scale_framebuffer: bool = true,
+    big_icon: HICON = null,
+    small_icon: HICON = null,
+    iconified: bool = false,
+    maximized: bool = false,
     width: u32 = 0,
     height: u32 = 0,
     min_width: u32 = 0,
@@ -59,6 +81,8 @@ pub const Window = extern struct {
     numer: u32 = 0,
     denom: u32 = 0,
     high_surrogate: WCHAR = 0,
+    last_cursor_pos_x: i32 = 0,
+    last_cursor_pos_y: i32 = 0,
 };
 
 pub var instance: HINSTANCE = null;
@@ -240,6 +264,13 @@ pub const PAINTSTRUCT = extern struct {
     rgbReserved: [32]BYTE,
 };
 
+pub const DWM_BLURBEHIND = extern struct {
+    dwFlags: DWORD,
+    fEnable: BOOL,
+    hRgnBlur: HRGN,
+    fTransitionOnMaximized: BOOL,
+};
+
 pub const TRACKMOUSEEVENT = extern struct {
     cbSize: DWORD = @sizeOf(TRACKMOUSEEVENT),
     dwFlags: DWORD,
@@ -254,7 +285,55 @@ pub const RAWINPUTDEVICE = extern struct {
     hwndTarget: HWND,
 };
 
-pub const RAWINPUT = opaque {};
+pub const RAWINPUTHEADER = extern struct {
+    dwType: DWORD,
+    dwSize: DWORD,
+    hDevice: HANDLE,
+    wParam: WPARAM,
+};
+
+pub const RAWMOUSE = extern struct {
+    usFlags: WORD,
+    u: extern union {
+        ulButtons: ULONG,
+        buttons: extern struct {
+            usButtonFlags: WORD,
+            usButtonData: WORD,
+        },
+    },
+    ulRawButtons: ULONG,
+    lLastX: LONG,
+    lLastY: LONG,
+    ulExtraInformation: ULONG,
+};
+
+pub const RAWINPUT = extern struct {
+    header: RAWINPUTHEADER,
+    data: extern union {
+        mouse: RAWMOUSE,
+    },
+};
+
+pub const GUID = extern struct {
+    Data1: DWORD,
+    Data2: WORD,
+    Data3: WORD,
+    Data4: [8]BYTE,
+};
+
+pub const DEV_BROADCAST_HDR = extern struct {
+    dbch_size: DWORD,
+    dbch_devicetype: DWORD,
+    dbch_reserved: DWORD,
+};
+
+pub const DEV_BROADCAST_DEVICEINTERFACE_W = extern struct {
+    dbcc_size: DWORD,
+    dbcc_devicetype: DWORD,
+    dbcc_reserved: DWORD = 0,
+    dbcc_classguid: GUID,
+    dbcc_name: [1]WCHAR = .{0},
+};
 
 pub const VULKAN_WIN32_SURFACE_CREATE_INFO_KHR = extern struct {
     s_type: c_int,
@@ -265,12 +344,33 @@ pub const VULKAN_WIN32_SURFACE_CREATE_INFO_KHR = extern struct {
 };
 
 pub const ENUM_CURRENT_SETTINGS: DWORD = 0xffffffff;
+pub const CDS_FULLSCREEN: DWORD = 0x00000004;
+pub const CDS_TEST: DWORD = 0x00000002;
+pub const CDS_RESET: DWORD = 0x40000000;
+pub const DISP_CHANGE_SUCCESSFUL: LONG = 0;
+pub const DISP_CHANGE_RESTART: LONG = 1;
+pub const DISP_CHANGE_FAILED: LONG = -1;
+pub const DISP_CHANGE_BADMODE: LONG = -2;
+pub const DISP_CHANGE_NOTUPDATED: LONG = -3;
+pub const DISP_CHANGE_BADFLAGS: LONG = -4;
+pub const DISP_CHANGE_BADPARAM: LONG = -5;
+pub const DISP_CHANGE_BADDUALVIEW: LONG = -6;
+pub const S_OK: HRESULT = 0;
+pub const DWM_BB_ENABLE: DWORD = 0x00000001;
+pub const DWM_BB_BLURREGION: DWORD = 0x00000002;
+pub const DM_BITSPERPEL: DWORD = 0x00040000;
+pub const DM_PELSWIDTH: DWORD = 0x00080000;
+pub const DM_PELSHEIGHT: DWORD = 0x00100000;
+pub const DM_DISPLAYFREQUENCY: DWORD = 0x00400000;
 pub const DISPLAY_DEVICE_ACTIVE: DWORD = 0x00000001;
 pub const DISPLAY_DEVICE_PRIMARY_DEVICE: DWORD = 0x00000004;
+pub const DISPLAY_DEVICE_MODESPRUNED: DWORD = 0x08000000;
+pub const EDS_ROTATEDMODE: DWORD = 0x00000004;
 pub const MONITOR_DEFAULTTONEAREST: DWORD = 2;
 pub const USER_DEFAULT_SCREEN_DPI: UINT = 96;
 pub const BI_BITFIELDS: DWORD = 3;
 pub const DIB_RGB_COLORS: UINT = 0;
+pub const IMAGE_ICON: UINT = 1;
 pub const IMAGE_CURSOR: UINT = 2;
 pub const LR_DEFAULTSIZE: UINT = 0x00000040;
 pub const LR_SHARED: UINT = 0x00008000;
@@ -303,6 +403,8 @@ pub const WS_THICKFRAME: DWORD = 0x00040000;
 pub const WS_MINIMIZEBOX: DWORD = 0x00020000;
 pub const WS_MAXIMIZEBOX: DWORD = 0x00010000;
 pub const WS_VISIBLE: DWORD = 0x10000000;
+pub const WS_CLIPSIBLINGS: DWORD = 0x04000000;
+pub const WS_CLIPCHILDREN: DWORD = 0x02000000;
 pub const WS_OVERLAPPEDWINDOW: DWORD = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
 pub const WS_EX_APPWINDOW: DWORD = 0x00040000;
 pub const WS_EX_TOPMOST: DWORD = 0x00000008;
@@ -331,22 +433,37 @@ pub const HWND_NOTOPMOST: HWND = @ptrFromInt(@as(usize, @bitCast(@as(isize, -2))
 pub const WM_NULL: UINT = 0x0000;
 pub const WM_CREATE: UINT = 0x0001;
 pub const WM_DESTROY: UINT = 0x0002;
+pub const WM_SETICON: UINT = 0x0080;
 pub const WM_MOVE: UINT = 0x0003;
 pub const WM_SIZE: UINT = 0x0005;
 pub const WM_CLOSE: UINT = 0x0010;
+pub const WM_DISPLAYCHANGE: UINT = 0x007e;
 pub const WM_SETFOCUS: UINT = 0x0007;
 pub const WM_KILLFOCUS: UINT = 0x0008;
 pub const WM_PAINT: UINT = 0x000f;
+pub const WM_NCACTIVATE: UINT = 0x0086;
+pub const WM_NCPAINT: UINT = 0x0085;
 pub const WM_SETCURSOR: UINT = 0x0020;
+pub const WM_SYSCOMMAND: UINT = 0x0112;
 pub const WM_GETMINMAXINFO: UINT = 0x0024;
+pub const WM_MOUSEACTIVATE: UINT = 0x0021;
+pub const WM_CAPTURECHANGED: UINT = 0x0215;
+pub const WM_ENTERSIZEMOVE: UINT = 0x0231;
+pub const WM_EXITSIZEMOVE: UINT = 0x0232;
+pub const WM_ENTERMENULOOP: UINT = 0x0211;
+pub const WM_EXITMENULOOP: UINT = 0x0212;
 pub const WM_ACTIVATE: UINT = 0x0006;
 pub const WM_DROPFILES: UINT = 0x0233;
 pub const WM_KEYDOWN: UINT = 0x0100;
 pub const WM_KEYUP: UINT = 0x0101;
 pub const WM_CHAR: UINT = 0x0102;
+pub const WM_SYSCHAR: UINT = 0x0106;
 pub const WM_SYSKEYDOWN: UINT = 0x0104;
 pub const WM_SYSKEYUP: UINT = 0x0105;
 pub const WM_UNICHAR: UINT = 0x0109;
+pub const WM_INPUTLANGCHANGE: UINT = 0x0051;
+pub const WM_QUIT: UINT = 0x0012;
+pub const WM_INPUT: UINT = 0x00ff;
 pub const WM_MOUSEMOVE: UINT = 0x0200;
 pub const WM_LBUTTONDOWN: UINT = 0x0201;
 pub const WM_LBUTTONUP: UINT = 0x0202;
@@ -360,10 +477,15 @@ pub const WM_XBUTTONUP: UINT = 0x020c;
 pub const WM_MOUSEHWHEEL: UINT = 0x020e;
 pub const WM_MOUSELEAVE: UINT = 0x02a3;
 pub const WM_DPICHANGED: UINT = 0x02e0;
+pub const WM_GETDPISCALEDSIZE: UINT = 0x02e4;
+pub const WM_DWMCOMPOSITIONCHANGED: UINT = 0x031e;
+pub const WM_DWMCOLORIZATIONCOLORCHANGED: UINT = 0x0320;
+pub const WM_DEVICECHANGE: UINT = 0x0219;
 pub const SIZE_MINIMIZED: WPARAM = 1;
 pub const SIZE_MAXIMIZED: WPARAM = 2;
 pub const SIZE_RESTORED: WPARAM = 0;
 pub const PM_REMOVE: UINT = 0x0001;
+pub const PM_NOREMOVE: UINT = 0x0000;
 pub const QS_ALLINPUT: DWORD = 0x04ff;
 pub const WAIT_OBJECT_0: DWORD = 0;
 pub const INFINITE: DWORD = 0xffffffff;
@@ -371,14 +493,31 @@ pub const TME_LEAVE: DWORD = 0x00000002;
 pub const RIDEV_REMOVE: DWORD = 0x00000001;
 pub const RIDEV_INPUTSINK: DWORD = 0x00000100;
 pub const RIDEV_NOLEGACY: DWORD = 0x00000030;
+pub const RID_INPUT: UINT = 0x10000003;
+pub const RIM_TYPEMOUSE: DWORD = 0;
+pub const MOUSE_MOVE_ABSOLUTE: WORD = 0x0001;
+pub const MOUSE_VIRTUAL_DESKTOP: WORD = 0x0002;
 pub const SPI_GETMOUSETRAILS: UINT = 0x005e;
 pub const WM_APP_EMPTY: UINT = 0x8000 + 1;
+pub const HTCLIENT: u16 = 1;
+pub const SC_SCREENSAVE: WPARAM = 0xf140;
+pub const SC_MONITORPOWER: WPARAM = 0xf170;
+pub const DBT_DEVICEARRIVAL: WPARAM = 0x8000;
+pub const DBT_DEVICEREMOVECOMPLETE: WPARAM = 0x8004;
+pub const DBT_DEVTYP_DEVICEINTERFACE: DWORD = 0x00000005;
+pub const DEVICE_NOTIFY_WINDOW_HANDLE: DWORD = 0x00000000;
 pub const MAPVK_VK_TO_VSC: UINT = 0;
 pub const MAPVK_VSC_TO_VK: UINT = 1;
 pub const MAPVK_VK_TO_CHAR: UINT = 2;
 pub const MAPVK_VSC_TO_VK_EX: UINT = 3;
 pub const SM_CXSCREEN: INT = 0;
 pub const SM_CYSCREEN: INT = 1;
+pub const SM_CXCURSOR: INT = 13;
+pub const SM_CYCURSOR: INT = 14;
+pub const SM_XVIRTUALSCREEN: INT = 76;
+pub const SM_YVIRTUALSCREEN: INT = 77;
+pub const SM_CXVIRTUALSCREEN: INT = 78;
+pub const SM_CYVIRTUALSCREEN: INT = 79;
 pub const SM_CXICON: INT = 11;
 pub const SM_CYICON: INT = 12;
 pub const SM_CXSMICON: INT = 49;
@@ -387,6 +526,7 @@ pub const LOGPIXELSX: INT = 88;
 pub const LOGPIXELSY: INT = 90;
 pub const HORZSIZE: INT = 4;
 pub const VERTSIZE: INT = 6;
+pub const MDT_EFFECTIVE_DPI: INT = 0;
 pub const HORZRES: INT = 8;
 pub const VERTRES: INT = 10;
 pub const CF_UNICODETEXT: UINT = 13;
@@ -399,7 +539,19 @@ pub const VK_LWIN: UINT = 0x5b;
 pub const VK_RWIN: UINT = 0x5c;
 pub const VK_CAPITAL: UINT = 0x14;
 pub const VK_NUMLOCK: UINT = 0x90;
+pub const VK_LSHIFT: UINT = 0xa0;
+pub const VK_RSHIFT: UINT = 0xa1;
+pub const VK_LCONTROL: UINT = 0xa2;
+pub const VK_RCONTROL: UINT = 0xa3;
+pub const VK_LMENU: UINT = 0xa4;
+pub const VK_RMENU: UINT = 0xa5;
+pub const VK_SNAPSHOT: UINT = 0x2c;
+pub const VK_PROCESSKEY: UINT = 0xe5;
 pub const UNICODE_NOCHAR: WPARAM = 0xffff;
+pub const ICON_SMALL: WPARAM = 0;
+pub const ICON_BIG: WPARAM = 1;
+pub const KF_EXTENDED: UINT = 0x0100;
+pub const KF_UP: UINT = 0x8000;
 
 pub fn loword(value: usize) u16 {
     return @truncate(value);
@@ -436,6 +588,50 @@ pub extern "kernel32" fn GlobalLock(hMem: HGLOBAL) callconv(.winapi) ?*anyopaque
 pub extern "kernel32" fn GlobalUnlock(hMem: HGLOBAL) callconv(.winapi) BOOL;
 pub extern "kernel32" fn GlobalFree(hMem: HGLOBAL) callconv(.winapi) HGLOBAL;
 pub extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
+pub extern "kernel32" fn Sleep(dwMilliseconds: DWORD) callconv(.winapi) void;
+
+pub const PFN_GetDpiForWindow = *const fn (HWND) callconv(.winapi) UINT;
+pub const PFN_AdjustWindowRectExForDpi = *const fn (*RECT, DWORD, BOOL, DWORD, UINT) callconv(.winapi) BOOL;
+pub const PFN_SetProcessDpiAwarenessContext = *const fn (HANDLE) callconv(.winapi) BOOL;
+pub const PFN_DwmEnableBlurBehindWindow = *const fn (HWND, *const DWM_BLURBEHIND) callconv(.winapi) HRESULT;
+pub const PFN_GetDpiForMonitor = *const fn (HMONITOR, INT, *UINT, *UINT) callconv(.winapi) HRESULT;
+
+pub var get_dpi_for_window: ?PFN_GetDpiForWindow = null;
+pub var adjust_window_rect_ex_for_dpi: ?PFN_AdjustWindowRectExForDpi = null;
+pub var set_process_dpi_awareness_context: ?PFN_SetProcessDpiAwarenessContext = null;
+pub var dwm_enable_blur_behind_window: ?PFN_DwmEnableBlurBehindWindow = null;
+pub var get_dpi_for_monitor: ?PFN_GetDpiForMonitor = null;
+
+pub fn initDynamicApis() void {
+    const user32 = LoadLibraryA("user32.dll");
+    if (user32) |module| {
+        if (GetProcAddress(module, "GetDpiForWindow")) |proc| {
+            get_dpi_for_window = @ptrCast(@alignCast(proc));
+        }
+        if (GetProcAddress(module, "AdjustWindowRectExForDpi")) |proc| {
+            adjust_window_rect_ex_for_dpi = @ptrCast(@alignCast(proc));
+        }
+        if (GetProcAddress(module, "SetProcessDpiAwarenessContext")) |proc| {
+            set_process_dpi_awareness_context = @ptrCast(@alignCast(proc));
+        }
+    }
+
+    const dwmapi = LoadLibraryA("dwmapi.dll");
+    if (dwmapi) |module| {
+        if (GetProcAddress(module, "DwmEnableBlurBehindWindow")) |proc| {
+            dwm_enable_blur_behind_window = @ptrCast(@alignCast(proc));
+        }
+    }
+
+    const shcore = LoadLibraryA("shcore.dll");
+    if (shcore) |module| {
+        if (GetProcAddress(module, "GetDpiForMonitor")) |proc| {
+            get_dpi_for_monitor = @ptrCast(@alignCast(proc));
+        }
+    }
+}
+
+pub const DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: HANDLE = @ptrFromInt(@as(usize, @bitCast(@as(isize, -4))));
 
 pub extern "user32" fn RegisterClassExW(param0: *const WNDCLASSEXW) callconv(.winapi) ATOM;
 pub extern "user32" fn UnregisterClassW(lpClassName: LPCWSTR, hInstance: HINSTANCE) callconv(.winapi) BOOL;
@@ -462,11 +658,14 @@ pub extern "user32" fn SetWindowLongPtrW(hWnd: HWND, nIndex: INT, dwNewLong: LON
 pub extern "user32" fn GetWindowLongPtrW(hWnd: HWND, nIndex: INT) callconv(.winapi) LONG_PTR;
 pub extern "user32" fn SetProcessDPIAware() callconv(.winapi) BOOL;
 pub extern "user32" fn SetLayeredWindowAttributes(hwnd: HWND, crKey: COLORREF, bAlpha: BYTE, dwFlags: DWORD) callconv(.winapi) BOOL;
+pub extern "user32" fn GetLayeredWindowAttributes(hwnd: HWND, pcrKey: ?*COLORREF, pbAlpha: ?*BYTE, pdwFlags: ?*DWORD) callconv(.winapi) BOOL;
 pub extern "user32" fn GetCursorPos(lpPoint: *POINT) callconv(.winapi) BOOL;
+pub extern "user32" fn WindowFromPoint(point: POINT) callconv(.winapi) HWND;
 pub extern "user32" fn SetCursorPos(X: INT, Y: INT) callconv(.winapi) BOOL;
 pub extern "user32" fn ScreenToClient(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn ClientToScreen(hWnd: HWND, lpPoint: *POINT) callconv(.winapi) BOOL;
 pub extern "user32" fn SetCursor(hCursor: HCURSOR) callconv(.winapi) HCURSOR;
+pub extern "user32" fn ClipCursor(lpRect: ?*const RECT) callconv(.winapi) BOOL;
 pub extern "user32" fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: LPCWSTR) callconv(.winapi) HCURSOR;
 pub extern "user32" fn LoadImageW(hInst: HINSTANCE, name: LPCWSTR, type: UINT, cx: INT, cy: INT, fuLoad: UINT) callconv(.winapi) HANDLE;
 pub extern "user32" fn DestroyIcon(hIcon: HICON) callconv(.winapi) BOOL;
@@ -475,7 +674,11 @@ pub extern "user32" fn PeekMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT
 pub extern "user32" fn GetMessageW(lpMsg: *MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT) callconv(.winapi) BOOL;
 pub extern "user32" fn TranslateMessage(lpMsg: *const MSG) callconv(.winapi) BOOL;
 pub extern "user32" fn DispatchMessageW(lpMsg: *const MSG) callconv(.winapi) LRESULT;
+pub extern "user32" fn SendMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.winapi) LRESULT;
 pub extern "user32" fn PostMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) callconv(.winapi) BOOL;
+pub extern "user32" fn PostQuitMessage(nExitCode: INT) callconv(.winapi) void;
+pub extern "user32" fn GetMessageTime() callconv(.winapi) LONG;
+pub extern "user32" fn WaitMessage() callconv(.winapi) BOOL;
 pub extern "user32" fn MsgWaitForMultipleObjects(nCount: DWORD, pHandles: ?*const HANDLE, bWaitAll: BOOL, dwMilliseconds: DWORD, dwWakeMask: DWORD) callconv(.winapi) DWORD;
 pub extern "user32" fn TrackMouseEvent(lpEventTrack: *TRACKMOUSEEVENT) callconv(.winapi) BOOL;
 pub extern "user32" fn SetCapture(hWnd: HWND) callconv(.winapi) HWND;
@@ -495,6 +698,7 @@ pub extern "user32" fn EnumDisplayMonitors(hdc: HDC, lprcClip: ?*const RECT, lpf
 pub extern "user32" fn EnumDisplayDevicesW(lpDevice: ?LPCWSTR, iDevNum: DWORD, lpDisplayDevice: *DISPLAY_DEVICEW, dwFlags: DWORD) callconv(.winapi) BOOL;
 pub extern "user32" fn EnumDisplaySettingsW(lpszDeviceName: ?LPCWSTR, iModeNum: DWORD, lpDevMode: *DEVMODEW) callconv(.winapi) BOOL;
 pub extern "user32" fn EnumDisplaySettingsExW(lpszDeviceName: ?LPCWSTR, iModeNum: DWORD, lpDevMode: *DEVMODEW, dwFlags: DWORD) callconv(.winapi) BOOL;
+pub extern "user32" fn ChangeDisplaySettingsExW(lpszDeviceName: ?LPCWSTR, lpDevMode: ?*DEVMODEW, hwnd: HWND, dwflags: DWORD, lParam: ?*anyopaque) callconv(.winapi) LONG;
 pub extern "user32" fn OpenClipboard(hWndNewOwner: HWND) callconv(.winapi) BOOL;
 pub extern "user32" fn CloseClipboard() callconv(.winapi) BOOL;
 pub extern "user32" fn EmptyClipboard() callconv(.winapi) BOOL;
@@ -502,9 +706,15 @@ pub extern "user32" fn SetClipboardData(uFormat: UINT, hMem: HGLOBAL) callconv(.
 pub extern "user32" fn GetClipboardData(uFormat: UINT) callconv(.winapi) HANDLE;
 pub extern "user32" fn IsClipboardFormatAvailable(format: UINT) callconv(.winapi) BOOL;
 pub extern "user32" fn RegisterRawInputDevices(pRawInputDevices: *const RAWINPUTDEVICE, uiNumDevices: UINT, cbSize: UINT) callconv(.winapi) BOOL;
+pub extern "user32" fn GetRawInputData(hRawInput: HANDLE, uiCommand: UINT, pData: ?*anyopaque, pcbSize: *UINT, cbSizeHeader: UINT) callconv(.winapi) UINT;
+pub extern "user32" fn RegisterDeviceNotificationW(hRecipient: HANDLE, NotificationFilter: *anyopaque, Flags: DWORD) callconv(.winapi) HDEVNOTIFY;
+pub extern "user32" fn UnregisterDeviceNotification(Handle: HDEVNOTIFY) callconv(.winapi) BOOL;
 
 pub extern "gdi32" fn CreateDIBSection(hdc: HDC, pbmi: *const BITMAPV5HEADER, usage: UINT, ppvBits: *?*anyopaque, hSection: HANDLE, offset: DWORD) callconv(.winapi) HBITMAP;
 pub extern "gdi32" fn CreateBitmap(nWidth: INT, nHeight: INT, nPlanes: UINT, nBitCount: UINT, lpBits: ?*const anyopaque) callconv(.winapi) HBITMAP;
+pub extern "gdi32" fn CreateRectRgn(x1: INT, y1: INT, x2: INT, y2: INT) callconv(.winapi) HRGN;
+pub extern "gdi32" fn CreateDCW(pwszDriver: LPCWSTR, pwszDevice: ?LPCWSTR, pszPort: ?LPCWSTR, pdm: ?*const DEVMODEW) callconv(.winapi) HDC;
+pub extern "gdi32" fn DeleteDC(hdc: HDC) callconv(.winapi) BOOL;
 pub extern "gdi32" fn DeleteObject(ho: HGDIOBJ) callconv(.winapi) BOOL;
 pub extern "gdi32" fn GetDeviceCaps(hdc: HDC, index: INT) callconv(.winapi) INT;
 

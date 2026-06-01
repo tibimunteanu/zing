@@ -237,7 +237,7 @@ pub fn initSystem() !void {
     });
 
     if (!platform.Window.init()) {
-        Errors.report(.platform_error, "Cocoa: failed to initialize application", .{});
+        Errors.report(.platform_error, "failed to initialize platform window system", .{});
         return error.PlatformError;
     }
 
@@ -278,13 +278,17 @@ pub fn create(width: u32, height: u32, title: [:0]const u8, monitor: ?Monitor, s
             .visible = hints.visible,
             .decorated = hints.decorated,
             .focused = hints.focused,
+            .auto_iconify = hints.auto_iconify,
             .floating = hints.floating,
             .maximized = hints.maximized,
+            .center_cursor = hints.center_cursor,
+            .scale_to_monitor = hints.scale_to_monitor,
+            .scale_framebuffer = hints.scale_framebuffer,
             .transparent_framebuffer = hints.transparent_framebuffer,
             .mouse_passthrough = hints.mouse_passthrough,
         };
         break :blk platform.Window.create(&config) orelse {
-            Errors.report(.platform_error, "Cocoa: failed to create window", .{});
+            Errors.report(.platform_error, "failed to create platform window", .{});
             return error.PlatformError;
         };
     };
@@ -304,6 +308,16 @@ pub fn create(width: u32, height: u32, title: [:0]const u8, monitor: ?Monitor, s
 
     const id = try insert(state);
     platform.Window.setCallbackId(native, id);
+    if (monitor) |value| {
+        const native_monitor = try @import("monitor.zig").nativeHandle(value);
+        platform.Window.setMonitor(
+            native,
+            native_monitor,
+            .{ .x = 0, .y = 0 },
+            .{ .width = width, .height = height },
+            0,
+        );
+    }
     return .{ .id = id };
 }
 
@@ -342,6 +356,7 @@ pub fn getPos(self: Window) !Pos {
 
 pub fn setPos(self: Window, pos: Pos) !void {
     const state = try getState(self);
+    if (state.monitor != null) return;
     platform.Window.setPos(state.native, .{ .x = pos.x, .y = pos.y });
 }
 
@@ -449,6 +464,7 @@ pub fn restore(self: Window) !void {
 
 pub fn maximize(self: Window) !void {
     const state = try getState(self);
+    if (state.monitor != null) return;
     platform.Window.maximize(state.native);
 }
 
@@ -490,13 +506,35 @@ pub fn setMonitor(self: Window, monitor: ?Monitor, pos: Pos, size: Size, refresh
             return error.InvalidValue;
         }
     }
-    (try getStatePtr(self)).monitor = monitor;
-    try self.setPos(pos);
-    try self.setSize(size);
+    const state = try getStatePtr(self);
+    const previous_monitor = state.monitor;
+    state.monitor = monitor;
+    const native_monitor = if (monitor) |value| try @import("monitor.zig").nativeHandle(value) else null;
+    platform.Window.setMonitor(
+        state.native,
+        native_monitor,
+        .{ .x = pos.x, .y = pos.y },
+        .{ .width = size.width, .height = size.height },
+        refresh_rate orelse 0,
+    );
+    if (!sameMonitor(previous_monitor, monitor) and monitor == null and state.resizable) {
+        platform.Window.setSizeLimits(state.native, toPlatformOptionalSize(state.min_size), toPlatformOptionalSize(state.max_size));
+        if (state.aspect_ratio) |ratio| {
+            platform.Window.setAspectRatio(state.native, ratio.numerator, ratio.denominator);
+        } else {
+            platform.Window.clearAspectRatio(state.native);
+        }
+    }
+}
+
+fn sameMonitor(a: ?Monitor, b: ?Monitor) bool {
+    if (a == null and b == null) return true;
+    if (a == null or b == null) return false;
+    return a.?.id == b.?.id;
 }
 
 pub fn setIcon(self: Window, images: []const CursorModule.Image) !void {
-    _ = try getState(self);
+    const state = try getState(self);
     for (images) |image| {
         if (image.width == 0 or image.height == 0) {
             Errors.report(.invalid_value, "invalid window icon dimensions", .{});
@@ -507,8 +545,19 @@ pub fn setIcon(self: Window, images: []const CursorModule.Image) !void {
             return error.InvalidValue;
         }
     }
-    Errors.report(.feature_unavailable, "regular window icons are not supported", .{});
-    return error.FeatureUnavailable;
+    const platform_images = try std.heap.c_allocator.alloc(platform.Window.IconImage, images.len);
+    defer std.heap.c_allocator.free(platform_images);
+    for (platform_images, images) |*out, image| {
+        out.* = .{
+            .width = image.width,
+            .height = image.height,
+            .pixels = image.pixels.ptr,
+        };
+    }
+    if (!platform.Window.setIcon(state.native, platform_images.ptr, platform_images.len)) {
+        Errors.report(.feature_unavailable, "regular window icons are not supported on this platform", .{});
+        return error.FeatureUnavailable;
+    }
 }
 
 pub fn getAttrib(self: Window, attribute: Attribute) !bool {
@@ -588,6 +637,11 @@ pub fn getCursorPos(self: Window) !Input.CursorPos {
 
 pub fn setCursorPos(self: Window, pos: Input.CursorPos) !void {
     const state = try getStatePtr(self);
+    if (!std.math.isFinite(pos.x) or !std.math.isFinite(pos.y)) {
+        Errors.report(.invalid_value, "invalid cursor position", .{});
+        return error.InvalidValue;
+    }
+    if (!try self.getAttrib(.focused)) return;
     if (state.cursor_mode == .disabled) {
         state.cursor_pos = pos;
         return;
@@ -600,10 +654,12 @@ pub fn setInputMode(self: Window, mode: InputMode) !void {
     switch (mode) {
         .cursor => |cursor_mode| {
             if (state.cursor_mode == cursor_mode) return;
-            if (cursor_mode == .captured) {
-                Errors.report(.feature_unimplemented, "Cocoa: captured cursor mode is not implemented", .{});
+            if (platform.os_tag == .macos and cursor_mode == .captured) {
+                Errors.report(.feature_unimplemented, "Cocoa: captured cursor mode not yet implemented", .{});
                 return error.FeatureUnimplemented;
             }
+            const pos = platform.Window.getCursorPos(state.native);
+            state.cursor_pos = .{ .x = @floatFromInt(pos.x), .y = @floatFromInt(pos.y) };
             state.cursor_mode = cursor_mode;
             platform.Window.setInputMode(state.native, 0, @intFromEnum(cursor_mode));
             return;
@@ -742,7 +798,7 @@ pub fn setClipboardString(value: [:0]const u8) !void {
 pub fn getClipboardString() ![:0]const u8 {
     try requireInit();
     return std.mem.span(platform.Window.getClipboardString() orelse {
-        Errors.report(.format_unavailable, "Cocoa: failed to retrieve string from pasteboard", .{});
+        Errors.report(.format_unavailable, "failed to retrieve string from the platform clipboard", .{});
         return error.FormatUnavailable;
     });
 }
@@ -917,7 +973,7 @@ fn platformWindowKey(id: usize, key_code: i32, scancode: i32, action_value: i32,
             state.sticky_key_states[key_index] = true;
             state.key_states[key_index] = .release;
         } else {
-            state.key_states[key_index] = action;
+            state.key_states[key_index] = if (action == .repeat) .press else action;
             if (action == .press) state.sticky_key_states[key_index] = false;
         }
 
@@ -996,12 +1052,12 @@ fn platformWindowDrop(id: usize, count: usize, paths: [*][*:0]const u8) void {
     const window = Window{ .id = id };
     if (getStatePtr(window) catch null) |state| {
         if (state.drop_callback) |callback| {
-            var buffer: [64][:0]const u8 = undefined;
-            const len = @min(count, buffer.len);
-            for (buffer[0..len], 0..) |*out, i| {
+            const buffer = std.heap.c_allocator.alloc([:0]const u8, count) catch return;
+            defer std.heap.c_allocator.free(buffer);
+            for (buffer, 0..) |*out, i| {
                 out.* = std.mem.span(paths[i]);
             }
-            callback(window, buffer[0..len]);
+            callback(window, buffer);
         }
     }
 }
@@ -1017,4 +1073,27 @@ fn mouseButtonFromNative(button: i32) Input.MouseButton {
         6 => .seven,
         else => .eight,
     };
+}
+
+var test_last_key_action: Input.Action = .release;
+
+fn testKeyCallback(_: Window, _: Input.Key, _: i32, action: Input.Action, _: Input.Modifiers) void {
+    test_last_key_action = action;
+}
+
+test "repeated key events keep getKey state pressed" {
+    const window = Window{ .id = 0 };
+    windows[window.id] = State{ .native = @as(*anyopaque, @ptrFromInt(1)), .key_callback = testKeyCallback };
+    defer windows[window.id] = null;
+
+    platformWindowKey(window.id, @intFromEnum(Input.Key.w), 17, 1, 0);
+    try std.testing.expectEqual(Input.Action.press, test_last_key_action);
+    try std.testing.expectEqual(Input.Action.press, try window.getKey(.w));
+
+    platformWindowKey(window.id, @intFromEnum(Input.Key.w), 17, 1, 0);
+    try std.testing.expectEqual(Input.Action.repeat, test_last_key_action);
+    try std.testing.expectEqual(Input.Action.press, try window.getKey(.w));
+
+    platformWindowKey(window.id, @intFromEnum(Input.Key.w), 17, 0, 0);
+    try std.testing.expectEqual(Input.Action.release, try window.getKey(.w));
 }

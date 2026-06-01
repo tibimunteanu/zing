@@ -933,6 +933,10 @@ const class = struct {
             return cpkg.boolResult(c.class_conformsToProtocol(self.value, &proto.value));
         }
 
+        pub fn addProtocol(self: @This(), proto: objc.Protocol) bool {
+            return cpkg.boolResult(c.class_addProtocol(self.value, proto.value));
+        }
+
         // currently only allows for overriding methods previously defined, e.g. by a superclass.
         // imp should be a function with C calling convention
         // whose first two arguments are a `c.id` and a `c.SEL`.

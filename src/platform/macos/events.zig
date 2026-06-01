@@ -1,20 +1,43 @@
 const objc = @import("objc.zig");
 
-const distant_future: f64 = 63113904000.0;
-
 pub fn poll() void {
-    drainEvents(false, 0.0);
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
+    const app = sharedApplication();
+    while (true) {
+        const event = nextEvent(NSDate.distantPast());
+        if (event.value == null) break;
+        app.msgSend(void, "sendEvent:", .{event.value});
+    }
 }
 
 pub fn wait() void {
-    drainEvents(true, distant_future);
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
+    const app = sharedApplication();
+    const event = nextEvent(NSDate.distantFuture());
+    app.msgSend(void, "sendEvent:", .{event.value});
+
+    poll();
 }
 
 pub fn waitTimeout(timeout: f64) void {
-    drainEvents(true, timeout);
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
+    const app = sharedApplication();
+    const event = nextEvent(NSDate.dateWithTimeIntervalSinceNow(timeout));
+    if (event.value != null) app.msgSend(void, "sendEvent:", .{event.value});
+
+    poll();
 }
 
 pub fn postEmpty() void {
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
     const event = objc.getClass("NSEvent").?.msgSend(objc.Object, "otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:", .{
         @as(isize, 15),
         CGPoint{ .x = 0.0, .y = 0.0 },
@@ -29,24 +52,14 @@ pub fn postEmpty() void {
     sharedApplication().msgSend(void, "postEvent:atStart:", .{ event.value, true });
 }
 
-fn drainEvents(block: bool, timeout: f64) void {
+fn nextEvent(limit: objc.Object) objc.Object {
     const mode = nsString("kCFRunLoopDefaultMode");
-    const limit = if (block) NSDate.dateWithTimeIntervalSinceNow(timeout) else NSDate.distantPast();
-    const app = sharedApplication();
-
-    while (true) {
-        const event = app.msgSend(objc.Object, "nextEventMatchingMask:untilDate:inMode:dequeue:", .{
-            @as(usize, ~@as(usize, 0)),
-            limit.value,
-            mode.value,
-            true,
-        });
-        if (event.value == null) break;
-
-        app.msgSend(void, "sendEvent:", .{event.value});
-        app.msgSend(void, "updateWindows", .{});
-        if (block) break;
-    }
+    return sharedApplication().msgSend(objc.Object, "nextEventMatchingMask:untilDate:inMode:dequeue:", .{
+        @as(usize, ~@as(usize, 0)),
+        limit.value,
+        mode.value,
+        true,
+    });
 }
 
 fn sharedApplication() objc.Object {
@@ -56,6 +69,10 @@ fn sharedApplication() objc.Object {
 const NSDate = struct {
     fn distantPast() objc.Object {
         return objc.getClass("NSDate").?.msgSend(objc.Object, "distantPast", .{});
+    }
+
+    fn distantFuture() objc.Object {
+        return objc.getClass("NSDate").?.msgSend(objc.Object, "distantFuture", .{});
     }
 
     fn dateWithTimeIntervalSinceNow(seconds: f64) objc.Object {

@@ -121,7 +121,38 @@ pub fn rawMouseMotionSupported() bool {
 
 pub fn getScancodeName(scancode: c_int) ?[*:0]const u8 {
     if (scancode < 0 or scancode > 0xff) return null;
-    return keyName(translateKey(@intCast(scancode)));
+    const key = translateKey(@intCast(scancode));
+    if (key == 0) return null;
+
+    const source = TISCopyCurrentKeyboardLayoutInputSource() orelse return keyName(key);
+    defer CFRelease(source);
+    const data = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) orelse return keyName(key);
+    const layout = CFDataGetBytePtr(data) orelse return keyName(key);
+
+    var dead_key_state: u32 = 0;
+    var chars: [4]u16 = @splat(0);
+    var char_count: u32 = 0;
+    if (UCKeyTranslate(
+        layout,
+        @intCast(scancode),
+        kUCKeyActionDisplay,
+        0,
+        LMGetKbdType(),
+        kUCKeyTranslateNoDeadKeysBit,
+        &dead_key_state,
+        chars.len,
+        &char_count,
+        &chars,
+    ) != noErr or char_count == 0) {
+        return null;
+    }
+
+    const key_index: usize = @intCast(key);
+    @memset(&key_names[key_index], 0);
+    const utf8_len = std.unicode.utf16LeToUtf8(&key_names[key_index], chars[0..char_count]) catch return null;
+    if (utf8_len == 0) return null;
+    key_names[key_index][utf8_len] = 0;
+    return &key_names[key_index];
 }
 
 pub fn translateKey(scancode: u16) c_int {
@@ -294,3 +325,34 @@ fn keyName(key: c_int) ?[*:0]const u8 {
         else => null,
     };
 }
+
+const std = @import("std");
+
+const CFTypeRef = *const opaque {};
+const CFDataRef = *const opaque {};
+const TISInputSourceRef = *const opaque {};
+
+const kUCKeyActionDisplay: u16 = 3;
+const kUCKeyTranslateNoDeadKeysBit: u32 = 1;
+const noErr: i32 = 0;
+
+var key_names: [512][17:0]u8 = @splat(@splat(0));
+
+extern "c" fn TISCopyCurrentKeyboardLayoutInputSource() ?TISInputSourceRef;
+extern "c" fn TISGetInputSourceProperty(input_source: TISInputSourceRef, property_key: CFTypeRef) ?CFDataRef;
+extern "c" fn LMGetKbdType() u32;
+extern "c" fn UCKeyTranslate(
+    key_layout_ptr: [*]const u8,
+    virtual_key_code: u16,
+    key_action: u16,
+    modifier_key_state: u32,
+    keyboard_type: u32,
+    key_translate_options: u32,
+    dead_key_state: *u32,
+    max_string_length: usize,
+    actual_string_length: *u32,
+    unicode_string: *[4]u16,
+) i32;
+extern "c" fn CFDataGetBytePtr(data: CFDataRef) ?[*]const u8;
+extern "c" fn CFRelease(object: CFTypeRef) void;
+extern "c" var kTISPropertyUnicodeKeyLayoutData: CFTypeRef;

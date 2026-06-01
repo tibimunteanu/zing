@@ -7,6 +7,10 @@ pub fn rawMouseMotionSupported() bool {
     return true;
 }
 
+pub fn updateKeyNames() void {
+    key_name_buffers = @splat(@splat(0));
+}
+
 pub fn getKeyScancode(key: c_int) c_int {
     const vk = keyToVirtualKey(key);
     if (vk == 0) return -1;
@@ -37,7 +41,39 @@ pub fn getScancodeName(scancode: c_int) ?[*:0]const u8 {
 }
 
 pub fn translateKey(vk: u32, scancode: u32) c_int {
-    _ = scancode;
+    switch (scancode) {
+        0x02...0x0b => return @intCast('1' + scancode - 0x02),
+        0x10 => return 'Q',
+        0x11 => return 'W',
+        0x12 => return 'E',
+        0x13 => return 'R',
+        0x14 => return 'T',
+        0x15 => return 'Y',
+        0x16 => return 'U',
+        0x17 => return 'I',
+        0x18 => return 'O',
+        0x19 => return 'P',
+        0x1e => return 'A',
+        0x1f => return 'S',
+        0x20 => return 'D',
+        0x21 => return 'F',
+        0x22 => return 'G',
+        0x23 => return 'H',
+        0x24 => return 'J',
+        0x25 => return 'K',
+        0x26 => return 'L',
+        0x2c => return 'Z',
+        0x2d => return 'X',
+        0x2e => return 'C',
+        0x2f => return 'V',
+        0x30 => return 'B',
+        0x31 => return 'N',
+        0x32 => return 'M',
+        0x137 => return 283,
+        0x45 => return 284,
+        0x36 => return 344,
+        else => {},
+    }
     if (vk >= 'A' and vk <= 'Z') return @intCast(vk);
     if (vk >= '0' and vk <= '9') return @intCast(vk);
     return switch (vk) {
