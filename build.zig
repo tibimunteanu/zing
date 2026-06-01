@@ -193,6 +193,12 @@ fn addPlatformFrameworks(b: *std.Build, compile: *std.Build.Step.Compile, os_tag
             compile.root_module.linkSystemLibrary("shell32", .{});
             compile.root_module.linkSystemLibrary("kernel32", .{});
         },
+        .linux => {
+            compile.root_module.link_libc = true;
+            compile.root_module.linkSystemLibrary("dl", .{});
+            compile.root_module.linkSystemLibrary("pthread", .{});
+            compile.root_module.linkSystemLibrary("m", .{});
+        },
         else => {},
     }
 }

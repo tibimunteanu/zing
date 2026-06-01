@@ -18,6 +18,7 @@ pub const Window = extern struct {
     callback_id: usize,
     cursor_mode: c_int,
     modifier_flags: usize,
+    modifier_key_states: [349]bool,
     cursor_warp_delta_x: f64,
     cursor_warp_delta_y: f64,
     virtual_cursor_x: f64,

@@ -497,7 +497,10 @@ pub const RID_INPUT: UINT = 0x10000003;
 pub const RIM_TYPEMOUSE: DWORD = 0;
 pub const MOUSE_MOVE_ABSOLUTE: WORD = 0x0001;
 pub const MOUSE_VIRTUAL_DESKTOP: WORD = 0x0002;
+pub const SPI_SETMOUSETRAILS: UINT = 0x005d;
 pub const SPI_GETMOUSETRAILS: UINT = 0x005e;
+pub const ES_DISPLAY_REQUIRED: DWORD = 0x00000002;
+pub const ES_CONTINUOUS: DWORD = 0x80000000;
 pub const WM_APP_EMPTY: UINT = 0x8000 + 1;
 pub const HTCLIENT: u16 = 1;
 pub const SC_SCREENSAVE: WPARAM = 0xf140;
@@ -589,6 +592,7 @@ pub extern "kernel32" fn GlobalUnlock(hMem: HGLOBAL) callconv(.winapi) BOOL;
 pub extern "kernel32" fn GlobalFree(hMem: HGLOBAL) callconv(.winapi) HGLOBAL;
 pub extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
 pub extern "kernel32" fn Sleep(dwMilliseconds: DWORD) callconv(.winapi) void;
+pub extern "kernel32" fn SetThreadExecutionState(esFlags: DWORD) callconv(.winapi) DWORD;
 
 pub const PFN_GetDpiForWindow = *const fn (HWND) callconv(.winapi) UINT;
 pub const PFN_AdjustWindowRectExForDpi = *const fn (*RECT, DWORD, BOOL, DWORD, UINT) callconv(.winapi) BOOL;

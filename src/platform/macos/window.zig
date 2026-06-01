@@ -177,6 +177,7 @@ pub fn create(config: *const Config) ?*anyopaque {
         .callback_id = 0,
         .cursor_mode = 0,
         .modifier_flags = 0,
+        .modifier_key_states = @splat(false),
         .cursor_warp_delta_x = 0.0,
         .cursor_warp_delta_y = 0.0,
         .virtual_cursor_x = 0.0,
@@ -871,6 +872,7 @@ fn delegateWindowDidBecomeKey(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) call
 fn delegateWindowDidResignKey(self: objc.c.id, _: objc.c.SEL, _: objc.c.id) callconv(.c) void {
     const window = windowFromObject(objc.Object.fromId(self));
     if (window.monitor != null and window.auto_iconify) iconify(@ptrCast(window));
+    window.modifier_key_states = @splat(false);
     callbacks().focus(window.callback_id, false);
 }
 
@@ -986,8 +988,12 @@ fn viewFlagsChanged(self: objc.c.id, _: objc.c.SEL, event_id: objc.c.id) callcon
     const key_code: u16 = @intCast(event.msgSend(c_ushort, "keyCode", .{}));
     const key = input.translateKey(key_code);
     const key_flag = translateKeyToModifierFlag(key);
-    const action: i32 = if (key_flag != 0 and (flags & key_flag) != 0 and (window.modifier_flags & key_flag) == 0) 1 else 0;
+    const action: i32 = if (key_flag != 0 and (flags & key_flag) != 0)
+        if (key >= 0 and key < window.modifier_key_states.len and window.modifier_key_states[@intCast(key)]) 0 else 1
+    else
+        0;
     window.modifier_flags = flags;
+    if (key >= 0 and key < window.modifier_key_states.len) window.modifier_key_states[@intCast(key)] = action == 1;
     callbacks().key(window.callback_id, key, key_code, action, translateMods(flags));
 }
 

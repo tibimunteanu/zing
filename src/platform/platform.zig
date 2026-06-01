@@ -25,7 +25,18 @@ const backend = switch (builtin.os.tag) {
         pub const VulkanWSI = @import("win32/vulkan_wsi.zig");
         pub const Window = @import("win32/window.zig");
     },
-    .linux => @compileError("Zing X11 platform backend is not implemented yet"),
+    .linux => struct {
+        pub const Cursor = @import("x11/cursor.zig");
+        pub const Events = @import("x11/events.zig");
+        pub const Input = @import("x11/input.zig");
+        pub const Joystick = @import("x11/joystick.zig");
+        pub const Monitor = @import("x11/monitor.zig");
+        pub const Native = @import("x11/native.zig");
+        pub const Tests = @import("x11/tests.zig");
+        pub const Time = @import("x11/time.zig");
+        pub const VulkanWSI = @import("x11/vulkan_wsi.zig");
+        pub const Window = @import("x11/window.zig");
+    },
     else => @compileError("Zing platform layer does not support this target OS"),
 };
 

@@ -82,6 +82,8 @@ var disabled_cursor_window: ?*win.Window = null;
 var captured_cursor_window: ?*win.Window = null;
 var restore_cursor_pos_x: f64 = 0;
 var restore_cursor_pos_y: f64 = 0;
+var acquired_monitor_count: usize = 0;
+var mouse_trail_size: win.UINT = 0;
 
 pub fn setEventCallbacks(new_callbacks: EventCallbacks) void {
     callbacks_ = new_callbacks;
@@ -772,7 +774,7 @@ fn wndProc(hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, lparam: win.LPARAM
             window.high_surrogate = 0;
             if (codepoint != 0) {
                 callbacks().char_mods(window.callback_id, codepoint, getKeyMods());
-                callbacks().char(window.callback_id, codepoint);
+                if (msg != win.WM_SYSCHAR) callbacks().char(window.callback_id, codepoint);
             }
             return 0;
         },
@@ -795,7 +797,7 @@ fn wndProc(hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, lparam: win.LPARAM
             if (window.cursor_mode == 2) {
                 const dx = x - window.last_cursor_pos_x;
                 const dy = y - window.last_cursor_pos_y;
-                if (!window.raw_mouse_motion) {
+                if (disabled_cursor_window == window and !window.raw_mouse_motion) {
                     window.virtual_cursor_x += @floatFromInt(dx);
                     window.virtual_cursor_y += @floatFromInt(dy);
                     callbacks().cursor_pos(window.callback_id, window.virtual_cursor_x, window.virtual_cursor_y);
@@ -823,14 +825,14 @@ fn wndProc(hwnd: win.HWND, msg: win.UINT, wparam: win.WPARAM, lparam: win.LPARAM
             if (window.mouse_button_mask == 0) _ = win.SetCapture(hwnd);
             window.mouse_button_mask |= buttonMask(button);
             callbacks().mouse_button(window.callback_id, button, 1, getKeyMods());
-            return 0;
+            return if (msg == win.WM_XBUTTONDOWN) 1 else 0;
         },
         win.WM_LBUTTONUP, win.WM_RBUTTONUP, win.WM_MBUTTONUP, win.WM_XBUTTONUP => {
             const button = mouseButtonFromMessage(msg, wparam);
             window.mouse_button_mask &= ~buttonMask(button);
             callbacks().mouse_button(window.callback_id, button, 0, getKeyMods());
             if (window.mouse_button_mask == 0) _ = win.ReleaseCapture();
-            return 0;
+            return if (msg == win.WM_XBUTTONUP) 1 else 0;
         },
         win.WM_MOUSEWHEEL => {
             callbacks().scroll(window.callback_id, 0.0, @as(f64, @floatFromInt(@as(i16, @bitCast(win.hiword(wparam))))) / 120.0);
@@ -884,7 +886,7 @@ fn handleDrop(window: *win.Window, drop: win.HDROP) void {
 }
 
 fn handleRawInput(window: *win.Window, raw_input: win.HANDLE) void {
-    if (window.cursor_mode != 2 or !window.raw_mouse_motion) return;
+    if (disabled_cursor_window != window or !window.raw_mouse_motion) return;
 
     var size: win.UINT = 0;
     _ = win.GetRawInputData(raw_input, win.RID_INPUT, null, &size, @sizeOf(win.RAWINPUTHEADER));
@@ -1253,6 +1255,12 @@ fn updateFramebufferTransparency(window: *win.Window) void {
 }
 
 fn acquireMonitor(window: *win.Window, native_monitor: *anyopaque, size: Size, refresh_rate: u32) void {
+    if (!window.monitor_acquired and acquired_monitor_count == 0) {
+        _ = win.SetThreadExecutionState(win.ES_CONTINUOUS | win.ES_DISPLAY_REQUIRED);
+        _ = win.SystemParametersInfoW(win.SPI_GETMOUSETRAILS, 0, &mouse_trail_size, 0);
+        _ = win.SystemParametersInfoW(win.SPI_SETMOUSETRAILS, 0, null, 0);
+    }
+
     const current = monitor_module.getVideoMode(native_monitor);
     if (monitor_module.setVideoMode(native_monitor, .{
         .width = size.width,
@@ -1262,12 +1270,21 @@ fn acquireMonitor(window: *win.Window, native_monitor: *anyopaque, size: Size, r
         .blue_bits = current.blue_bits,
         .refresh_rate = if (refresh_rate != 0) refresh_rate else current.refresh_rate,
     })) {
+        if (!window.monitor_acquired) acquired_monitor_count += 1;
         window.monitor_acquired = true;
+    } else if (!window.monitor_acquired and acquired_monitor_count == 0) {
+        _ = win.SetThreadExecutionState(win.ES_CONTINUOUS);
+        _ = win.SystemParametersInfoW(win.SPI_SETMOUSETRAILS, mouse_trail_size, null, 0);
     }
 }
 
 fn releaseMonitor(window: *win.Window, native_monitor: *anyopaque) void {
     if (!window.monitor_acquired) return;
+    if (acquired_monitor_count > 0) acquired_monitor_count -= 1;
+    if (acquired_monitor_count == 0) {
+        _ = win.SetThreadExecutionState(win.ES_CONTINUOUS);
+        _ = win.SystemParametersInfoW(win.SPI_SETMOUSETRAILS, mouse_trail_size, null, 0);
+    }
     monitor_module.restoreVideoMode(native_monitor);
     window.monitor_acquired = false;
 }

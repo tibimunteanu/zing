@@ -18,6 +18,7 @@ var has_khr_surface = false;
 var has_ext_metal_surface = false;
 var has_mvk_macos_surface = false;
 var has_khr_win32_surface = false;
+var has_khr_xlib_surface = false;
 const macos_extensions = [_][*:0]const u8{
     "VK_KHR_surface",
     "VK_EXT_metal_surface",
@@ -69,6 +70,7 @@ pub fn deinitSystem() void {
     has_ext_metal_surface = false;
     has_mvk_macos_surface = false;
     has_khr_win32_surface = false;
+    has_khr_xlib_surface = false;
     if (owns_loader) {
         if (vulkan_library) |*library| {
             library.close();
@@ -82,6 +84,7 @@ pub fn supported() !bool {
     return switch (platform.os_tag) {
         .macos => available,
         .windows => available,
+        .linux => available,
         else => false,
     };
 }
@@ -97,6 +100,13 @@ pub fn getRequiredInstanceExtensions() ![]const [*:0]const u8 {
         },
         .windows => {
             if (!has_khr_surface or !has_khr_win32_surface) {
+                Errors.report(.api_unavailable, "Vulkan: window surface creation extensions not found", .{});
+                return error.ApiUnavailable;
+            }
+            return &platform.VulkanWSI.RequiredExtensions;
+        },
+        .linux => {
+            if (!has_khr_surface or !has_khr_xlib_surface) {
                 Errors.report(.api_unavailable, "Vulkan: window surface creation extensions not found", .{});
                 return error.ApiUnavailable;
             }
@@ -129,11 +139,40 @@ pub fn getPhysicalDevicePresentationSupport(instance: vk.Instance, physical_devi
         const get_support: vk.PfnGetPhysicalDeviceWin32PresentationSupportKHR = @ptrCast(get_proc);
         return get_support(physical_device, queue_family) != 0;
     }
+    if (platform.os_tag == .linux) {
+        if (!available or !has_khr_surface or !has_khr_xlib_surface) return false;
+        const get_proc = getInstanceProcAddress(instance, "vkGetPhysicalDeviceXlibPresentationSupportKHR") orelse return false;
+        const get_support: vk.PfnGetPhysicalDeviceXlibPresentationSupportKHR = @ptrCast(get_proc);
+        return get_support(
+            physical_device,
+            queue_family,
+            @ptrCast(platform.VulkanWSI.getNativeDisplay() orelse return false),
+            @intCast(platform.VulkanWSI.getVisualId()),
+        ) != 0;
+    }
     return false;
 }
 
 pub fn createWindowSurface(instance: vk.Instance, window: Window, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) !void {
     surface.* = .null_handle;
+    if (platform.os_tag == .linux) {
+        if (!has_khr_surface or !has_khr_xlib_surface) return error.ApiUnavailable;
+        const get_proc = getInstanceProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.ApiUnavailable;
+        const create_xlib_surface: vk.PfnCreateXlibSurfaceKHR = @ptrCast(get_proc);
+        const create_info = vk.XlibSurfaceCreateInfoKHR{
+            .dpy = @ptrCast(platform.VulkanWSI.getNativeDisplay() orelse return error.PlatformError),
+            .window = @intCast(platform.VulkanWSI.getNativeWindow(try window.nativeHandle())),
+        };
+        const result = create_xlib_surface(instance, &create_info, allocation_callbacks, surface);
+        return switch (result) {
+            .success => {},
+            .error_out_of_host_memory => error.OutOfHostMemory,
+            .error_out_of_device_memory => error.OutOfDeviceMemory,
+            .error_native_window_in_use_khr => error.NativeWindowInUse,
+            else => error.PlatformError,
+        };
+    }
+
     if (platform.os_tag == .windows) {
         if (!has_khr_surface or !has_khr_win32_surface) return error.ApiUnavailable;
         const get_proc = getInstanceProcAddress(instance, "vkCreateWin32SurfaceKHR") orelse return error.ApiUnavailable;
@@ -185,6 +224,7 @@ fn loadExtensionAvailability() !void {
     has_ext_metal_surface = false;
     has_mvk_macos_surface = false;
     has_khr_win32_surface = false;
+    has_khr_xlib_surface = false;
 
     const get_proc = loader orelse return;
     const enumerate_proc = get_proc(.null_handle, "vkEnumerateInstanceExtensionProperties") orelse {
@@ -206,10 +246,13 @@ fn loadExtensionAvailability() !void {
         return;
     }
 
-    var properties: [256]vk.ExtensionProperties = undefined;
-    const query_count = @min(count, properties.len);
-    count = @intCast(query_count);
-    result = enumerate(null, &count, properties[0..].ptr);
+    const properties = std.heap.c_allocator.alloc(vk.ExtensionProperties, count) catch {
+        Errors.report(.platform_error, "Vulkan: failed to allocate extension property buffer", .{});
+        return error.PlatformError;
+    };
+    defer std.heap.c_allocator.free(properties);
+
+    result = enumerate(null, &count, properties.ptr);
     if (result != .success) {
         if (owns_loader) {
             Errors.report(.api_unavailable, "Vulkan: failed to query instance extensions", .{});
@@ -225,11 +268,13 @@ fn loadExtensionAvailability() !void {
         if (std.mem.eql(u8, name, "VK_EXT_metal_surface")) has_ext_metal_surface = true;
         if (std.mem.eql(u8, name, "VK_MVK_macos_surface")) has_mvk_macos_surface = true;
         if (std.mem.eql(u8, name, "VK_KHR_win32_surface")) has_khr_win32_surface = true;
+        if (std.mem.eql(u8, name, "VK_KHR_xlib_surface")) has_khr_xlib_surface = true;
     }
 
     available = switch (platform.os_tag) {
         .macos => has_khr_surface and (has_ext_metal_surface or has_mvk_macos_surface),
         .windows => has_khr_surface and has_khr_win32_surface,
+        .linux => has_khr_surface and has_khr_xlib_surface,
         else => false,
     };
 }
